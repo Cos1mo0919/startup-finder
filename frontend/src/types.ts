@@ -1,0 +1,76 @@
+export type Source = {
+  url: string;
+  publisher: string;
+  kind: string;
+  published_at: string;
+  quotes: string[];
+};
+export type Component = {
+  label: string;
+  score: number;
+  max: number;
+  reason?: string;
+  fact_index?: number;
+};
+export type Project = {
+  id: string;
+  name: string;
+  creator: string;
+  organization: string;
+  city: string;
+  event: string;
+  country: string;
+  category: string;
+  audience: string;
+  rating: number;
+  confidence: number;
+  summary_uz: string;
+  audience_groups: string[];
+  first_seen: string;
+  last_seen: string;
+  published_at: string;
+  images: { url: string; source_url: string; publisher: string }[];
+  source_count: number;
+  analysis_mode: string;
+  main_url?: string;
+  aliases?: string[];
+  sources?: Source[];
+  rating_components?: Record<string, Component>;
+  confidence_components?: Record<string, Component>;
+  content?: {
+    summary_uz: string;
+    university: string;
+    what_uz: string;
+    how_uz: string;
+    problem_uz: string;
+    individual_benefit_uz: string;
+    business_benefit_uz: string;
+    advantages_uz: string[];
+    limitations_uz: string[];
+    facts: { text_uz: string; quote: string; source_url: string }[];
+    ai_analysis_uz: string;
+    links: Record<string, string>;
+  };
+};
+export type Run = {
+  id: number;
+  started_at: string;
+  finished_at: string | null;
+  status: string;
+  counts: Record<string, number>;
+  errors: { source: string; code: string }[];
+  duration_seconds: number | null;
+};
+export type Status = {
+  timezone: string;
+  scheduler_enabled: boolean;
+  next_run: string | null;
+  last_run: Run | null;
+  runs: Run[];
+  total_projects: number;
+  today_projects: number;
+  pending_candidates: number;
+  ai_enabled: boolean;
+  search_enabled: boolean;
+  sources: { name: string; url: string; kind: string }[];
+};
