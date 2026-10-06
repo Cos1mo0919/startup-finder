@@ -1,7 +1,19 @@
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
-from sqlalchemy import JSON, DateTime, Float, ForeignKey, Integer, String, Text, create_engine, event
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    create_engine,
+    event,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, sessionmaker
 
 
@@ -41,13 +53,24 @@ class Project(Base):
     confidence: Mapped[float] = mapped_column(Float, default=0)
     rating_components: Mapped[dict] = mapped_column(JSON, default=dict)
     confidence_components: Mapped[dict] = mapped_column(JSON, default=dict)
+    primary_sector: Mapped[str] = mapped_column(String(50), default="other")
+    sectors: Mapped[list] = mapped_column(JSON, default=list)
+    visible: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    stop_reasons: Mapped[list] = mapped_column(JSON, default=list)
+    detection_signals: Mapped[list] = mapped_column(JSON, default=list)
+    real_project_confidence: Mapped[float] = mapped_column(Float, default=0)
+    event_id: Mapped[str | None] = mapped_column(ForeignKey("events.id"), nullable=True)
+    evidence_records: Mapped[list["ProjectEvidence"]] = relationship(
+        cascade="all, delete-orphan", lazy="selectin"
+    )
     sources: Mapped[list["Source"]] = relationship(
         back_populates="project", cascade="all, delete-orphan", lazy="selectin"
     )
 
 
 class Source(Base):
-    __tablename__ = "sources"
+    __tablename__ = "project_sources"
+    source_id: Mapped[str | None] = mapped_column(ForeignKey("sources.id"), nullable=True)
     id: Mapped[int] = mapped_column(primary_key=True)
     project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), index=True)
     url: Mapped[str] = mapped_column(Text, unique=True)
@@ -60,6 +83,8 @@ class Source(Base):
 
 
 class Candidate(Base):
+    source_id: Mapped[str | None] = mapped_column(ForeignKey("sources.id"), nullable=True)
+    event_id: Mapped[str | None] = mapped_column(ForeignKey("events.id"), nullable=True)
     __tablename__ = "candidates"
     url: Mapped[str] = mapped_column(Text, primary_key=True)
     article: Mapped[dict] = mapped_column(JSON)
@@ -87,6 +112,84 @@ class Lease(Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
+class RegistrySource(Base):
+    __tablename__ = "sources"
+    id: Mapped[str] = mapped_column(String(80), primary_key=True)
+    name: Mapped[str] = mapped_column(String(300))
+    url: Mapped[str] = mapped_column(Text, unique=True)
+    source_type: Mapped[str] = mapped_column(String(50), default="other")
+    region: Mapped[str] = mapped_column(String(120), default="Uzbekistan")
+    priority: Mapped[int] = mapped_column(Integer, default=3)
+    check_frequency: Mapped[int] = mapped_column(Integer, default=480)
+    reliability_score: Mapped[float] = mapped_column(Float, default=3)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    collection_method: Mapped[str] = mapped_column(String(30), default="manual_config")
+    trust_kind: Mapped[str] = mapped_column(String(30), default="unknown")
+    options: Mapped[dict] = mapped_column(JSON, default=dict)
+    last_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_success_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    consecutive_errors: Mapped[int] = mapped_column(Integer, default=0)
+    candidates_found: Mapped[int] = mapped_column(Integer, default=0)
+    new_projects: Mapped[int] = mapped_column(Integer, default=0)
+    last_error: Mapped[str] = mapped_column(String(100), default="")
+    notes: Mapped[str] = mapped_column(Text, default="")
+
+
+class Event(Base):
+    __tablename__ = "events"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    name: Mapped[str] = mapped_column(String(300))
+    event_type: Mapped[str] = mapped_column(String(50))
+    organizer: Mapped[str] = mapped_column(String(300), default="")
+    city: Mapped[str] = mapped_column(String(100), default="")
+    country: Mapped[str] = mapped_column(String(100), default="Uzbekistan")
+    start_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    end_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    official_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source_url: Mapped[str] = mapped_column(Text, unique=True)
+    source_id: Mapped[str | None] = mapped_column(ForeignKey("sources.id"), nullable=True)
+    status: Mapped[str] = mapped_column(String(30), default="discovered")
+    discovered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    last_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_error: Mapped[str] = mapped_column(String(100), default="")
+    evidence_quote: Mapped[str] = mapped_column(Text)
+
+
+class ProjectEvidence(Base):
+    __tablename__ = "project_evidence"
+    __table_args__ = (UniqueConstraint("project_id", "url", "evidence_type", "quote"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), index=True)
+    source_id: Mapped[str | None] = mapped_column(ForeignKey("sources.id"), nullable=True)
+    url: Mapped[str] = mapped_column(Text)
+    evidence_type: Mapped[str] = mapped_column(String(50))
+    confidence: Mapped[float] = mapped_column(Float)
+    discovered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    notes: Mapped[str] = mapped_column(Text, default="")
+    quote: Mapped[str] = mapped_column(Text)
+
+
+class RejectedCandidate(Base):
+    __tablename__ = "rejected_candidates"
+    url: Mapped[str] = mapped_column(Text, primary_key=True)
+    title: Mapped[str] = mapped_column(String(500), default="")
+    reasons: Mapped[list] = mapped_column(JSON, default=list)
+    evidence_score: Mapped[float] = mapped_column(Float, default=0)
+    signals: Mapped[list] = mapped_column(JSON, default=list)
+    rejected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+
+
+class EcosystemSignal(Base):
+    __tablename__ = "ecosystem_signals"
+    url: Mapped[str] = mapped_column(Text, primary_key=True)
+    title: Mapped[str] = mapped_column(String(500))
+    source_id: Mapped[str | None] = mapped_column(ForeignKey("sources.id"), nullable=True)
+    signal_type: Mapped[str] = mapped_column(String(50))
+    published_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    discovered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    quote: Mapped[str] = mapped_column(Text)
+
+
 def make_db(url):
     if url.startswith("sqlite:///") and ":memory:" not in url:
         Path(url.removeprefix("sqlite:///")).parent.mkdir(parents=True, exist_ok=True)
@@ -100,7 +203,9 @@ def make_db(url):
             connection.execute("PRAGMA foreign_keys=ON")
             connection.execute("PRAGMA journal_mode=WAL")
 
-    Base.metadata.create_all(engine)
+    from .migrations import migrate
+
+    migrate(engine, Base.metadata)
     factory = sessionmaker(engine, expire_on_commit=False)
     with factory.begin() as session:
         if session.get(Lease, "pipeline") is None:

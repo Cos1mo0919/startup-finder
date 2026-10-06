@@ -14,7 +14,7 @@ COPY pyproject.toml uv.lock ./
 RUN --mount=type=secret,id=build_ca,target=/run/secrets/build_ca \
     if [ -f /run/secrets/build_ca ]; then export SSL_CERT_FILE=/run/secrets/build_ca; fi; uv sync --frozen --no-dev
 COPY backend/ backend/
-COPY sources.json ./
+COPY config/ config/
 COPY --from=frontend /build/frontend/dist frontend/dist/
 RUN useradd --create-home --uid 10001 finder && mkdir -p /app/data && chown -R finder:finder /app
 USER finder

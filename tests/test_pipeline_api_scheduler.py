@@ -154,7 +154,7 @@ def test_adding_ai_reanalyzes_extractive_project_without_duplicate(settings, fac
         projects = session.scalars(select(Project)).all()
         assert len(projects) == 1
         assert projects[0].content["analysis_mode"] == "ai"
-        assert projects[0].creator == "universitet"
+        assert projects[0].creator == "Test University"
 
 
 def test_ai_rejection_is_terminal_not_an_hourly_paid_retry(settings, factory):

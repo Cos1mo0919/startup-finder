@@ -9,7 +9,7 @@ def normalize(text):
 
 
 UZBEKISTAN = re.compile(
-    r"o[‘’ʻʼ'`]?zbekiston|uzbekistan|узбекистан|ўзбекистон|toshkent|ташкент|tashkent|samarqand|самарканд|samarkand|farg[‘’']?ona|andijon|buxoro|nukus",
+    r"o[‘’ʻʼ'`]?zbekiston|uzbekistan|узбекистан|ўзбекистон|toshkent|ташкент|tashkent|samarqand|самарканд|samarkand|namangan|navoiy|qarshi|qashqadaryo|jizzax|sirdaryo|surxondaryo|xorazm|qoraqalpog|farg[‘’']?ona|andijon|buxoro|nukus",
     re.I,
 )
 PROJECT = re.compile(
@@ -68,13 +68,42 @@ def extractive_analysis(article):
     if not evidence:
         return None
     quote = evidence[0][:1400]
+    identity = re.search(
+        r"([A-Z][\w‘’'-]+(?:\s+[A-Z][\w‘’'-]+){0,3}(?:\s+(?:University|universiteti|instituti|jamoasi|kompaniyasi)))\s+tomonidan",
+        quote,
+    )
+    creator = identity[1] if identity else ""
     return Analysis(
         is_project=True,
         uzbekistan_related=True,
         name=match[1],
+        creator=creator,
         summary_uz=quote,
         what_uz=quote,
         facts=[Fact(text_uz=quote, quote=quote, source_url=article.url)],
         evidence=Evidence(practical="described", practical_fact=0),
         analysis_mode="extractive",
     )
+
+
+IDEA_LIST = re.compile(
+    r"(?:\d+|best|top|eng yaxshi|лучшие).{0,30}(?:startup ideas|startap g[‘’']oyalari|идей для|бизнес.идеи)|startup ideas|startap g[‘’']oyalari",
+    re.I,
+)
+ECOSYSTEM = re.compile(
+    r"(?:yangi|new|новый).{0,30}(?:fund|fond|фонд|акселератор|accelerator|grant dasturi)|IT Park.{0,40}(?:kengay|expan|расшир)|davlat dasturi|государственн.{0,15}программ|kompaniya.{0,50}sotib ol|acquires?\b|acquisition of|приобрел.{0,40}компан|(?:investitsiya|investment|funding).{0,40}(?:jalb qildi|raised)|grant.{0,30}(?:dasturi|program|программ)",
+    re.I,
+)
+SPAM = re.compile(r"buy (?:backlinks|followers)|casino bonus|казино.{0,20}бонус|100% guaranteed profit", re.I)
+
+
+def material_type(article):
+    if IDEA_LIST.search(article.title) or SPAM.search(article.title + " " + article.text[:1000]):
+        return "REJECT"
+    if ECOSYSTEM.search(article.title):
+        return "ECOSYSTEM_SIGNAL"
+    from .events import detect_event
+
+    if detect_event(article) and not CONCRETE.search(article.text):
+        return "EVENT"
+    return "PROJECT" if is_candidate(article) else "OTHER"

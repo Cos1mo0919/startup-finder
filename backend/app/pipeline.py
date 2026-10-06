@@ -7,11 +7,15 @@ from .analysis import AnalysisError, analyzer_for, validate_analysis
 from .collectors.sources import Discovery
 from .collectors.parsers import PARSER_VERSION
 from .dates import valid_date
-from .db import Candidate, Lease, Project, Run, Source, now_utc
+from .db import Candidate, EcosystemSignal, Lease, Project, RegistrySource, Run, Source, now_utc
 from .dedup import find_duplicate, fingerprint
-from .detection import is_candidate, normalize
+from .detection import material_type, normalize
 from .network import FetchError, WebClient, canonical_url
-from .ranking import confidence, score
+from .ranking import score
+from .evidence import attach_evidence, audit_existing, evaluate_project, record_rejection
+from .events import save_event
+from .registry import seed_registry
+from .sectors import classify_sectors
 from .schemas import Analysis, Article
 
 logger = logging.getLogger(__name__)
@@ -21,8 +25,10 @@ class Pipeline:
     def __init__(self, settings, factory, discovery=None, analyzer=None):
         self.settings, self.factory = settings, factory
         self.web = None if discovery else WebClient(settings)
-        self.discovery = discovery or Discovery(settings, self.web)
+        self.discovery = discovery or Discovery(settings, self.web, factory=factory)
         self.analyzer = analyzer or analyzer_for(settings)
+        seed_registry(factory, settings.sources_file)
+        self.last_persist_visible = False
 
     def close(self):
         if self.web:
@@ -80,6 +86,7 @@ class Pipeline:
                     audience=analysis.audience,
                     content=analysis.model_dump(mode="json"),
                     images=[],
+                    event_id=articles[0].event_id,
                 )
                 session.add(project)
                 session.flush()
@@ -109,6 +116,8 @@ class Pipeline:
                         setattr(project, field, getattr(selected, field))
                 if not project.main_url and selected.main_url:
                     project.main_url = canonical_url(selected.main_url)
+            if not project.event_id and articles[0].event_id:
+                project.event_id = articles[0].event_id
             known = {s.url for s in project.sources}
             for article in articles:
                 url = canonical_url(article.url)
@@ -131,14 +140,44 @@ class Pipeline:
                     ][:5]
             stored = Analysis.model_validate(project.content)
             project.rating, project.rating_components = score(stored, project.sources)
-            project.confidence, project.confidence_components = confidence(stored, project.sources)
+            project.primary_sector, project.sectors = classify_sectors(stored)
+            attach_evidence(session, project, analysis, articles, now)
+            reasons = evaluate_project(session, project, self.settings.evidence_min_score)
+            self.last_persist_visible = project.visible
+            if reasons:
+                record_rejection(
+                    session,
+                    articles[0].url,
+                    project.name,
+                    reasons,
+                    project.confidence,
+                    project.detection_signals,
+                )
+            else:
+                from .db import RejectedCandidate
+
+                for source in project.sources:
+                    rejected = session.get(RejectedCandidate, source.url)
+                    if rejected:
+                        session.delete(rejected)
             return created
 
     def run(self, archive=False):
         owner, start, began = str(uuid4()), now_utc(), monotonic()
         if not self.acquire(owner, start):
             return {"status": "busy"}
-        counts = dict(sources_checked=0, candidates=0, rejected=0, duplicates=0, new_projects=0, pending=0)
+        counts = dict(
+            sources_checked=0,
+            candidates=0,
+            rejected=0,
+            duplicates=0,
+            new_projects=0,
+            pending=0,
+            stop_filtered=0,
+            ecosystem_signals=0,
+            events=0,
+            event_projects=0,
+        )
         errors = []
         with self.factory.begin() as session:
             run = Run(started_at=start, counts=counts.copy())
@@ -146,8 +185,13 @@ class Pipeline:
             session.flush()
             run_id = run.id
         try:
+            audit_existing(self.factory, self.settings.evidence_min_score)
             links, discovery_errors, checked = self.discovery.discover(start, archive)
             errors.extend(discovery_errors)
+            if hasattr(self.discovery, "follow_events"):
+                event_links, event_errors = self.discovery.follow_events(start)
+                links = event_links + links
+                errors.extend(event_errors)
             counts["sources_checked"] = checked
             with self.factory() as session:
                 reanalysis = set()
@@ -165,7 +209,10 @@ class Pipeline:
                         .where(
                             or_(
                                 Candidate.status.in_(["pending", "error"]),
-                                and_(Candidate.status == "published", Candidate.url.in_(reanalysis)),
+                                and_(
+                                    Candidate.status.in_(["published", "rejected"]),
+                                    Candidate.url.in_(reanalysis),
+                                ),
                             )
                         )
                         .order_by(Candidate.updated_at)
@@ -184,9 +231,10 @@ class Pipeline:
                 with self.factory() as session:
                     existing = session.get(Candidate, url)
                     if existing and (
-                        (existing.status == "published" and url not in reanalysis)
+                        (existing.status in ("published", "ecosystem", "event") and url not in reanalysis)
                         or (
                             existing.status == "rejected"
+                            and url not in reanalysis
                             and not (archive and existing.reason == "date_out_of_range")
                         )
                     ):
@@ -198,20 +246,50 @@ class Pipeline:
                         if item.get("cached") and retry[url].get("parser_version", 1) == PARSER_VERSION
                         else self.discovery.article(url, item.get("published_at"))
                     )
+                    article.source_id = item.get("source_id") or article.source_id
+                    article.event_id = item.get("event_id") or article.event_id
                     with self.factory.begin() as session:
                         candidate = session.get(Candidate, url)
                         if candidate is None:
                             candidate = Candidate(url=url, article=article.model_dump(mode="json"))
                             session.add(candidate)
+                        candidate.source_id, candidate.event_id = article.source_id, article.event_id
                         candidate.article = article.model_dump(mode="json")
                         candidate.attempts = (candidate.attempts or 0) + 1
                     if not valid_date(article.published_at, start, archive):
                         self.mark(url, "rejected", "date_out_of_range")
                         counts["rejected"] += 1
+                        counts["stop_filtered"] += 1
                         continue
-                    if not is_candidate(article):
-                        self.mark(url, "rejected", "not_a_project")
+                    event_id, event_created = save_event(self.factory, article, start)
+                    counts["events"] += int(event_created)
+                    classification = material_type(article)
+                    if classification == "ECOSYSTEM_SIGNAL":
+                        with self.factory.begin() as session:
+                            if session.get(EcosystemSignal, url) is None:
+                                session.add(
+                                    EcosystemSignal(
+                                        url=url,
+                                        title=article.title,
+                                        source_id=article.source_id,
+                                        signal_type="ecosystem",
+                                        published_at=article.published_at,
+                                        quote=article.text[:1500],
+                                        discovered_at=start,
+                                    )
+                                )
+                        self.mark(url, "ecosystem", "")
+                        counts["ecosystem_signals"] += 1
+                        continue
+                    if classification == "EVENT":
+                        self.mark(url, "event", "")
+                        continue
+                    if classification != "PROJECT":
+                        self.mark(
+                            url, "rejected", "idea_list" if classification == "REJECT" else "not_project"
+                        )
                         counts["rejected"] += 1
+                        counts["stop_filtered"] += 1
                         continue
                     analysis = self.analyzer.analyze([article])
                     if analysis is None:
@@ -237,12 +315,24 @@ class Pipeline:
                     except (FetchError, AnalysisError) as exc:
                         errors.append({"source": "Qo‘shimcha tahlil", "code": str(exc)})
                     created = self.persist(analysis, articles, start)
-                    counts["new_projects" if created else "duplicates"] += 1
-                    self.mark(url, "published", "")
+                    if self.last_persist_visible:
+                        counts["new_projects" if created else "duplicates"] += 1
+                        counts["event_projects"] += int(created and bool(article.event_id))
+                        if created and article.source_id:
+                            with self.factory.begin() as session:
+                                source = session.get(RegistrySource, article.source_id)
+                                if source:
+                                    source.new_projects += 1
+                        self.mark(url, "published", "")
+                    else:
+                        counts["rejected"] += 1
+                        counts["stop_filtered"] += 1
+                        self.mark(url, "rejected", "stop_filter")
                 except (FetchError, AnalysisError) as exc:
                     if isinstance(exc, AnalysisError) and str(exc) == "not_a_verified_uzbekistan_project":
                         self.mark(url, "rejected", "not_a_project")
                         counts["rejected"] += 1
+                        counts["stop_filtered"] += 1
                     else:
                         self.mark(url, "error", str(exc))
                         errors.append({"source": "Nomzod", "code": str(exc)})
@@ -274,3 +364,5 @@ class Pipeline:
             candidate = session.get(Candidate, url)
             if candidate:
                 candidate.status, candidate.reason, candidate.updated_at = state, reason, now_utc()
+                if state == "rejected" and reason != "stop_filter":
+                    record_rejection(session, url, candidate.article.get("title", ""), [reason])

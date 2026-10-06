@@ -1,3 +1,4 @@
+import { RadarAdmin } from "./Radar";
 import { Activity, Clock3 } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { Status } from "./types";
@@ -64,8 +65,9 @@ export function StatusPage() {
       <div className="notice">
         <Clock3 size={18} />
         <p>
-          Qidiruv har soatning boshida ishlaydi. Barcha vaqtlar Toshkent vaqti
-          bilan ko‘rsatilgan. Bu sahifa har 30 soniyada yangilanadi.
+          Jadval har soatda tekshiriladi; har bir manba o‘z tekshiruv davriga
+          ega. Barcha vaqtlar Toshkent vaqti bilan ko‘rsatilgan. Bu sahifa har
+          30 soniyada yangilanadi.
         </p>
       </div>
       <div className="status-grid">
@@ -144,6 +146,7 @@ export function StatusPage() {
           ))}
         </section>
       </div>
+      <RadarAdmin status={s} />
       <section className="detail-section">
         <h2>Qidiruvlar tarixi</h2>
         {s.runs.length ? (

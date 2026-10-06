@@ -116,7 +116,7 @@ export function Card({
       <div className="card-top">
         <span className="category">
           <Leaf size={13} />
-          {categories[p.category] || "Boshqa"}
+          {categories[p.primary_sector || p.category] || "Boshqa"}
         </span>
         <span className="card-date">{date(p.published_at)}</span>
       </div>
@@ -145,6 +145,13 @@ export function Card({
           </dl>
         </div>
         <ProjectImage project={p} />
+      </div>
+      <div className="sector-chips">
+        {p.sectors?.slice(1).map((sector) => (
+          <span className="tag" key={sector}>
+            {categories[sector] || sector}
+          </span>
+        ))}
       </div>
       <div className="card-bottom">
         <span className="score">

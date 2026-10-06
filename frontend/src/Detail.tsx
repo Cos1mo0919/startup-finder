@@ -1,3 +1,4 @@
+import { EvidencePanel, ProblemPanel } from "./Radar";
 import {
   ArrowLeft,
   BookOpen,
@@ -59,7 +60,7 @@ export function Detail() {
       </Link>
       <div className="detail-heading">
         <span className="category">
-          {meta.data?.categories[p.category] || "Loyiha"}
+          {meta.data?.categories[p.primary_sector || p.category] || "Loyiha"}
         </span>
         <h1>{p.name}</h1>
         <p>{p.summary_uz}</p>
@@ -144,6 +145,7 @@ export function Detail() {
               </div>
             ))}
           </section>
+          <EvidencePanel project={p} />
           <section className="detail-section ai-section">
             <div className="section-heading">
               <h2>
@@ -165,6 +167,7 @@ export function Detail() {
                 <p>{c.ai_analysis_uz || "Qo‘shimcha tahlil mavjud emas."}</p>
               </>
             )}
+            <ProblemPanel project={p} />
             {[
               ["Bu nima", c.what_uz],
               ["Qanday ishlaydi", c.how_uz],

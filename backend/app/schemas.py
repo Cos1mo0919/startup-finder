@@ -32,6 +32,8 @@ CATEGORIES = {
 
 
 class Article(BaseModel):
+    source_id: str | None = None
+    event_id: str | None = None
     parser_version: int = 2
     url: str
     publisher: str
@@ -63,7 +65,20 @@ class Evidence(BaseModel):
     usability_fact: int | None = None
 
 
+class ProblemAnalysis(BaseModel):
+    affected_groups_uz: str = Field(default="", max_length=1500)
+    severity_uz: str = Field(default="", max_length=1500)
+    frequency_uz: str = Field(default="", max_length=1500)
+    solution_scope_uz: str = Field(default="", max_length=1500)
+    problem_severity_score: float | None = Field(default=None, ge=0, le=10)
+    basis_fact_indexes: list[int] = Field(default_factory=list, max_length=20)
+
+
 class Analysis(BaseModel):
+    primary_sector: str = "other"
+    sectors: list[str] = Field(default_factory=list, max_length=8)
+    problem_analysis: ProblemAnalysis = Field(default_factory=ProblemAnalysis)
+    why_now_uz: str = Field(default="", max_length=2500)
     is_project: bool
     uzbekistan_related: bool
     language: Literal["uz"] = "uz"

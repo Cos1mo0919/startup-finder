@@ -1510,3 +1510,217 @@ footer > span {
     transition: none !important;
   }
 }
+.sector-overview {
+  padding: 16px;
+  background: #edf2e6;
+  border: 1px solid #dce5d2;
+  border-radius: 10px;
+  margin-bottom: 20px;
+}
+.sector-overview > div:first-child {
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  align-items: center;
+}
+.sector-overview h3 {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  font-size: 12px;
+  margin: 0;
+}
+.sector-overview > div > span {
+  font-size: 10px;
+  color: #6a805b;
+}
+.sector-overview > p {
+  font-size: 11px;
+  margin: 12px 0 0;
+  color: #6a805b;
+}
+.sector-buttons {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+.sector-buttons a {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  background: white;
+  border: 1px solid #dce5d2;
+  border-radius: 7px;
+  padding: 9px;
+  font-size: 11px;
+}
+.sector-buttons small {
+  font-size: 9px;
+  color: #799068;
+}
+.sector-chips,
+.evidence-signals {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: 14px 0;
+}
+.evidence-record {
+  border-top: 1px solid var(--line);
+  padding: 16px 0;
+  font-size: 12px;
+}
+.evidence-record summary {
+  cursor: pointer;
+  line-height: 1.6;
+}
+.evidence-record summary span {
+  font-size: 10px;
+  color: #6f865e;
+  margin-left: 12px;
+}
+.evidence-record blockquote {
+  border-left: 2px solid #99b285;
+  margin: 14px 0;
+  padding: 10px;
+  color: #6a805e;
+  line-height: 1.7;
+}
+.problem-panel {
+  border-top: 1px solid #d6e1cc;
+  margin-top: 22px;
+  padding-top: 22px;
+}
+.problem-panel dl div {
+  margin: 15px 0;
+}
+.problem-panel dt {
+  font-size: 12px;
+  font-weight: 600;
+}
+.problem-panel dd {
+  font-size: 12px;
+  margin: 6px 0;
+  color: #6f815f;
+  line-height: 1.7;
+}
+.radar-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+.radar-metrics > div {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: #f3f6ee;
+  border-radius: 8px;
+  padding: 16px;
+}
+.radar-metrics span {
+  font-size: 11px;
+  color: #6f805f;
+}
+.radar-metrics strong {
+  font-size: 22px;
+  font-weight: 600;
+}
+.registry-list {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+.registry-source {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 17px;
+  min-width: 0;
+}
+.registry-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: flex-start;
+}
+.registry-heading > a {
+  font-weight: 600;
+  font-size: 13px;
+}
+.registry-source p {
+  font-size: 11px;
+  margin: 12px 0;
+}
+.registry-source dl {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+.registry-source dt {
+  font-size: 10px;
+  color: #849375;
+  margin-bottom: 5px;
+}
+.registry-source dd {
+  font-size: 11px;
+  margin: 0;
+  line-height: 1.5;
+}
+.source-error {
+  color: #a86137 !important;
+}
+.source-error code {
+  font-size: 9px;
+  display: block;
+}
+.health-error {
+  background: #fff0e8;
+  color: #9c5e3c;
+}
+.health-disabled,
+.health-untested {
+  background: #f0f1ec;
+  color: #839079;
+}
+.health-needs_config {
+  background: #fff4d9;
+  color: #92743f;
+}
+.review-record {
+  border-top: 1px solid var(--line);
+  padding: 15px 0;
+}
+.review-record a {
+  overflow-wrap: anywhere;
+}
+.review-record small {
+  font-size: 10px;
+  color: #839471;
+}
+.review-record p {
+  font-size: 11px;
+  margin: 8px 0;
+}
+@media (max-width: 720px) {
+  .radar-metrics {
+    grid-template-columns: 1fr 1fr;
+  }
+  .registry-list {
+    grid-template-columns: 1fr;
+  }
+  .sector-overview > div:first-child {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 7px;
+  }
+  .sector-buttons a {
+    font-size: 10px;
+  }
+  .evidence-record summary span {
+    display: block;
+    margin-left: 0;
+  }
+  .registry-source {
+    padding: 14px;
+  }
+}

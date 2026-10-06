@@ -60,6 +60,14 @@ def validate_analysis(analysis, articles):
         if index is None or not 0 <= index < len(analysis.facts):
             setattr(analysis.evidence, key, "unknown")
             setattr(analysis.evidence, key + "_fact", None)
+    from .sectors import classify_sectors
+
+    analysis.primary_sector, analysis.sectors = classify_sectors(analysis)
+    if not analysis.problem_analysis.basis_fact_indexes or any(
+        not 0 <= i < len(analysis.facts) for i in analysis.problem_analysis.basis_fact_indexes
+    ):
+        analysis.problem_analysis.problem_severity_score = None
+        analysis.problem_analysis.basis_fact_indexes = []
     return analysis
 
 
@@ -93,6 +101,14 @@ for applications with an existing project. Images and scores are not yours to in
 Rubric inputs require fact indexes; use unknown if unsupported. novel requires explicit novelty evidence;
 adopted requires actual users; multiple audience requires evidence of distinct groups.
 Only provide official/creator/company/university/event/github links if present in source text.
+Provide primary_sector and sectors using the supported sector keys: ai, fintech, healthtech,
+edtech, agritech, govtech, smart_city, cybersecurity, ecommerce, logistics, mobility, legaltech,
+climatetech, energy, construction, robotics, saas, developer_tools, design, manufacturing,
+foodtech, traveltech, other. The primary sector is also in sectors.
+problem_analysis must explain the specific affected groups, severity, frequency and whether the
+solution is partial or complete, in Uzbek. Optional problem_severity_score needs relevant fact
+indexes; leave null if evidence is missing. why_now_uz explains potential current relevance as
+AI analysis, not a verified fact. Do not invent current market facts or business/investment scores.
 If no project qualifies set is_project=false. analysis_mode=ai, language=uz.
 Schema: """ + json.dumps(schema, ensure_ascii=False)
         payload = [{"url": a.url, "title": a.title, "text": a.text[:18000]} for a in articles[:4]]

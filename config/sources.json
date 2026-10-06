@@ -1,0 +1,417 @@
+[
+  {
+    "id": "spot-uz",
+    "name": "Spot (O‘zbekcha)",
+    "url": "https://www.spot.uz/oz/rss/",
+    "source_type": "news",
+    "region": "Uzbekistan",
+    "priority": 5,
+    "check_frequency": 60,
+    "reliability_score": 7.5,
+    "enabled": true,
+    "collection_method": "RSS",
+    "kind": "news",
+    "options": {},
+    "notes": "RSS avval jonli tekshirilgan."
+  },
+  {
+    "id": "spot-ru",
+    "name": "Spot (Ruscha)",
+    "url": "https://www.spot.uz/ru/rss/",
+    "source_type": "news",
+    "region": "Uzbekistan",
+    "priority": 5,
+    "check_frequency": 60,
+    "reliability_score": 7.5,
+    "enabled": true,
+    "collection_method": "RSS",
+    "kind": "news",
+    "options": {},
+    "notes": "Ruscha materiallar uchun AI tarjimasi kerak."
+  },
+  {
+    "id": "uzhunt",
+    "name": "UzHunt",
+    "url": "https://uzhunt.uz/",
+    "source_type": "startup_platform",
+    "region": "Uzbekistan",
+    "priority": 4,
+    "check_frequency": 180,
+    "reliability_score": 5,
+    "enabled": true,
+    "collection_method": "direct_page",
+    "kind": "unknown",
+    "options": {
+      "link_pattern": "/p/[^/]+$"
+    },
+    "notes": "Jonli HTML va robots.txt tekshirildi. Mahsulot havolalari olinadi; sanasiz sahifalar lentaga chiqmaydi. Platformadagi yozuv muallif yoki tashkilotning rasmiy tasdig‘i deb qabul qilinmaydi; qo‘shimcha dalil kerak."
+  },
+  {
+    "id": "itpark",
+    "name": "IT Park Uzbekistan",
+    "url": "https://www.it-park.uz/uz/itpark/news",
+    "source_type": "accelerator",
+    "region": "Uzbekistan",
+    "priority": 4,
+    "check_frequency": 180,
+    "reliability_score": 9,
+    "enabled": true,
+    "collection_method": "direct_page",
+    "kind": "official",
+    "options": {
+      "link_pattern": "/itpark/news/"
+    },
+    "notes": "Rasmiy yangiliklar sahifasi va robots.txt jonli tekshirildi. Hududiy qidiruv alohida profil orqali."
+  },
+  {
+    "id": "ictweek",
+    "name": "ICT Week Uzbekistan",
+    "url": "https://www.ictweek.uz/eng",
+    "source_type": "event",
+    "region": "Uzbekistan",
+    "priority": 3,
+    "check_frequency": 480,
+    "reliability_score": 9,
+    "enabled": true,
+    "collection_method": "direct_page",
+    "kind": "event",
+    "options": {
+      "link_pattern": "/eng/news/20[0-9]{2}/"
+    },
+    "notes": "Rasmiy tadbir yangiliklari va robots.txt tekshirildi. Inglizcha tavsiflar AI tarjimasini kutadi."
+  },
+  {
+    "id": "tuit",
+    "name": "Toshkent axborot texnologiyalari universiteti",
+    "url": "https://tuit.uz/",
+    "source_type": "university",
+    "region": "Uzbekistan",
+    "priority": 3,
+    "check_frequency": 480,
+    "reliability_score": 9,
+    "enabled": false,
+    "collection_method": "direct_page",
+    "kind": "university",
+    "options": {
+      "link_pattern": "post|news|yangilik"
+    },
+    "notes": "Bosh sahifa ochildi, robots.txt tekshiruvi HTTP 503 qaytardi; xavfsiz yig‘ish tasdiqlanmaguncha o‘chirilgan."
+  },
+  {
+    "id": "samdu",
+    "name": "Samarqand davlat universiteti",
+    "url": "https://www.samdu.uz/",
+    "source_type": "university",
+    "region": "Regional Uzbekistan — Samarqand",
+    "priority": 2,
+    "check_frequency": 1440,
+    "reliability_score": 9,
+    "enabled": false,
+    "collection_method": "direct_page",
+    "kind": "university",
+    "options": {
+      "link_pattern": "news|yangilik|post"
+    },
+    "notes": "Jonli tekshiruvda HTTP 409; himoyalar chetlab o‘tilmaydi."
+  },
+  {
+    "id": "bsu",
+    "name": "Buxoro davlat universiteti",
+    "url": "https://buxdu.uz/",
+    "source_type": "university",
+    "region": "Regional Uzbekistan — Buxoro",
+    "priority": 2,
+    "check_frequency": 1440,
+    "reliability_score": 9,
+    "enabled": false,
+    "collection_method": "direct_page",
+    "kind": "university",
+    "options": {
+      "link_pattern": "news|yangilik|post"
+    },
+    "notes": "Manzil va yig‘ish sozlamalari jonli tekshiruvni kutmoqda."
+  },
+  {
+    "id": "fdu",
+    "name": "Farg‘ona davlat universiteti",
+    "url": "https://fdu.uz/",
+    "source_type": "university",
+    "region": "Regional Uzbekistan — Farg‘ona",
+    "priority": 2,
+    "check_frequency": 1440,
+    "reliability_score": 9,
+    "enabled": false,
+    "collection_method": "direct_page",
+    "kind": "university",
+    "options": {
+      "link_pattern": "news|yangilik|post"
+    },
+    "notes": "Manzil va yig‘ish sozlamalari jonli tekshiruvni kutmoqda."
+  },
+  {
+    "id": "adu",
+    "name": "Andijon davlat universiteti",
+    "url": "https://adu.uz/",
+    "source_type": "university",
+    "region": "Regional Uzbekistan — Andijon",
+    "priority": 2,
+    "check_frequency": 1440,
+    "reliability_score": 9,
+    "enabled": false,
+    "collection_method": "direct_page",
+    "kind": "university",
+    "options": {
+      "link_pattern": "news|yangilik|post"
+    },
+    "notes": "Manzil va yig‘ish sozlamalari jonli tekshiruvni kutmoqda."
+  },
+  {
+    "id": "namdu",
+    "name": "Namangan davlat universiteti",
+    "url": "https://namdu.uz/",
+    "source_type": "university",
+    "region": "Regional Uzbekistan — Namangan",
+    "priority": 2,
+    "check_frequency": 1440,
+    "reliability_score": 9,
+    "enabled": false,
+    "collection_method": "direct_page",
+    "kind": "university",
+    "options": {
+      "link_pattern": "news|yangilik|post"
+    },
+    "notes": "Manzil va yig‘ish sozlamalari jonli tekshiruvni kutmoqda."
+  },
+  {
+    "id": "karsu",
+    "name": "Qoraqalpoq davlat universiteti",
+    "url": "https://karsu.uz/",
+    "source_type": "university",
+    "region": "Regional Uzbekistan — Qoraqalpog‘iston",
+    "priority": 2,
+    "check_frequency": 1440,
+    "reliability_score": 9,
+    "enabled": false,
+    "collection_method": "direct_page",
+    "kind": "university",
+    "options": {
+      "link_pattern": "news|yangilik|post"
+    },
+    "notes": "Manzil va yig‘ish sozlamalari jonli tekshiruvni kutmoqda."
+  },
+  {
+    "id": "urdu",
+    "name": "Urganch davlat universiteti",
+    "url": "https://urdu.uz/",
+    "source_type": "university",
+    "region": "Regional Uzbekistan — Xorazm",
+    "priority": 2,
+    "check_frequency": 1440,
+    "reliability_score": 9,
+    "enabled": false,
+    "collection_method": "direct_page",
+    "kind": "university",
+    "options": {
+      "link_pattern": "news|yangilik|post"
+    },
+    "notes": "Manzil va yig‘ish sozlamalari jonli tekshiruvni kutmoqda."
+  },
+  {
+    "id": "navdu",
+    "name": "Navoiy davlat universiteti",
+    "url": "https://navdu.uz/",
+    "source_type": "university",
+    "region": "Regional Uzbekistan — Navoiy",
+    "priority": 2,
+    "check_frequency": 1440,
+    "reliability_score": 9,
+    "enabled": false,
+    "collection_method": "direct_page",
+    "kind": "university",
+    "options": {
+      "link_pattern": "news|yangilik|post"
+    },
+    "notes": "Manzil va yig‘ish sozlamalari jonli tekshiruvni kutmoqda."
+  },
+  {
+    "id": "qarshidu",
+    "name": "Qarshi davlat universiteti",
+    "url": "https://qarshidu.uz/",
+    "source_type": "university",
+    "region": "Regional Uzbekistan — Qashqadaryo",
+    "priority": 2,
+    "check_frequency": 1440,
+    "reliability_score": 9,
+    "enabled": false,
+    "collection_method": "direct_page",
+    "kind": "university",
+    "options": {
+      "link_pattern": "news|yangilik|post"
+    },
+    "notes": "Manzil va yig‘ish sozlamalari jonli tekshiruvni kutmoqda."
+  },
+  {
+    "id": "jizpi",
+    "name": "Jizzax politexnika instituti",
+    "url": "https://jizpi.uz/",
+    "source_type": "university",
+    "region": "Regional Uzbekistan — Jizzax",
+    "priority": 2,
+    "check_frequency": 1440,
+    "reliability_score": 9,
+    "enabled": false,
+    "collection_method": "direct_page",
+    "kind": "university",
+    "options": {
+      "link_pattern": "news|yangilik|post"
+    },
+    "notes": "Manzil va yig‘ish sozlamalari jonli tekshiruvni kutmoqda."
+  },
+  {
+    "id": "guldu",
+    "name": "Guliston davlat universiteti",
+    "url": "https://guldu.uz/",
+    "source_type": "university",
+    "region": "Regional Uzbekistan — Sirdaryo",
+    "priority": 2,
+    "check_frequency": 1440,
+    "reliability_score": 9,
+    "enabled": false,
+    "collection_method": "direct_page",
+    "kind": "university",
+    "options": {
+      "link_pattern": "news|yangilik|post"
+    },
+    "notes": "Manzil va yig‘ish sozlamalari jonli tekshiruvni kutmoqda."
+  },
+  {
+    "id": "tersu",
+    "name": "Termiz davlat universiteti",
+    "url": "https://tersu.uz/",
+    "source_type": "university",
+    "region": "Regional Uzbekistan — Surxondaryo",
+    "priority": 2,
+    "check_frequency": 1440,
+    "reliability_score": 9,
+    "enabled": false,
+    "collection_method": "direct_page",
+    "kind": "university",
+    "options": {
+      "link_pattern": "news|yangilik|post"
+    },
+    "notes": "Manzil va yig‘ish sozlamalari jonli tekshiruvni kutmoqda."
+  },
+  {
+    "id": "gazeta",
+    "name": "Gazeta.uz",
+    "url": "https://www.gazeta.uz/oz/rss/",
+    "source_type": "news",
+    "region": "Uzbekistan",
+    "priority": 4,
+    "check_frequency": 180,
+    "reliability_score": 7.5,
+    "enabled": false,
+    "collection_method": "RSS",
+    "kind": "news",
+    "options": {},
+    "notes": "Oldingi tekshiruvda HTTP 403; cheklovlar chetlab o‘tilmaydi."
+  },
+  {
+    "id": "search-regional",
+    "name": "Hududiy loyihalar qidiruvi",
+    "url": "https://api.search.brave.com/res/v1/web/search?profile=regional",
+    "source_type": "community",
+    "region": "Regional Uzbekistan",
+    "priority": 4,
+    "check_frequency": 180,
+    "reliability_score": 0,
+    "enabled": true,
+    "collection_method": "search",
+    "kind": "unknown",
+    "options": {
+      "query": "Uzbekistan {region} startap loyiha prototip universitet",
+      "regions": [
+        "Samarqand",
+        "Buxoro",
+        "Farg‘ona",
+        "Andijon",
+        "Namangan",
+        "Qoraqalpog‘iston",
+        "Xorazm",
+        "Navoiy",
+        "Qarshi Qashqadaryo",
+        "Jizzax",
+        "Sirdaryo",
+        "Surxondaryo"
+      ]
+    },
+    "notes": "Brave Search API kaliti kerak. Natija manbasi alohida tekshiriladi."
+  },
+  {
+    "id": "search-hackathons",
+    "name": "Hakaton va tanlovlar",
+    "url": "https://api.search.brave.com/res/v1/web/search?profile=hackathons",
+    "source_type": "hackathon",
+    "region": "Regional Uzbekistan",
+    "priority": 4,
+    "check_frequency": 180,
+    "reliability_score": 0,
+    "enabled": true,
+    "collection_method": "search",
+    "kind": "unknown",
+    "options": {
+      "query": "Uzbekistan hackathon tanlov demo day startup winner loyiha",
+      "regions": []
+    },
+    "notes": "Brave Search API kaliti kerak. Natija manbasi alohida tekshiriladi."
+  },
+  {
+    "id": "search-government",
+    "name": "Davlat texnologik tashabbuslari",
+    "url": "https://api.search.brave.com/res/v1/web/search?profile=government",
+    "source_type": "government",
+    "region": "Regional Uzbekistan",
+    "priority": 3,
+    "check_frequency": 480,
+    "reliability_score": 0,
+    "enabled": true,
+    "collection_method": "search",
+    "kind": "unknown",
+    "options": {
+      "query": "site:gov.uz Uzbekistan loyiha innovatsiya prototip grant",
+      "regions": []
+    },
+    "notes": "Brave Search API kaliti kerak. Natija manbasi alohida tekshiriladi."
+  },
+  {
+    "id": "search-itpark-regions",
+    "name": "IT Park hududiy bo‘limlari",
+    "url": "https://api.search.brave.com/res/v1/web/search?profile=itpark-regions",
+    "source_type": "accelerator",
+    "region": "Regional Uzbekistan",
+    "priority": 3,
+    "check_frequency": 480,
+    "reliability_score": 0,
+    "enabled": true,
+    "collection_method": "search",
+    "kind": "unknown",
+    "options": {
+      "query": "site:it-park.uz {region} loyiha startup demo day",
+      "regions": [
+        "Samarqand",
+        "Buxoro",
+        "Farg‘ona",
+        "Andijon",
+        "Namangan",
+        "Qoraqalpog‘iston",
+        "Xorazm",
+        "Navoiy",
+        "Qarshi Qashqadaryo",
+        "Jizzax",
+        "Sirdaryo",
+        "Surxondaryo"
+      ]
+    },
+    "notes": "Brave Search API kaliti kerak. Natija manbasi alohida tekshiriladi."
+  }
+]

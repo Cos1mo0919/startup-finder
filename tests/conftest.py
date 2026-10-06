@@ -28,7 +28,7 @@ def factory(settings):
 
 
 def sample_article(name="AgroKo‘mak", url="https://news.example/article", publisher="Sinov nashri"):
-    quote = f"O‘zbekiston uchun “{name}” loyihasi universitet tomonidan ishlab chiqildi va talabalar uchun taqdim etildi."
+    quote = f"O‘zbekiston uchun “{name}” loyihasi Test University tomonidan ishlab chiqildi va talabalar uchun taqdim etildi."
     return Article(
         url=url,
         publisher=publisher,
@@ -46,7 +46,7 @@ def sample_analysis(article=None, name="AgroKo‘mak"):
         is_project=True,
         uzbekistan_related=True,
         name=name,
-        creator="universitet",
+        creator="Test University",
         summary_uz=article.text,
         what_uz=article.text,
         category="agriculture",

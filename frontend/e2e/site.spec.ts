@@ -75,3 +75,31 @@ test("status and empty-state layouts are usable", async ({ page }, info) => {
     fullPage: true,
   });
 });
+
+test("sector statistics and radar diagnostics", async ({ page }) => {
+  await page.goto("/");
+  const sectors = page.getByRole("region", { name: "Sektorlar statistikasi" });
+  await expect(sectors).toContainText("1 ta tasdiqlangan loyiha");
+  await sectors.getByRole("link").first().click();
+  await expect(
+    page.getByRole("link", { name: "AgroKo‘mak", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("link", { name: "Batafsil", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Tasdiqlanganlik dalillari" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Nega bu loyiha hozir muhim?" }),
+  ).toBeVisible();
+  await page.goto("/status");
+  await expect(
+    page.getByRole("heading", { name: "Manbalar reyestri va holati" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Loyiha aniqlash sabablari" }),
+  ).toBeVisible();
+  await page.getByText("AgroKo‘mak · Lentada", { exact: false }).click();
+  await expect(
+    page.getByText("Majburiy sifat tekshiruvlaridan o‘tgan."),
+  ).toBeVisible();
+});

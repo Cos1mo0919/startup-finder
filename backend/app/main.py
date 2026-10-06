@@ -4,8 +4,11 @@ from typing import Literal
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy import func, or_, select, text
-from .collectors.sources import load_sources
+from sqlalchemy import String, cast, func, or_, select, text
+from .registry import seed_registry
+from .evidence import audit_existing
+from .radar_api import radar_status, sector_stats, evidence_json
+from .sectors import SECTORS, LEGACY
 from .config import Settings
 from .dates import TASHKENT, today_start
 from .db import Candidate, Project, Run, aware, make_db, now_utc
@@ -42,12 +45,17 @@ def serialize_project(project, detail=False):
         last_seen=iso(project.last_seen),
         published_at=iso(project.published_at),
         images=project.images,
+        primary_sector=project.primary_sector,
+        sectors=project.sectors,
+        real_project_confidence=project.real_project_confidence,
         source_count=len(project.sources),
         analysis_mode=content["analysis_mode"],
     )
     if detail:
         result.update(
             content=content,
+            evidence=evidence_json(project),
+            detection_signals=project.detection_signals,
             main_url=project.main_url,
             aliases=project.aliases,
             rating_components=project.rating_components,
@@ -69,6 +77,8 @@ def serialize_project(project, detail=False):
 def create_app(settings=None):
     settings = settings or Settings()
     engine, factory = make_db(settings.database_url)
+    seed_registry(factory, settings.sources_file)
+    audit_existing(factory, settings.evidence_min_score)
     scheduler = make_scheduler(settings, factory)
 
     @asynccontextmanager
@@ -103,7 +113,8 @@ def create_app(settings=None):
     @app.get("/api/meta")
     def meta():
         return {
-            "categories": CATEGORIES,
+            "categories": SECTORS,
+            "sectors": SECTORS,
             "timezone": "Asia/Tashkent",
             "years": list(range(now_utc().astimezone(TASHKENT).year, 2021, -1)),
         }
@@ -121,7 +132,7 @@ def create_app(settings=None):
         page: int = Query(default=1, ge=1, le=10000),
         page_size: int = Query(default=12, ge=1, le=50),
     ):
-        query = select(Project)
+        query = select(Project).where(Project.visible.is_(True))
         if q.strip():
             term = q.strip()
             query = query.where(
@@ -136,7 +147,13 @@ def create_app(settings=None):
                 )
             )
         if category:
-            query = query.where(Project.category == category)
+            sector = LEGACY.get(category, category)
+            query = query.where(
+                or_(
+                    Project.primary_sector == sector,
+                    cast(Project.sectors, String).contains('"' + sector + '"', autoescape=True),
+                )
+            )
         if city:
             query = query.where(Project.city.icontains(city, autoescape=True))
         if audience:
@@ -179,7 +196,7 @@ def create_app(settings=None):
     def project_detail(project_id: str):
         with factory() as session:
             project = session.get(Project, project_id)
-            if project is None:
+            if project is None or not project.visible:
                 raise HTTPException(404, "Loyiha topilmadi")
             return serialize_project(project, detail=True)
 
@@ -199,13 +216,16 @@ def create_app(settings=None):
                 }
                 for r in runs
             ]
-            total = session.scalar(select(func.count()).select_from(Project))
+            total = session.scalar(select(func.count()).select_from(Project).where(Project.visible.is_(True)))
             today = session.scalar(
-                select(func.count()).select_from(Project).where(Project.first_seen >= today_start(now_utc()))
+                select(func.count())
+                .select_from(Project)
+                .where(Project.first_seen >= today_start(now_utc()), Project.visible.is_(True))
             )
             pending = session.scalar(
                 select(func.count()).select_from(Candidate).where(Candidate.status == "pending")
             )
+            radar = radar_status(session, settings.evidence_min_score)
         job = scheduler.get_job("discovery")
         next_run = getattr(job, "next_run_time", None) if settings.scheduler_enabled else None
         return {
@@ -219,10 +239,18 @@ def create_app(settings=None):
             "pending_candidates": pending,
             "ai_enabled": bool(settings.ai_key),
             "search_enabled": bool(settings.search_api_key.get_secret_value()),
-            "sources": [
-                {"name": s.name, "url": s.url, "kind": s.kind} for s in load_sources(settings.sources_file)
-            ],
+            **radar,
         }
+
+    @app.get("/api/sectors/stats")
+    def sectors_stats():
+        with factory() as session:
+            return sector_stats(session)
+
+    @app.get("/api/sources")
+    def source_registry():
+        with factory() as session:
+            return radar_status(session, settings.evidence_min_score)["sources"]
 
     if (settings.frontend_dist / "assets").exists():
         app.mount("/assets", StaticFiles(directory=settings.frontend_dist / "assets"), name="assets")

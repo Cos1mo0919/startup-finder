@@ -1,23 +1,16 @@
-import json
+import re
+from itertools import zip_longest
 from typing import Protocol
-from urllib.parse import urlsplit
+from urllib.parse import urljoin, urlsplit
 import httpx
-from pydantic import BaseModel
+from bs4 import BeautifulSoup
+from sqlalchemy import select
 from ..dates import priority
-from ..network import FetchError, safe_url
-from ..schemas import SourceKind
+from ..db import Event, RegistrySource
+from ..events import event_queries, followup_due
+from ..network import FetchError, safe_url, canonical_url
+from ..registry import due, record_check, seed_registry, source_for_url
 from .parsers import parse_article, parse_feed
-
-
-class SourceConfig(BaseModel):
-    name: str
-    url: str
-    kind: SourceKind = "unknown"
-    enabled: bool = True
-
-
-def load_sources(path):
-    return [SourceConfig.model_validate(s) for s in json.loads(path.read_text()) if s.get("enabled", True)]
 
 
 class SearchAdapter(Protocol):
@@ -49,61 +42,145 @@ class BraveSearch:
 
 
 class Discovery:
-    def __init__(self, settings, web, search=None):
-        self.settings, self.web = settings, web
-        self.sources = load_sources(settings.sources_file)
+    def __init__(self, settings, web, search=None, factory=None):
+        self.settings, self.web, self.factory = settings, web, factory
+        self.force = False
+        if factory:
+            seed_registry(factory, settings.sources_file)
+            with factory() as session:
+                self.sources = list(session.scalars(select(RegistrySource)))
+            if settings.trusted_egress_proxy:
+                web.proxy_hosts.update(urlsplit(s.url).hostname for s in self.sources if s.enabled)
+        else:
+            self.sources = []
         self.search = search or (
             BraveSearch(settings.search_api_key.get_secret_value())
             if settings.search_api_key.get_secret_value()
             else NoSearch()
         )
 
-    def source_metadata(self, url):
-        host = urlsplit(url).hostname
-        for source in self.sources:
-            if urlsplit(source.url).hostname == host:
-                return source.name, source.kind
-        return host, "unknown"
-
     def article(self, url, feed_date=None):
         raw, final_url = self.web.get(url)
-        name, kind = self.source_metadata(final_url)
-        return parse_article(raw, final_url, name, kind, feed_date)
+        with self.factory() as session:
+            source = source_for_url(session, final_url)
+            name, kind = (
+                (source.name, source.trust_kind) if source else (urlsplit(final_url).hostname, "unknown")
+            )
+            result = parse_article(raw, final_url, name, kind, feed_date)
+            result.source_id = source.id if source else None
+            return result
+
+    def page_links(self, url, pattern=""):
+        raw, final = self.web.get(url)
+        soup = BeautifulSoup(raw, "html.parser")
+        links = []
+        for anchor in soup.select("a[href]")[:400]:
+            try:
+                link = canonical_url(urljoin(final, anchor["href"]))
+                if urlsplit(link).hostname != urlsplit(final).hostname or link == canonical_url(final):
+                    continue
+                if pattern and not re.search(pattern, link):
+                    continue
+                links.append({"url": link, "published_at": None})
+            except (FetchError, ValueError):
+                continue
+        return list({item["url"]: item for item in links}.values())[:40]
+
+    def collect(self, source, now, archive):
+        method = source.collection_method
+        if method == "RSS":
+            raw, _ = self.web.get(source.url)
+            return parse_feed(raw)
+        if method == "direct_page":
+            if source.options.get("single_article"):
+                self.web.get(source.url)
+                return [{"url": source.url, "published_at": None}]
+            if not source.options.get("link_pattern"):
+                raise FetchError("source_requires_configuration")
+            return self.page_links(source.url, source.options["link_pattern"])
+        if method == "search":
+            if isinstance(self.search, NoSearch):
+                raise FetchError("requires_api_key")
+            query = source.options.get("query", "")
+            if not query:
+                raise FetchError("source_requires_configuration")
+            regions = source.options.get("regions", []) or ["Uzbekistan"]
+            # Rotate a persistent hourly calendar, covering all configured regions without an API burst.
+            slot = int(now.timestamp() // (source.check_frequency * 60)) % len(regions)
+            query = query.replace("{region}", regions[slot])
+            freshness = "2022-01-01to" + now.strftime("%Y-%m-%d") if archive else "pm"
+            return [{"url": u, "published_at": None} for u in self.search.search(query, freshness)]
+        raise FetchError("source_requires_configuration")
 
     def discover(self, now, archive=False):
-        links, errors, checked = [], [], 0
-        for source in self.sources:
+        batches, errors, checked = [], [], 0
+        with self.factory() as session:
+            sources = list(
+                session.scalars(
+                    select(RegistrySource).order_by(RegistrySource.priority.desc(), RegistrySource.id)
+                )
+            )
+        for source in sources:
+            if not due(source, now, self.force):
+                continue
             checked += 1
             try:
-                raw, _ = self.web.get(source.url)
-                links.extend(parse_feed(raw))
+                links = self.collect(source, now, archive)
+                for item in links:
+                    item["source_id"] = source.id
+                links.sort(key=lambda item: priority(item.get("published_at"), now))
+                batches.append(links)
+                record_check(self.factory, source.id, now, len(links))
             except FetchError as exc:
+                record_check(self.factory, source.id, now, error=str(exc))
                 errors.append({"source": source.name, "code": str(exc)})
-        if not isinstance(self.search, NoSearch):
-            queries = [
-                "O‘zbekiston startap loyiha prototip tanlov universitet",
-                "Узбекистан стартап проект хакатон разработка инвестиции",
-                "Uzbekistan startup research agriculture healthcare energy demo day",
+        # Fair per-source budget: local sources cannot be crowded out by a large news RSS.
+        links = []
+        seen = set()
+        for group in zip_longest(*batches):
+            for item in group:
+                if item and canonical_url(item["url"]) not in seen:
+                    seen.add(canonical_url(item["url"]))
+                    links.append(item)
+        return links[: self.settings.max_candidates], errors, checked
+
+    def follow_events(self, now):
+        with self.factory() as session:
+            events = [
+                e
+                for e in session.scalars(select(Event).order_by(Event.discovered_at.desc()))
+                if followup_due(e, now)
             ]
-            for freshness in ["2022-01-01to" + now.strftime("%Y-%m-%d")] if archive else ["pd", "pw", "pm"]:
-                for query in queries:
-                    checked += 1
-                    try:
-                        links.extend(
-                            {"url": u, "published_at": None} for u in self.search.search(query, freshness)
+        links, errors = [], []
+        for event in events[: self.settings.max_event_followups]:
+            error = ""
+            try:
+                found = []
+                if not isinstance(self.search, NoSearch):
+                    for query in event_queries(event):
+                        found.extend(
+                            {"url": u, "published_at": None} for u in self.search.search(query, "pm")
                         )
-                    except FetchError as exc:
-                        errors.append({"source": "Brave Search", "code": str(exc)})
-                        break
-                if errors and errors[-1]["source"] == "Brave Search":
-                    break
-        links.sort(key=lambda item: priority(item.get("published_at"), now))
-        unique = list({item["url"]: item for item in reversed(links)}.values())[::-1]
-        return unique[: self.settings.max_candidates], errors, checked
+                elif event.official_url:
+                    found = self.page_links(
+                        event.official_url,
+                        "winner|project|loyiha|g.olib|demo|startup|team|participant|natija",
+                    )
+                else:
+                    raise FetchError("event_requires_search_key")
+                links.extend(
+                    {**item, "event_id": event.id, "source_id": event.source_id} for item in found[:10]
+                )
+            except FetchError as exc:
+                error = str(exc)
+                errors.append({"source": event.name, "code": error})
+            with self.factory.begin() as session:
+                stored = session.get(Event, event.id)
+                stored.last_checked_at = now
+                stored.last_error = error
+        return links, errors
 
     def corroborate(self, name, original_url):
-        return [
-            u
-            for u in self.search.search(f'"{name}" Uzbekistan O‘zbekiston', "2022-01-01to2030-01-01")
-            if u != original_url
-        ][:3]
+        return [u for u in self.search.search(f'"{name}" Uzbekistan O‘zbekiston', "pm") if u != original_url][
+            :3
+        ]

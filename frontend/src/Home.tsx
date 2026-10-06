@@ -1,3 +1,4 @@
+import { SectorOverview } from "./Radar";
 import {
   ArrowDownWideNarrow,
   ArrowRight,
@@ -217,6 +218,7 @@ export function Home() {
               {results.data?.total ?? 0} ta loyiha
             </span>
           </div>
+          <SectorOverview />
           <div className="feed-toolbar">
             <div className="period-tabs" aria-label="Vaqt bo‘yicha filtr">
               {[
@@ -367,7 +369,7 @@ export function Home() {
               <br />
               xabardor bo‘ling.
             </h3>
-            <p>Manbalar har soatda tekshiriladi.</p>
+            <p>Har soatda muddati kelgan manbalar tekshiriladi.</p>
             <div className="live-metric">
               <span>Keyingi qidiruv</span>
               <strong>{time(status.data?.next_run)}</strong>
