@@ -60,3 +60,15 @@ Version 2 migration has legacy preservation and repeatability tests; SQLite also
 Archive backfill uses explicit inclusive calendar bounds, separate per-year runs and public, bounded source archive pagination/sitemaps plus targeted multilingual search. Publication dates are verified on articles; sitemap lastmod never becomes published_at. Discovery queues URLs durably before processing, preserving backlog and provenance. Pending archive records retain their scope and can be translated later even during a fresh run. Projects are append/merge only; first_seen is discovery time, year filters use original publication date.
 
 Early topic filtering operates before paid analysis, with concrete product evidence taking precedence over broad noise keywords. A versioned deterministic extractor recognizes attributed named projects across Uzbek/Russian/English; foreign input is presented through narrow, evidence-backed Uzbek templates, retaining original quotes. Unsupported descriptions remain unknown. AI failure leaves retryable candidates, not silent losses. Structured run diagnostics separate source/config/parser/AI/translation errors and expose rejection and origin counts. No redesign is planned.
+# Temporary preview boundary — 2026-10-07
+
+The optional `scripts/preview.sh` exposes the existing single-origin frontend/API
+through an external tunnel; it does not change collectors, UI, database schema or
+scheduler. SQLite stays on the originating machine. Backend restart preserves data;
+machine deletion requires an independently retained backup. `backend.app.db_transfer`
+exports a consistent SQLite backup including committed WAL and refuses overwrites.
+`scripts/verify_deployment.py` checks routes, assets, API, filters and stored project
+identity across restarts. The hourly scheduler exists only while the API process runs.
+No managed cron, worker or permanent hosting was provisioned. Public HTTPS is currently
+blocked by tunnel connectivity in the managed network; no successful external deployment
+is claimed. Stage 1 remains unaccepted.
