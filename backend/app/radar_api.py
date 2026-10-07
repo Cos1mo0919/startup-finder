@@ -12,6 +12,7 @@ from .db import (
     now_utc,
 )
 from .dates import today_start
+from .diagnostics import candidate_diagnostics
 from .evidence import EVIDENCE_LABELS, STOP_LABELS
 from .sectors import SECTORS
 
@@ -76,6 +77,7 @@ def radar_status(session, threshold):
         session.scalars(select(EcosystemSignal).order_by(EcosystemSignal.discovered_at.desc()).limit(30))
     )
     return {
+        **candidate_diagnostics(session),
         "sources": [source_json(s) for s in sources],
         "source_summary": {
             "total": len(sources),

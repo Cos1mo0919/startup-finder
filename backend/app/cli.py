@@ -1,5 +1,7 @@
 import argparse
 import json
+from datetime import date
+from pathlib import Path
 from .config import Settings
 from .db import make_db
 from .pipeline import Pipeline
@@ -29,6 +31,15 @@ def main():
     toggle.add_argument("--disable-source", action="store_true")
     parser.add_argument(
         "--audit", action="store_true", help="Re-evaluate all stored project evidence and feed visibility"
+    )
+    parser.add_argument(
+        "--backfill", action="store_true", help="Bounded archive discovery, separate run for every year"
+    )
+    parser.add_argument("--from-date", type=date.fromisoformat, default=date(2022, 1, 1))
+    parser.add_argument("--to-date", type=date.fromisoformat, default=date(2026, 9, 30))
+    parser.add_argument("--report", type=Path, help="Write structured results to this JSON file")
+    parser.add_argument(
+        "--drain", action="store_true", help="Process durable backlog without rediscovering sources"
     )
     args = parser.parse_args()
     settings = Settings()
@@ -67,7 +78,23 @@ def main():
         pipeline = Pipeline(settings, factory)
         pipeline.discovery.force = args.force_sources
         try:
-            result = pipeline.run(archive=args.archive)
+            if args.backfill:
+                from .queries import archive_windows
+
+                results = []
+                for window in archive_windows(args.from_date, args.to_date):
+                    result = pipeline.run(archive=True, window=window, discover=not args.drain)
+                    results.append(result)
+                    print(json.dumps({"year": window[0].year, **result}, ensure_ascii=False), flush=True)
+                result = {
+                    "status": "partial" if any(r["status"] != "completed" for r in results) else "completed",
+                    "runs": results,
+                }
+            else:
+                result = pipeline.run(archive=args.archive, discover=not args.drain)
+            if args.report:
+                args.report.parent.mkdir(parents=True, exist_ok=True)
+                args.report.write_text(json.dumps(result, ensure_ascii=False, indent=2))
         finally:
             pipeline.close()
         print(json.dumps(result, ensure_ascii=False, indent=2))

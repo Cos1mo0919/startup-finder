@@ -5,13 +5,19 @@
     "url": "https://www.spot.uz/oz/rss/",
     "source_type": "news",
     "region": "Uzbekistan",
-    "priority": 5,
-    "check_frequency": 60,
+    "priority": 3,
+    "check_frequency": 480,
     "reliability_score": 7.5,
     "enabled": true,
     "collection_method": "RSS",
     "kind": "news",
-    "options": {},
+    "options": {
+      "archive": {
+        "sitemap_index": "https://www.spot.uz/sitemap.xml",
+        "sitemap_pattern": "materials-oz-{year}-",
+        "target_pattern": "startup|startap|loyiha|project|prototype|prototip|hackathon|hakaton|demo|robot|platform|app|dastur|innovation|innovatsi|founder|student|university|univer|launch|kotib|mohir|tass|bilim|raqam|smart|digital|service|servis|med|health|edu|fintech|agro"
+      }
+    },
     "notes": "RSS avval jonli tekshirilgan."
   },
   {
@@ -20,13 +26,19 @@
     "url": "https://www.spot.uz/ru/rss/",
     "source_type": "news",
     "region": "Uzbekistan",
-    "priority": 5,
-    "check_frequency": 60,
+    "priority": 3,
+    "check_frequency": 480,
     "reliability_score": 7.5,
     "enabled": true,
     "collection_method": "RSS",
     "kind": "news",
-    "options": {},
+    "options": {
+      "archive": {
+        "sitemap_index": "https://www.spot.uz/sitemap.xml",
+        "sitemap_pattern": "materials-ru-{year}-",
+        "target_pattern": "startup|startap|loyiha|project|prototype|prototip|hackathon|hakaton|demo|robot|platform|app|dastur|innovation|innovatsi|founder|student|university|univer|launch|kotib|mohir|tass|bilim|raqam|smart|digital|service|servis|med|health|edu|fintech|agro"
+      }
+    },
     "notes": "Ruscha materiallar uchun AI tarjimasi kerak."
   },
   {
@@ -35,8 +47,8 @@
     "url": "https://uzhunt.uz/",
     "source_type": "startup_platform",
     "region": "Uzbekistan",
-    "priority": 4,
-    "check_frequency": 180,
+    "priority": 5,
+    "check_frequency": 60,
     "reliability_score": 5,
     "enabled": true,
     "collection_method": "direct_page",
@@ -52,14 +64,21 @@
     "url": "https://www.it-park.uz/uz/itpark/news",
     "source_type": "accelerator",
     "region": "Uzbekistan",
-    "priority": 4,
-    "check_frequency": 180,
+    "priority": 5,
+    "check_frequency": 60,
     "reliability_score": 9,
     "enabled": true,
     "collection_method": "direct_page",
     "kind": "official",
     "options": {
-      "link_pattern": "/itpark/news/"
+      "link_pattern": "/itpark/news/",
+      "archive": {
+        "page_url": "https://www.it-park.uz/uz/itpark/news?page={page}",
+        "max_pages": 20,
+        "target_pattern": "startap|startup|loyiha|project|hackathon|hakaton|g.olib|winner|prototip|demo"
+      },
+      "body_selector": ".news-show",
+      "date_selector": ".news-show .text-right p"
     },
     "notes": "Rasmiy yangiliklar sahifasi va robots.txt jonli tekshirildi. Hududiy qidiruv alohida profil orqali."
   },
@@ -69,8 +88,8 @@
     "url": "https://www.ictweek.uz/eng",
     "source_type": "event",
     "region": "Uzbekistan",
-    "priority": 3,
-    "check_frequency": 480,
+    "priority": 5,
+    "check_frequency": 60,
     "reliability_score": 9,
     "enabled": true,
     "collection_method": "direct_page",
@@ -95,7 +114,7 @@
     "options": {
       "link_pattern": "post|news|yangilik"
     },
-    "notes": "Bosh sahifa ochildi, robots.txt tekshiruvi HTTP 503 qaytardi; xavfsiz yig‘ish tasdiqlanmaguncha o‘chirilgan."
+    "notes": "2026-10-07: Ochiq tekshiruv xatosi: http_503. Himoya chetlab o‘tilmaydi."
   },
   {
     "id": "samdu",
@@ -112,24 +131,26 @@
     "options": {
       "link_pattern": "news|yangilik|post"
     },
-    "notes": "Jonli tekshiruvda HTTP 409; himoyalar chetlab o‘tilmaydi."
+    "notes": "2026-10-07: Ochiq sahifa javob berdi, ammo maqola matni va ishonchli nashr sanasi adapteri hali tasdiqlanmagan; o‘chirilgan."
   },
   {
     "id": "bsu",
     "name": "Buxoro davlat universiteti",
-    "url": "https://buxdu.uz/",
+    "url": "https://buxdu.uz/yangiliklar/",
     "source_type": "university",
     "region": "Regional Uzbekistan — Buxoro",
-    "priority": 2,
-    "check_frequency": 1440,
+    "priority": 4,
+    "check_frequency": 180,
     "reliability_score": 9,
-    "enabled": false,
+    "enabled": true,
     "collection_method": "direct_page",
     "kind": "university",
     "options": {
-      "link_pattern": "news|yangilik|post"
+      "link_pattern": "/yangiliklar/\\d+/[^/]+/?$",
+      "body_selector": ".box-shadow008",
+      "date_selector": ".box-shadow008 > div:first-child"
     },
-    "notes": "Manzil va yig‘ish sozlamalari jonli tekshiruvni kutmoqda."
+    "notes": "2026-10-07: robots.txt, yangiliklar va maqola matni/sanasi tekshirildi."
   },
   {
     "id": "fdu",
@@ -146,41 +167,54 @@
     "options": {
       "link_pattern": "news|yangilik|post"
     },
-    "notes": "Manzil va yig‘ish sozlamalari jonli tekshiruvni kutmoqda."
+    "notes": "2026-10-07: Ochiq sahifa javob berdi, ammo maqola matni va ishonchli nashr sanasi adapteri hali tasdiqlanmagan; o‘chirilgan."
   },
   {
     "id": "adu",
     "name": "Andijon davlat universiteti",
-    "url": "https://adu.uz/",
+    "url": "https://adu.uz/yangiliklar",
     "source_type": "university",
     "region": "Regional Uzbekistan — Andijon",
-    "priority": 2,
-    "check_frequency": 1440,
+    "priority": 4,
+    "check_frequency": 180,
     "reliability_score": 9,
-    "enabled": false,
+    "enabled": true,
     "collection_method": "direct_page",
     "kind": "university",
     "options": {
-      "link_pattern": "news|yangilik|post"
+      "link_pattern": "/yangiliklar/[^/?]+$",
+      "body_selector": "article",
+      "date_selector": "main section .mt-4 span",
+      "archive": {
+        "page_url": "https://adu.uz/yangiliklar?page={page}",
+        "max_pages": 12
+      }
     },
-    "notes": "Manzil va yig‘ish sozlamalari jonli tekshiruvni kutmoqda."
+    "notes": "2026-10-07: robots.txt, yangiliklar, maqola matni va nashr sanasi tekshirildi."
   },
   {
     "id": "namdu",
     "name": "Namangan davlat universiteti",
-    "url": "https://namdu.uz/",
+    "url": "https://namdu.uz/page/axborot-xizmati/yangiliklar/",
     "source_type": "university",
     "region": "Regional Uzbekistan — Namangan",
-    "priority": 2,
-    "check_frequency": 1440,
+    "priority": 4,
+    "check_frequency": 180,
     "reliability_score": 9,
-    "enabled": false,
+    "enabled": true,
     "collection_method": "direct_page",
     "kind": "university",
     "options": {
-      "link_pattern": "news|yangilik|post"
+      "link_pattern": "/axborot-xizmati/yangiliklar/\\d+",
+      "body_selector": ".blog-details-contents",
+      "date_selector": ".breadcrumb-inner .blog-meta li",
+      "archive": {
+        "page_url": "https://namdu.uz/page/axborot-xizmati/yangiliklar/?page={page}",
+        "max_pages": 12
+      },
+      "trailing_slash": true
     },
-    "notes": "Manzil va yig‘ish sozlamalari jonli tekshiruvni kutmoqda."
+    "notes": "2026-10-07: robots.txt va maqola matni/sanasi tekshirildi; hudud: Namangan."
   },
   {
     "id": "karsu",
@@ -197,7 +231,7 @@
     "options": {
       "link_pattern": "news|yangilik|post"
     },
-    "notes": "Manzil va yig‘ish sozlamalari jonli tekshiruvni kutmoqda."
+    "notes": "2026-10-07: Ochiq sahifa javob berdi, ammo maqola matni va ishonchli nashr sanasi adapteri hali tasdiqlanmagan; o‘chirilgan."
   },
   {
     "id": "urdu",
@@ -214,7 +248,7 @@
     "options": {
       "link_pattern": "news|yangilik|post"
     },
-    "notes": "Manzil va yig‘ish sozlamalari jonli tekshiruvni kutmoqda."
+    "notes": "2026-10-07: Ochiq sahifa javob berdi, ammo maqola matni va ishonchli nashr sanasi adapteri hali tasdiqlanmagan; o‘chirilgan."
   },
   {
     "id": "navdu",
@@ -231,7 +265,7 @@
     "options": {
       "link_pattern": "news|yangilik|post"
     },
-    "notes": "Manzil va yig‘ish sozlamalari jonli tekshiruvni kutmoqda."
+    "notes": "2026-10-07: Ochiq sahifa javob berdi, ammo maqola matni va ishonchli nashr sanasi adapteri hali tasdiqlanmagan; o‘chirilgan."
   },
   {
     "id": "qarshidu",
@@ -248,7 +282,7 @@
     "options": {
       "link_pattern": "news|yangilik|post"
     },
-    "notes": "Manzil va yig‘ish sozlamalari jonli tekshiruvni kutmoqda."
+    "notes": "2026-10-07: Ochiq sahifa javob berdi, ammo maqola matni va ishonchli nashr sanasi adapteri hali tasdiqlanmagan; o‘chirilgan."
   },
   {
     "id": "jizpi",
@@ -265,7 +299,7 @@
     "options": {
       "link_pattern": "news|yangilik|post"
     },
-    "notes": "Manzil va yig‘ish sozlamalari jonli tekshiruvni kutmoqda."
+    "notes": "2026-10-07: Ochiq sahifa javob berdi, ammo maqola matni va ishonchli nashr sanasi adapteri hali tasdiqlanmagan; o‘chirilgan."
   },
   {
     "id": "guldu",
@@ -282,7 +316,7 @@
     "options": {
       "link_pattern": "news|yangilik|post"
     },
-    "notes": "Manzil va yig‘ish sozlamalari jonli tekshiruvni kutmoqda."
+    "notes": "2026-10-07: Ochiq sahifa javob berdi, ammo maqola matni va ishonchli nashr sanasi adapteri hali tasdiqlanmagan; o‘chirilgan."
   },
   {
     "id": "tersu",
@@ -299,7 +333,7 @@
     "options": {
       "link_pattern": "news|yangilik|post"
     },
-    "notes": "Manzil va yig‘ish sozlamalari jonli tekshiruvni kutmoqda."
+    "notes": "2026-10-07: Ochiq tekshiruv xatosi: http_503. Himoya chetlab o‘tilmaydi."
   },
   {
     "id": "gazeta",
@@ -413,5 +447,22 @@
       ]
     },
     "notes": "Brave Search API kaliti kerak. Natija manbasi alohida tekshiriladi."
+  },
+  {
+    "id": "spot-startups",
+    "name": "Spot — startaplar",
+    "url": "https://www.spot.uz/oz/startups/",
+    "source_type": "startup_platform",
+    "kind": "news",
+    "region": "Uzbekistan",
+    "priority": 5,
+    "check_frequency": 60,
+    "reliability_score": 7.5,
+    "enabled": true,
+    "collection_method": "direct_page",
+    "options": {
+      "link_pattern": "/oz/20[2-9][0-9]/\\d{2}/\\d{2}/"
+    },
+    "notes": "Startaplar bo‘limi. Nashr sanasi har bir maqoladan tekshiriladi; pagination tasdiqlanmagan."
   }
 ]

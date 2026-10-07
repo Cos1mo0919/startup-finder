@@ -181,6 +181,57 @@ export function RadarAdmin({ status: s }: { status: Status }) {
   return (
     <div className="radar-admin">
       <section className="detail-section">
+        <h2>Qayta ishlash va rad etish sabablari</h2>
+        <div className="radar-metrics">
+          {Object.entries({
+            pending_ai: "AI yoki qo‘shimcha dalil kutilmoqda",
+            queued: "Navbatdagi URL",
+            processed_ai: "AI bilan ishlangan",
+            processed_fallback: "Qoidalar bilan ishlangan",
+            ai_errors: "AI xatolari",
+            translation_errors: "Tarjima xatolari",
+          }).map(([key, label]) => (
+            <div key={key}>
+              <span>{label}</span>
+              <strong>{s.processing_summary[key] || 0}</strong>
+            </div>
+          ))}
+        </div>
+        <p className="section-note">
+          Quyidagi sabablar saqlangan nomzodlar bo‘yicha; bir yozuvda bir nechta
+          sabab bo‘lishi mumkin. Dublikatlar birlashtiriladi, ekotizim xabarlari
+          alohida saqlanadi.
+        </p>
+        <div className="radar-metrics">
+          {s.reject_reason_stats.map((r) => (
+            <div key={r.reason}>
+              <span>{r.label}</span>
+              <strong>{r.count}</strong>
+            </div>
+          ))}
+        </div>
+        <h3>Nomzodlar qayerdan topildi?</h3>
+        {s.origin_stats.map((o) => (
+          <p key={o.origin}>
+            <strong>{o.label}</strong>: {o.candidates || 0} nomzod ·{" "}
+            {o.published || 0} qabul qilingan manba · {o.pending || 0}{" "}
+            kutilmoqda · {o.rejected || 0} rad etilgan
+          </p>
+        ))}
+        <p className="section-note">
+          Bir loyiha bir nechta manbadan kelishi mumkin. Manbalar soni noyob
+          loyihalar soniga teng emas.
+        </p>
+        <h3>Nashr yili bo‘yicha saqlangan loyihalar</h3>
+        <div className="sector-buttons">
+          {Object.entries(s.historical_counts).map(([year, count]) => (
+            <Link key={year} to={`/?period=all&year=${year}`}>
+              {year}: {count}
+            </Link>
+          ))}
+        </div>
+      </section>
+      <section className="detail-section">
         <h2>Radar ko‘rsatkichlari</h2>
         <div className="radar-metrics">
           {[

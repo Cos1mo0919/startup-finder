@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     trusted_egress_proxy: bool = False
     scheduler_enabled: bool = True
     evidence_min_score: float = Field(default=5.0, ge=0, le=10)
+    archive_pages: int = Field(default=20, ge=1, le=100)
+    search_queries_per_source: int = Field(default=3, ge=1, le=30)
     max_event_followups: int = Field(default=3, ge=0, le=20)
     max_candidates: int = Field(default=30, ge=1, le=200)
     fetch_timeout: float = Field(default=15, ge=1, le=60)

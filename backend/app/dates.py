@@ -29,13 +29,15 @@ def valid_date(value, now, archive=False):
 
 def priority(value, now):
     if value is None:
-        return 5
+        return 6
     age = aware(now) - aware(value)
     if age <= timedelta(hours=1):
         return 0
     if aware(value).astimezone(TASHKENT).date() == aware(now).astimezone(TASHKENT).date():
         return 1
-    return 2 if age <= timedelta(days=7) else 3 if age <= timedelta(days=30) else 4
+    if aware(value).astimezone(TASHKENT).date() == aware(now).astimezone(TASHKENT).date() - timedelta(days=1):
+        return 2
+    return 3 if age <= timedelta(days=7) else 4 if age <= timedelta(days=30) else 5
 
 
 def today_start(now):

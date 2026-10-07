@@ -1,6 +1,5 @@
 import re
 import unicodedata
-from .schemas import Analysis, Fact, Evidence
 
 
 def normalize(text):
@@ -13,7 +12,7 @@ UZBEKISTAN = re.compile(
     re.I,
 )
 PROJECT = re.compile(
-    r"start[ -]?up|startap|стартап|loyiha|проект|prototype|prototip|прототип|ishlab chiq|разработ|launch|ishga tush|taqdim et|namoyish|hackathon|хакатон|hakaton",
+    r"tizim|систем|system|service|servis|qurilma|device|start[ -]?up|startap|стартап|loyiha|проект|prototype|prototip|прототип|ishlab chiq|разработ|launch|ishga tush|taqdim et|namoyish|hackathon|хакатон|hakaton",
     re.I,
 )
 EXISTENCE = re.compile(
@@ -32,7 +31,11 @@ CONCRETE = re.compile(
 
 def is_candidate(article):
     text = article.title + " " + article.text
-    return bool(UZBEKISTAN.search(text) and PROJECT.search(text) and EXISTENCE.search(text))
+    from .fallback import ACTION
+
+    return bool(
+        UZBEKISTAN.search(text) and PROJECT.search(text) and (EXISTENCE.search(text) or ACTION.search(text))
+    )
 
 
 def is_uzbek(text, declared=""):
@@ -48,42 +51,9 @@ def is_uzbek(text, declared=""):
 
 
 def extractive_analysis(article):
-    if not is_candidate(article) or not is_uzbek(article.text, article.language):
-        return None
-    # Only explicit quoted names adjacent to project/startup are accepted without AI.
-    text = article.title + " " + article.text
-    match = re.search(
-        r'[“«"]([^”»"\n]{2,100})[”»"]\s*(?:nomli\s+)?(?:startap|loyiha|platforma|ilova|dastur|qurilma)',
-        text,
-        re.I,
-    )
-    if not match:
-        match = re.search(
-            r"(@[A-Za-z][A-Za-z0-9_]{4,63})\s+(?:Telegram[- ]?bot|chat[- ]?bot|bot)", text, re.I
-        )
-    if not match:
-        return None
-    sentences = re.split(r"(?<=[.!?])\s+", article.text)
-    evidence = [s for s in sentences if match[1].lower() in s.lower() and CONCRETE.search(s) and len(s) >= 20]
-    if not evidence:
-        return None
-    quote = evidence[0][:1400]
-    identity = re.search(
-        r"([A-Z][\w‘’'-]+(?:\s+[A-Z][\w‘’'-]+){0,3}(?:\s+(?:University|universiteti|instituti|jamoasi|kompaniyasi)))\s+tomonidan",
-        quote,
-    )
-    creator = identity[1] if identity else ""
-    return Analysis(
-        is_project=True,
-        uzbekistan_related=True,
-        name=match[1],
-        creator=creator,
-        summary_uz=quote,
-        what_uz=quote,
-        facts=[Fact(text_uz=quote, quote=quote, source_url=article.url)],
-        evidence=Evidence(practical="described", practical_fact=0),
-        analysis_mode="extractive",
-    )
+    from .fallback import extract
+
+    return extract(article)
 
 
 IDEA_LIST = re.compile(
@@ -97,13 +67,38 @@ ECOSYSTEM = re.compile(
 SPAM = re.compile(r"buy (?:backlinks|followers)|casino bonus|казино.{0,20}бонус|100% guaranteed profit", re.I)
 
 
+NOISE = re.compile(
+    r"(?:mehmonxona|bino|ko‘chmas mulk|hotel|building|недвижимост|здани|гостиниц).{0,60}(?:sotil|sotuv|sale|прода)|lavozim.{0,40}tayin|direktor.{0,40}tayin|назначен|appointed|celebrity|знаменитост|aksiya.{0,30}(?:narxi|qimmat)|stock market|биржев|hamkorlik.{0,40}muhokama|деловая встреча|corporate meeting",
+    re.I,
+)
+
+
+def early_reason(article):
+    if IDEA_LIST.search(article.title):
+        return "idea_list"
+    if SPAM.search(article.title + " " + article.text[:1000]):
+        return "spam"
+    from .fallback import project_name, ACTION
+
+    concrete = bool(project_name(article) and ACTION.search(article.text))
+    if not concrete and NOISE.search(article.title):
+        return "noise_topic"
+    return ""
+
+
 def material_type(article):
-    if IDEA_LIST.search(article.title) or SPAM.search(article.title + " " + article.text[:1000]):
+    reason = early_reason(article)
+    if reason:
         return "REJECT"
-    if ECOSYSTEM.search(article.title):
+    from .fallback import project_name, ACTION
+
+    concrete = bool(project_name(article) and ACTION.search(article.text))
+    if ECOSYSTEM.search(article.title) and not any(
+        n.lower() in article.title.lower() for n in project_name(article)
+    ):
         return "ECOSYSTEM_SIGNAL"
     from .events import detect_event
 
-    if detect_event(article) and not CONCRETE.search(article.text):
+    if detect_event(article) and not concrete:
         return "EVENT"
     return "PROJECT" if is_candidate(article) else "OTHER"

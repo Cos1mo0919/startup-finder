@@ -42,7 +42,7 @@ def public_dns(url, proxy_trusted_hosts=()):
         if host in proxy_trusted_hosts and os.environ.get("HTTPS_PROXY", "").startswith(
             ("http://", "https://")
         ):
-            return
+            return False
         raise FetchError("dns_failed") from exc
     if not addresses or any(not ipaddress.ip_address(a[4][0]).is_global for a in addresses):
         raise FetchError("private_address")
@@ -71,6 +71,7 @@ class WebClient:
         self.client = httpx.Client(
             timeout=settings.fetch_timeout, headers={"User-Agent": settings.user_agent}
         )
+        self.proxy_dns_verified = set()
         self.robots = {}
         self.last_request = {}
 
@@ -80,8 +81,12 @@ class WebClient:
     def _fetch(self, url, robots=False):
         for _ in range(5):
             url = safe_url(url)
-            public_dns(url, self.proxy_hosts)
             host = urlsplit(url).netloc
+            # Cache only the explicitly trusted proxy-DNS fallback for this client lifetime.
+            # Locally resolved destinations still undergo IP validation on every request.
+            if host not in self.proxy_dns_verified:
+                if public_dns(url, self.proxy_hosts) is False and host in self.proxy_hosts:
+                    self.proxy_dns_verified.add(host)
             wait = max(0, self.last_request.get(host, 0) + 1 - time.monotonic())
             if wait:
                 time.sleep(wait)

@@ -2,6 +2,7 @@ import json
 from typing import Protocol
 from urllib.parse import urlsplit
 import httpx
+from .fallback import ACTION
 from .detection import EXISTENCE, UZBEKISTAN, extractive_analysis, is_uzbek, normalize
 from .network import FetchError, canonical_url, public_dns, safe_url
 from .schemas import Analysis, CATEGORIES
@@ -22,9 +23,16 @@ def validate_analysis(analysis, articles):
     all_text = " ".join(texts.values())
     if normalize(analysis.name) not in normalize(all_text):
         raise AnalysisError("unsupported_project_name")
-    if not UZBEKISTAN.search(all_text) or not EXISTENCE.search(all_text):
+    if not UZBEKISTAN.search(all_text) or not (EXISTENCE.search(all_text) or ACTION.search(all_text)):
         raise AnalysisError("missing_existence_evidence")
-    if not is_uzbek(analysis.summary_uz):
+
+    def descriptive_uzbek(value):
+        for proper in (analysis.name, analysis.creator, analysis.organization, analysis.university):
+            if proper:
+                value = value.replace(proper, "")
+        return is_uzbek(value)
+
+    if not descriptive_uzbek(analysis.summary_uz):
         raise AnalysisError("translation_not_uzbek")
     for fact in analysis.facts:
         try:
@@ -33,7 +41,7 @@ def validate_analysis(analysis, articles):
             raise AnalysisError("unsupported_source") from exc
         if " ".join(fact.quote.split()) not in " ".join(text.split()):
             raise AnalysisError("unsupported_quote")
-        if not is_uzbek(fact.text_uz):
+        if not descriptive_uzbek(fact.text_uz):
             raise AnalysisError("fact_translation_not_uzbek")
     for field in ("creator", "organization", "university", "city", "event"):
         value = getattr(analysis, field)

@@ -34,7 +34,7 @@ CATEGORIES = {
 class Article(BaseModel):
     source_id: str | None = None
     event_id: str | None = None
-    parser_version: int = 2
+    parser_version: int = 3
     url: str
     publisher: str
     title: str

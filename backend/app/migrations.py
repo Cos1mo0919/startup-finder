@@ -16,7 +16,13 @@ ADDITIONS = {
         "event_id": "VARCHAR(36) REFERENCES events(id)",
     },
     "project_sources": {"source_id": "VARCHAR(80) REFERENCES sources(id)"},
+    "runs": {"details": "JSON NOT NULL DEFAULT '{}'"},
     "candidates": {
+        "origin": "VARCHAR(40) NOT NULL DEFAULT 'other'",
+        "processing_version": "INTEGER NOT NULL DEFAULT 0",
+        "analysis_mode": "VARCHAR(20) NOT NULL DEFAULT ''",
+        "last_run_id": "INTEGER",
+        "archive_scope": "JSON NOT NULL DEFAULT '[]'",
         "source_id": "VARCHAR(80) REFERENCES sources(id)",
         "event_id": "VARCHAR(36) REFERENCES events(id)",
     },
@@ -50,5 +56,11 @@ def migrate(engine, metadata):
         if conn.scalar(text("SELECT version FROM schema_migrations WHERE version=2")) is None:
             conn.execute(
                 text("INSERT INTO schema_migrations(version,applied_at) VALUES(2,:at)"),
+                {"at": datetime.now(timezone.utc).isoformat()},
+            )
+
+        if conn.scalar(text("SELECT version FROM schema_migrations WHERE version=3")) is None:
+            conn.execute(
+                text("INSERT INTO schema_migrations(version,applied_at) VALUES(3,:at)"),
                 {"at": datetime.now(timezone.utc).isoformat()},
             )

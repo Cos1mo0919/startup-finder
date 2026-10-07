@@ -83,6 +83,11 @@ class Source(Base):
 
 
 class Candidate(Base):
+    origin: Mapped[str] = mapped_column(String(40), default="other")
+    processing_version: Mapped[int] = mapped_column(Integer, default=0)
+    analysis_mode: Mapped[str] = mapped_column(String(20), default="")
+    last_run_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    archive_scope: Mapped[list] = mapped_column(JSON, default=list)
     source_id: Mapped[str | None] = mapped_column(ForeignKey("sources.id"), nullable=True)
     event_id: Mapped[str | None] = mapped_column(ForeignKey("events.id"), nullable=True)
     __tablename__ = "candidates"
@@ -95,6 +100,7 @@ class Candidate(Base):
 
 
 class Run(Base):
+    details: Mapped[dict] = mapped_column(JSON, default=dict)
     __tablename__ = "runs"
     id: Mapped[int] = mapped_column(primary_key=True)
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)

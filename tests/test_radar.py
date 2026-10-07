@@ -226,7 +226,9 @@ def test_event_detection_and_multilingual_followup_queries():
     assert event["name"] == "Samarqand AI Hackathon" and event["city"] == "Samarqand"
     assert event["start_date"].astimezone(ZoneInfo("Asia/Tashkent")).day == 10
     queries = event_queries(SimpleNamespace(**event))
-    assert len(queries) == 3 and "winner" in queries[2] and "победители" in queries[1]
+    assert (
+        len(queries) == 9 and any("winner" in q for q in queries) and any("победители" in q for q in queries)
+    )
 
 
 def test_event_to_project_discovery_links_and_persists_provenance(settings, factory):
@@ -255,7 +257,7 @@ def test_event_to_project_discovery_links_and_persists_provenance(settings, fact
     search = Search()
     discovery = Discovery(settings, FakeWeb(), search=search, factory=factory)
     links, errors = discovery.follow_events(now_utc())
-    assert not errors and len(search.queries) == 3
+    assert not errors and len(search.queries) == 9
     assert all(i["event_id"] == event_id for i in links)
     article = sample_article(url=links[0]["url"])
     article.event_id = event_id

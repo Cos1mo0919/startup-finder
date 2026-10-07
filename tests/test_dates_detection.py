@@ -31,7 +31,7 @@ def test_uzbekistan_midnight():
 
 
 def test_priority_windows():
-    assert [priority(NOW - timedelta(hours=h), NOW) for h in [0.5, 2, 48, 240, 1000]] == [0, 1, 2, 3, 4]
+    assert [priority(NOW - timedelta(hours=h), NOW) for h in [0.5, 2, 48, 240, 1000]] == [0, 1, 3, 4, 5]
 
 
 def test_detector_requires_real_project_and_uzbekistan():

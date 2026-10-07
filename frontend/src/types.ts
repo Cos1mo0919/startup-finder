@@ -77,6 +77,18 @@ export type Project = {
   };
 };
 export type Run = {
+  details?: {
+    mode?: string;
+    window?: string[];
+    summary?: {
+      source_errors: number;
+      parser_errors: number;
+      event_errors: number;
+      configuration_errors: number;
+      ai_unavailable: boolean;
+      pending: number;
+    };
+  };
   id: number;
   started_at: string;
   finished_at: string | null;
@@ -86,6 +98,14 @@ export type Run = {
   duration_seconds: number | null;
 };
 export type Status = {
+  processing_summary: Record<string, number>;
+  reject_reason_stats: { reason: string; label: string; count: number }[];
+  origin_stats: ({ origin: string; label: string } & Record<
+    string,
+    string | number
+  >)[];
+  historical_counts: Record<string, number>;
+
   timezone: string;
   scheduler_enabled: boolean;
   next_run: string | null;

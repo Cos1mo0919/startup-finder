@@ -81,16 +81,12 @@ def save_event(factory, article, now):
         return item.id, True
 
 
-def event_queries(event):
+def event_queries(event, window=None):
+    from .queries import EVENT_TERMS
+
     name = event.name.replace('"', "")
-    return [
-        f'"{name}" Uzbekistan {suffix}'
-        for suffix in (
-            "g‘olib ishtirokchi loyiha jamoa talabalar",
-            "победители участники проекты студенты команды",
-            "winner participant project student team demo startup",
-        )
-    ]
+    year = f" {window[0].year}" if window else ""
+    return [f'"{name}" Uzbekistan {term}{year}' for term in EVENT_TERMS]
 
 
 def followup_due(event, now):

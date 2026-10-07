@@ -208,6 +208,7 @@ def create_app(settings=None):
                 {
                     "id": r.id,
                     "started_at": iso(r.started_at),
+                    "details": r.details,
                     "finished_at": iso(r.finished_at),
                     "status": r.status,
                     "counts": r.counts,

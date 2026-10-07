@@ -80,6 +80,23 @@ export function StatusPage() {
           </h2>
           {run ? (
             <>
+              {run.details?.summary && (
+                <div className="notice">
+                  <p>
+                    {run.details.mode === "archive"
+                      ? "Arxiv qidiruvi"
+                      : "Yangi nashrlar qidiruvi"}
+                    : {run.details.window?.join(" — ")}. Manba xatolari:{" "}
+                    {run.details.summary.source_errors}; sahifa xatolari:{" "}
+                    {run.details.summary.parser_errors}; tadbir qidiruvi
+                    xatolari: {run.details.summary.event_errors}; sozlash kerak:{" "}
+                    {run.details.summary.configuration_errors}; kutilayotgan
+                    nomzodlar: {run.details.summary.pending}.
+                    {run.details.summary.ai_unavailable &&
+                      " AI kaliti yo‘q; qoidalar asosidagi tahlil ishlaydi."}
+                  </p>
+                </div>
+              )}
               <div className="run-counts">
                 {Object.entries(countLabels).map(([k, label]) => (
                   <div key={k}>
@@ -118,7 +135,7 @@ export function StatusPage() {
         <section className="detail-section">
           <h2>Ulangan xizmatlar</h2>
           <div className="service">
-            <span>Ochiq RSS manbalari</span>
+            <span>Manbalar reyestri</span>
             <span className="tag">{s.sources.length} ta sozlangan</span>
           </div>
           <div className="service">
@@ -134,8 +151,9 @@ export function StatusPage() {
             </span>
           </div>
           <p className="section-note">
-            Kalitlarsiz faqat yetarli dalilli o‘zbekcha materiallar qayta
-            ishlanadi. Boshqa tillardagi materiallar tarjima va tahlilni kutadi.
+            Kalitlarsiz aniq nom va muallifga ega materiallar qoidalar asosida
+            ajratiladi. Boshqa tillardagi dalillar asl iqtibos va qisqa
+            o‘zbekcha izoh bilan saqlanadi; to‘liq tarjima AI talab qiladi.
             Sozlangan xizmatning ishlashi qidiruv natijasida tekshiriladi.
           </p>
           <h3>Qidiruv manbalari</h3>

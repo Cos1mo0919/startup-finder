@@ -3,6 +3,7 @@ from sqlalchemy import select
 from .dates import valid_date
 from .db import Project, ProjectEvidence, RegistrySource, RejectedCandidate, now_utc
 from .detection import CONCRETE, IDEA_LIST, SPAM, normalize
+from .fallback import ACTION
 from .network import canonical_url
 from .ranking import publisher_group
 from .registry import ensure_publisher
@@ -86,15 +87,19 @@ def evidence_types(analysis, quote, kind):
     )
     if named and not speculative:
         types.update(k for k, pattern in PATTERNS.items() if re.search(pattern, quote, re.I))
-        if CONCRETE.search(quote) or re.search(
-            r"created|developed|demonstrated|разработан|создан", quote, re.I
+        if (
+            CONCRETE.search(quote)
+            or ACTION.search(quote)
+            or re.search(r"created|developed|demonstrated|разработан|создан", quote, re.I)
         ):
             types.add("project_exists")
     if identified(analysis) and any(
         v and normalize(v) in normalize(quote) for v in (analysis.creator, analysis.organization)
     ):
         if re.search(
-            r"tomonidan|yarat|ishlab chiq|created|develop|team|jamoa|автор|разработ|созда", quote, re.I
+            r"tomonidan|yarat|ishlab chiq|created|develop|built|presented|team|jamoa|автор|разработ|созда|представил|asoschi|hammuassis|founder|основател|hamkorlikda",
+            quote,
+            re.I,
         ):
             types.add("creator_identity")
     if types & EXISTENCE:
