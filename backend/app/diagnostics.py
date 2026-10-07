@@ -1,4 +1,9 @@
 from collections import Counter
+import hashlib
+
+
+def candidate_id(url):
+    return "sha256:" + hashlib.sha256(url.encode()).hexdigest()
 
 
 def inspect_candidate(session, url):
@@ -7,12 +12,29 @@ def inspect_candidate(session, url):
     from .db import Candidate, Project, Source, RejectedCandidate
     from .network import canonical_url
 
+    reference = url
+    if url.startswith("sha256:"):
+        url = next(
+            (value for value in session.scalars(select(Candidate.url)) if candidate_id(value) == reference),
+            None,
+        )
+        if url is None:
+            return {
+                "id": reference,
+                "url": None,
+                "status": "not_found",
+                "reason": "No candidate matches this ID",
+                "pending_reason": None,
+            }
     url = canonical_url(url)
     candidate = session.get(Candidate, url)
     project = session.scalar(select(Project).join(Source).where(Source.url == url))
     rejection = session.get(RejectedCandidate, url)
     return {
+        "id": candidate_id(url),
         "url": url,
+        "title": candidate.article.get("title", "") if candidate else "",
+        "pending_reason": candidate.reason if candidate and candidate.status == "pending" else None,
         "status": candidate.status if candidate else "not_discovered",
         "reason": candidate.reason
         if candidate
@@ -21,6 +43,9 @@ def inspect_candidate(session, url):
         "archive_scope": candidate.archive_scope if candidate else [],
         "attempts": candidate.attempts if candidate else 0,
         "processing_version": candidate.processing_version if candidate else None,
+        "analysis_mode": candidate.analysis_mode if candidate else None,
+        "last_run_id": candidate.last_run_id if candidate else None,
+        "language": candidate.article.get("language") if candidate else None,
         "published_at": candidate.article.get("published_at") if candidate else None,
         "stored_rejection_reasons": rejection.reasons if rejection else [],
         "project": {
@@ -157,4 +182,94 @@ def candidate_diagnostics(session):
                 for p in session.scalars(select(Project).where(Project.visible.is_(True)))
             )
         ),
+    }
+
+
+def list_candidates(session, status="pending"):
+    from sqlalchemy import select
+    from .db import Candidate
+
+    query = select(Candidate.url).order_by(Candidate.url)
+    if status != "all":
+        query = query.where(Candidate.status == status)
+    items = [inspect_candidate(session, url) for url in session.scalars(query)]
+    return {"status_filter": status, "count": len(items), "items": items}
+
+
+def debug_report(session, settings):
+    """Local diagnostic export: no API keys, proxy URLs, DB credentials or article bodies."""
+    import subprocess
+    from sqlalchemy import select
+    from sqlalchemy.engine import make_url
+    from .config import ROOT
+    from .db import Candidate, RegistrySource, Run
+    from .registry import load_sources
+
+    def git_value(*args):
+        try:
+            result = subprocess.run(
+                ["git", *args], cwd=ROOT, capture_output=True, text=True, timeout=5, check=True
+            )
+            return result.stdout.strip()
+        except (OSError, subprocess.SubprocessError):
+            return None
+
+    seeds = {s.id: s for s in load_sources(settings.sources_file)}
+    sources = []
+    for source in session.scalars(select(RegistrySource).order_by(RegistrySource.id)):
+        archive = source.options.get("archive", {})
+        seed_archive = seeds[source.id].options.get("archive", {}) if source.id in seeds else None
+        sources.append(
+            {
+                "id": source.id,
+                "name": source.name,
+                "enabled": source.enabled,
+                "method": source.collection_method,
+                "archive_configured": bool(archive),
+                "seed_archive_configured": bool(seed_archive),
+                "archive_matches_seed": archive == seed_archive if seed_archive is not None else None,
+                "archive_adapter": "sitemap"
+                if archive.get("sitemap_index")
+                else "pagination"
+                if archive.get("page_url")
+                else "current_listings",
+                "last_error": source.last_error,
+                "consecutive_errors": source.consecutive_errors,
+                "last_success_at": source.last_success_at.isoformat() if source.last_success_at else None,
+            }
+        )
+    runs = list(session.scalars(select(Run).order_by(Run.id.desc())))
+    selected = runs[:5]
+    windows = set()
+    for run in runs:
+        window = tuple(run.details.get("window", []))
+        if window and window not in windows:
+            windows.add(window)
+            if run not in selected:
+                selected.append(run)
+    database = make_url(settings.database_url)
+    dirty = git_value("status", "--porcelain", "--untracked-files=no")
+    return {
+        "schema": 1,
+        "git_commit": git_value("rev-parse", "HEAD"),
+        "tracked_changes": bool(dirty) if dirty is not None else None,
+        "database": {
+            "driver": database.drivername,
+            "file": database.database if database.get_backend_name() == "sqlite" else None,
+        },
+        "settings": {
+            "max_candidates": settings.max_candidates,
+            "archive_pages": settings.archive_pages,
+            "trusted_egress_proxy": settings.trusted_egress_proxy,
+            "ai_enabled": bool(settings.ai_key),
+            "search_enabled": bool(settings.search_api_key.get_secret_value()),
+            "sources_sha256": hashlib.sha256(settings.sources_file.read_bytes()).hexdigest(),
+        },
+        "candidate_counts": dict(Counter(session.scalars(select(Candidate.status)))),
+        "pending": list_candidates(session),
+        "sources": sources,
+        "runs": [
+            {"id": r.id, "status": r.status, "counts": r.counts, "details": r.details, "errors": r.errors}
+            for r in selected
+        ],
     }

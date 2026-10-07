@@ -21,7 +21,22 @@ def main():
         help="Allow old dates in current listings/queue; does not traverse yearly archives (use --backfill)",
     )
     parser.add_argument(
-        "--inspect-url", help="Read candidate/project status for an exact source URL without discovery"
+        "--inspect-url",
+        "--inspect-candidate",
+        help="Read candidate/project status by URL or sha256: ID without discovery",
+    )
+    parser.add_argument(
+        "--list-candidates", action="store_true", help="List candidates with exact reasons (default: pending)"
+    )
+    parser.add_argument(
+        "--candidate-status",
+        default="pending",
+        choices=["all", "queued", "pending", "rejected", "published", "error", "event", "ecosystem"],
+    )
+    parser.add_argument(
+        "--debug-report",
+        action="store_true",
+        help="Export pending candidates, archive configuration and run failures without discovery or secret values",
     )
     parser.add_argument(
         "--force-sources", action="store_true", help="Manually check enabled sources regardless of frequency"
@@ -53,11 +68,22 @@ def main():
     settings = Settings()
     engine, factory = make_db(settings.database_url)
     try:
-        if args.inspect_url:
-            from .diagnostics import inspect_candidate
+        if args.debug_report or args.list_candidates or args.inspect_url:
+            from .diagnostics import debug_report, list_candidates, inspect_candidate
 
             with factory() as session:
-                print(json.dumps(inspect_candidate(session, args.inspect_url), ensure_ascii=False, indent=2))
+                result = (
+                    debug_report(session, settings)
+                    if args.debug_report
+                    else list_candidates(session, args.candidate_status)
+                    if args.list_candidates
+                    else inspect_candidate(session, args.inspect_url)
+                )
+                output = json.dumps(result, ensure_ascii=False, indent=2)
+                if args.report:
+                    args.report.parent.mkdir(parents=True, exist_ok=True)
+                    args.report.write_text(output)
+                print(output)
             return 0
         if args.seed_sources or args.update_sources:
             print(
