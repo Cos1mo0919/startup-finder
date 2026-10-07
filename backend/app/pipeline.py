@@ -212,6 +212,15 @@ class Pipeline:
         errors, reasons, origins = [], Counter(), {}
         details = {
             "mode": "archive" if archive else "fresh",
+            "discovery_mode": "queue_only"
+            if not discover
+            else "year_backfill"
+            if window
+            else "current_listings",
+            "limits": {
+                "archive_pages": self.settings.archive_pages,
+                "max_candidates": self.settings.max_candidates,
+            },
             "window": [d.isoformat() for d in window] if window else [],
             "coverage": [],
         }

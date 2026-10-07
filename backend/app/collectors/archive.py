@@ -101,6 +101,7 @@ def sitemap_links(discovery, source, window, config):
             "source_id": source.id,
             "year": window[0].year,
             "sitemaps_available": len(maps),
+            "selected_sitemaps": selected,
             "pages": len(selected),
             "candidates": len(links),
             "page_limit": discovery.settings.archive_pages,

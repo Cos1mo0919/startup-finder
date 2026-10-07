@@ -3,9 +3,7 @@
 ## Current stage
 **Stage 1 — Uzbekistan. Реализация и расширение Startup Radar подготовлены к проверке; пользователь ещё не принял этап.** Global и отдельный GitHub / Yangi dasturlar не начинались.
 
-**Последний результат (07.10.2026):** проверка без платных API завершена, в ленте
-3 проверенные карточки. Актуальные цифры и ограничения — в последнем разделе ниже
-и [KEYLESS_VALIDATION.md](docs/KEYLESS_VALIDATION.md). Ранние разделы отражают историю.
+**Последняя доработка (07.10.2026):** диагностика воспроизводимости архивного поиска и узбекское отображение дат. Точный сценарий Codespace проверен на отдельной пустой базе; он не равен годовому backfill. Подробности и результаты — [ARCHIVE_REPRODUCIBILITY.md](docs/ARCHIVE_REPRODUCIBILITY.md). Прежние 3 карточки Cloud и историческая статистика описаны в [KEYLESS_VALIDATION.md](docs/KEYLESS_VALIDATION.md); они не являются результатом одиночного запуска на чистой базе.
 
 ## Completed
 - Узбекский React/TypeScript сайт: лента, поиск, фильтры, карточки, факты и отдельный AI-анализ, подробный read-only `/status`.
@@ -160,3 +158,15 @@ Local artifacts/backup: `/workspace/artifacts/keyless/` (not committed). Setup/s
 instructions updated in the cloud configuration draft, not published automatically.
 Public preview remains a separate unresolved network limitation; local validation
 does not claim a public deployment. Stop for user review; **Stage 1 is not accepted**.
+
+## 07.10.2026 — архивная воспроизводимость и узбекские даты
+
+- Проверены текущая Cloud-база и точные команды пользователя на отдельной пустой SQLite-базе без AI/SEARCH ключей. `--archive --force-sources` нашёл 147 URL, обработал 60, не обнаружил Uzbekistan Airways/DMED и оставил KotibAI в queued. Audit и запуск API не заменяют backfill.
+- На отдельной копии этой базы `--drain --archive` завершил очередь и опубликовал только KotibAI. Это подтверждает различие обнаружения ссылок и качества анализа.
+- Прямое получение трёх оригинальных статей в ещё одной пустой диагностической базе подтвердило, что все три проходят существующие фильтры без прежних evidence. Прямой тест не выдаётся за discovery.
+- CLI объясняет режим `--archive`, `--inspect-url` показывает конкретный статус/причину, run.details содержит режим и лимиты, coverage — выбранные sitemap. Детектор, fallback, пороги и выборка коллектора не изменены.
+- Общий frontend-форматтер исправлен на явные узбекские месяцы, включая архивные диапазоны status. Формат проверен на реальных карточках при мобильной ширине. БД и timezone logic не менялись; редизайна нет.
+- Проверки: Ruff, 152 backend-теста, TypeScript/Vite build, 10 desktop/mobile browser-тестов. Есть прежнее предупреждение зависимости FastAPI/Starlette о httpx; ошибок проверок нет. Backend после точного сценария отвечал 200 на главной, status, health и API проектов.
+- Итоговые live-результаты годового backfill и команды повторения — [ARCHIVE_REPRODUCIBILITY.md](docs/ARCHIVE_REPRODUCIBILITY.md). Ни Stage 1, ни последующие этапы не объявлены принятыми.
+
+Чистый годовой backfill завершён: 791 уникальный кандидат, 3 published, 498 rejected, 272 pending, 12 event, 3 ecosystem, 3 error, queued=0. Все три целевых проекта воспроизведены автоматически без API: Uzbekistan Airways (2022), DMED (2025), KotibAI (2026); оценки и исходные даты совпали с Cloud. Для 2023/2024 подтверждённых карточек в выборке нет. Проверено 11 уникальных источников; все пять run имеют объяснённый partial (pending без AI, в первом окне также 3 ошибки страниц). Полные счётчики — в связанном отчёте.

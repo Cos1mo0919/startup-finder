@@ -280,6 +280,10 @@ def test_public_sitemap_stratifies_year_without_using_lastmod(settings):
     )
     assert len(result) == 1 and result[0]["published_at"] is None
     assert d.archive_coverage[0]["pages"] == 2
+    assert d.archive_coverage[0]["selected_sitemaps"] == [
+        "https://example.uz/2022-01.xml",
+        "https://example.uz/2022-12.xml",
+    ]
 
 
 def test_malformed_archive_is_scoped_fetch_error():

@@ -95,3 +95,9 @@ Diagnostics expose visible keyless/AI counts, candidate languages and pending re
 Source origins distinguish IT Park from generic accelerators. New seed defaults use
 free sources; optional Brave profiles remain available but disabled. Source health,
 operator settings and historical data survive normal startup.
+
+## Reproducibility and date presentation
+
+`--archive` permits historical dates while collecting current listings; only `--backfill` supplies yearly traversal windows. `--force-sources` bypasses scheduling, not coverage/processing limits. Runs record `discovery_mode`, effective limits, and selected sitemap URLs. `--inspect-url` diagnoses an exact candidate URL separately from project visibility without running discovery. No evidence gates or collector selection rules changed for this diagnostic update.
+
+The shared frontend date formatter maps numeric Gregorian components in Asia/Tashkent to explicit Uzbek month names. It avoids browser Uzbek ICU fallbacks (M03) and applies to cards, details, status/admin and archive windows. Stored timestamps and backend timezone/filter logic are unchanged.

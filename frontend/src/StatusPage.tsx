@@ -86,12 +86,15 @@ export function StatusPage() {
                     {run.details.mode === "archive"
                       ? "Arxiv qidiruvi"
                       : "Yangi nashrlar qidiruvi"}
-                    : {run.details.window?.join(" — ")}. Manba xatolari:{" "}
-                    {run.details.summary.source_errors}; sahifa xatolari:{" "}
-                    {run.details.summary.parser_errors}; tadbir qidiruvi
-                    xatolari: {run.details.summary.event_errors}; sozlash kerak:{" "}
-                    {run.details.summary.configuration_errors}; kutilayotgan
-                    nomzodlar: {run.details.summary.pending}.
+                    :{" "}
+                    {run.details.window
+                      ?.map((value) => date(value))
+                      .join(" — ")}
+                    . Manba xatolari: {run.details.summary.source_errors};
+                    sahifa xatolari: {run.details.summary.parser_errors}; tadbir
+                    qidiruvi xatolari: {run.details.summary.event_errors};
+                    sozlash kerak: {run.details.summary.configuration_errors};
+                    kutilayotgan nomzodlar: {run.details.summary.pending}.
                     {run.details.summary.ai_unavailable &&
                       " AI kaliti yo‘q; qoidalar asosidagi tahlil ishlaydi."}
                   </p>

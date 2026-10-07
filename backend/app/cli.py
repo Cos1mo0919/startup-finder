@@ -1,5 +1,6 @@
 import argparse
 import json
+import sys
 from datetime import date
 from pathlib import Path
 from .config import Settings
@@ -14,7 +15,14 @@ from sqlalchemy import select
 
 def main():
     parser = argparse.ArgumentParser(description="Run Uzbekistan discovery once")
-    parser.add_argument("--archive", action="store_true", help="Allow publication dates from 2022 onward")
+    parser.add_argument(
+        "--archive",
+        action="store_true",
+        help="Allow old dates in current listings/queue; does not traverse yearly archives (use --backfill)",
+    )
+    parser.add_argument(
+        "--inspect-url", help="Read candidate/project status for an exact source URL without discovery"
+    )
     parser.add_argument(
         "--force-sources", action="store_true", help="Manually check enabled sources regardless of frequency"
     )
@@ -45,6 +53,12 @@ def main():
     settings = Settings()
     engine, factory = make_db(settings.database_url)
     try:
+        if args.inspect_url:
+            from .diagnostics import inspect_candidate
+
+            with factory() as session:
+                print(json.dumps(inspect_candidate(session, args.inspect_url), ensure_ascii=False, indent=2))
+            return 0
         if args.seed_sources or args.update_sources:
             print(
                 json.dumps(
@@ -75,6 +89,13 @@ def main():
             audit_existing(factory, settings.evidence_min_score)
             print("Evidence and visibility updated")
             return 0
+        if args.archive and not args.backfill and not args.drain:
+            print(
+                "--archive permits old publication dates but searches current listings only. "
+                "For yearly archives use --backfill --from-date 2022-01-01 --to-date 2026-09-30. "
+                "--force-sources bypasses source schedules, not archive coverage limits.",
+                file=sys.stderr,
+            )
         pipeline = Pipeline(settings, factory)
         pipeline.discovery.force = args.force_sources
         try:

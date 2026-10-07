@@ -1,5 +1,39 @@
 from collections import Counter
 
+
+def inspect_candidate(session, url):
+    """Distinguish never discovered, queued, pending, rejected and stored visibility."""
+    from sqlalchemy import select
+    from .db import Candidate, Project, Source, RejectedCandidate
+    from .network import canonical_url
+
+    url = canonical_url(url)
+    candidate = session.get(Candidate, url)
+    project = session.scalar(select(Project).join(Source).where(Source.url == url))
+    rejection = session.get(RejectedCandidate, url)
+    return {
+        "url": url,
+        "status": candidate.status if candidate else "not_discovered",
+        "reason": candidate.reason
+        if candidate
+        else "URL is absent from the candidate queue; no candidate status is available",
+        "source_id": candidate.source_id if candidate else None,
+        "archive_scope": candidate.archive_scope if candidate else [],
+        "attempts": candidate.attempts if candidate else 0,
+        "processing_version": candidate.processing_version if candidate else None,
+        "published_at": candidate.article.get("published_at") if candidate else None,
+        "stored_rejection_reasons": rejection.reasons if rejection else [],
+        "project": {
+            "id": project.id,
+            "name": project.name,
+            "visible": project.visible,
+            "stop_reasons": project.stop_reasons,
+        }
+        if project
+        else None,
+    }
+
+
 REASON_LABELS = {
     "needs_translation": "Tarjima kerak",
     "ambiguous_project": "Loyiha nomi yoki mazmuni noaniq",
