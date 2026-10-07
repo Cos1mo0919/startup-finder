@@ -182,3 +182,174 @@ def test_debug_cli_does_not_start_pipeline(settings, monkeypatch, capsys, tmp_pa
     result = json.loads(capsys.readouterr().out)
     assert result["pending"]["count"] == 0
     assert json.loads(destination.read_text()) == result
+
+
+def test_archive_repair_is_additive_idempotent_and_preserves_disabled_health(settings, factory):
+    import json
+    from backend.app.db import RegistrySource
+    from backend.app.registry import repair_archive_config
+
+    adapter = {"sitemap_index": "https://news.example/index.xml", "sitemap_pattern": "{year}"}
+    settings.sources_file.write_text(
+        json.dumps(
+            [
+                {"id": key, "name": key, "url": f"https://{key}.example/", "options": {"archive": adapter}}
+                for key in ["legacy", "custom", "moved"]
+            ]
+        )
+    )
+    with factory.begin() as s:
+        s.add(
+            RegistrySource(
+                id="legacy",
+                name="Operator name",
+                url="https://legacy.example/",
+                collection_method="RSS",
+                enabled=False,
+                priority=1,
+                consecutive_errors=4,
+                last_error="http_403",
+                options={"custom": "preserved"},
+            )
+        )
+        s.add(
+            RegistrySource(
+                id="custom",
+                name="Custom",
+                url="https://custom.example/",
+                collection_method="RSS",
+                options={"archive": {}},
+            )
+        )
+        s.add(
+            RegistrySource(
+                id="moved",
+                name="Moved",
+                url="https://different.example/",
+                collection_method="RSS",
+                options={},
+            )
+        )
+    result = repair_archive_config(factory, settings.sources_file)
+    assert result["updated"] == ["legacy"]
+    assert repair_archive_config(factory, settings.sources_file)["updated"] == []
+    with factory() as s:
+        source = s.get(RegistrySource, "legacy")
+        assert source.options == {"custom": "preserved", "archive": adapter}
+        assert not source.enabled and source.name == "Operator name" and source.priority == 1
+        assert source.consecutive_errors == 4 and source.last_error == "http_403"
+        assert s.get(RegistrySource, "custom").options == {"archive": {}}
+        assert s.get(RegistrySource, "moved").options == {}
+
+
+def test_legacy_registry_cannot_silently_report_rss_as_yearly_backfill(settings, factory):
+    import json
+    from backend.app.db import RegistrySource, now_utc
+    from backend.app.registry import repair_archive_config
+    from backend.app.collectors.sources import Discovery
+
+    settings.sources_file.write_text(
+        json.dumps(
+            [
+                {
+                    "id": "news",
+                    "name": "News",
+                    "url": "https://news.example/rss",
+                    "options": {
+                        "archive": {
+                            "sitemap_index": "https://news.example/index.xml",
+                            "sitemap_pattern": "{year}",
+                        }
+                    },
+                }
+            ]
+        )
+    )
+    with factory.begin() as s:
+        s.add(
+            RegistrySource(
+                id="news",
+                name="News",
+                url="https://news.example/rss",
+                collection_method="RSS",
+                enabled=True,
+                options={},
+            )
+        )
+
+    class Web:
+        proxy_hosts = set()
+
+        def get(self, url):
+            assert url != "https://news.example/rss", (
+                "Yearly traversal must not silently fall back to current RSS"
+            )
+            if url.endswith("index.xml"):
+                return (
+                    b"<sitemapindex><sitemap><loc>https://news.example/2022.xml</loc></sitemap></sitemapindex>",
+                    url,
+                )
+            return b"<urlset><url><loc>https://news.example/2022/07/19/project</loc></url></urlset>", url
+
+    discovery = Discovery(settings, Web(), factory=factory)
+    discovery.window = (date(2022, 1, 1), date(2022, 12, 31))
+    links, errors, _ = discovery.discover(now_utc(), archive=True)
+    assert not links and errors[0]["code"] == "archive_configuration_missing"
+    from backend.app.radar_api import source_json
+    from backend.app.diagnostics import summarize_run
+
+    with factory() as session:
+        assert source_json(session.get(RegistrySource, "news"))["status"] == "NEEDS_CONFIG"
+    assert summarize_run({}, errors, False)["configuration_errors"] == 1
+    assert repair_archive_config(factory, settings.sources_file, "news")["updated"] == ["news"]
+    links, errors, _ = discovery.discover(now_utc(), archive=True)
+    assert not errors and links[0]["url"] == "https://news.example/2022/07/19/project"
+    assert discovery.archive_coverage[0]["pages"] == 1
+
+
+@pytest.mark.parametrize("article_year,expected", [(2026, "published"), (2025, "rejected")])
+def test_rediscovered_queued_url_routes_to_its_year_but_still_verifies_article_date(
+    settings, factory, article_year, expected
+):
+    from datetime import datetime, timezone
+
+    article = sample_article("AquaSense", url="https://news.example/2026/03/10/aqua")
+    article.published_at = datetime(article_year, 3, 10, tzinfo=timezone.utc)
+    with factory.begin() as session:
+        session.add(
+            Candidate(
+                url=article.url,
+                article={"_queued": True, "_fetch_url": article.url},
+                status="queued",
+                archive_scope=["2022-01-01", "2022-12-31"],
+            )
+        )
+    result = Pipeline(settings, factory, FakeDiscovery([article])).run(
+        archive=True, window=(date(2026, 1, 1), date(2026, 9, 30))
+    )
+    assert result["counts"]["candidates"] == 1
+    with factory() as session:
+        c = session.get(Candidate, article.url)
+        assert c.archive_scope == ["2026-01-01", "2026-09-30"]
+        assert c.status == expected
+        if expected == "rejected":
+            assert c.reason == "outside_archive_window"
+
+
+def test_rediscovery_does_not_move_old_queued_url_into_unrelated_window(settings, factory):
+    article = sample_article("AquaSense", url="https://news.example/2022/07/19/aqua")
+    with factory.begin() as session:
+        session.add(
+            Candidate(
+                url=article.url,
+                article={"_queued": True},
+                status="queued",
+                archive_scope=["2022-01-01", "2022-12-31"],
+            )
+        )
+    result = Pipeline(settings, factory, FakeDiscovery([article])).run(
+        archive=True, window=(date(2026, 1, 1), date(2026, 9, 30))
+    )
+    assert result["counts"]["candidates"] == 0
+    with factory() as session:
+        assert session.get(Candidate, article.url).archive_scope == ["2022-01-01", "2022-12-31"]

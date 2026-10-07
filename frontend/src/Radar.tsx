@@ -48,6 +48,8 @@ const eventTypes: Record<string, string> = {
 const errorLabels: Record<string, string> = {
   requires_api_key: "Qidiruv kaliti kerak",
   event_requires_search_key: "Tadbir qidiruvi uchun kalit kerak",
+  archive_configuration_missing:
+    "Arxiv sozlamalari eskirgan; CLI orqali tiklash kerak",
   source_requires_configuration: "Yig‘ish usulini sozlash kerak",
   http_403: "Kirish rad etildi (403)",
   network_unavailable: "Tarmoqqa ulanish imkoni bo‘lmadi",

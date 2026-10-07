@@ -6,6 +6,7 @@ from sqlalchemy import and_, or_, select, update
 from .analysis import AnalysisError, analyzer_for, validate_analysis
 from .collectors.sources import Discovery
 from .collectors.parsers import PARSER_VERSION
+from .collectors.archive import url_day
 from .dates import valid_date, parse_date
 from .db import (
     Candidate,
@@ -271,6 +272,13 @@ class Pipeline:
                         session.flush()
                     elif window and row.reason in ("outside_archive_window", "old_date", "date_out_of_range"):
                         row.archive_scope = [d.isoformat() for d in window]
+                    elif window and row.status == "queued":
+                        # A current listing may first expose this URL in an older yearly run.
+                        # Route an unprocessed dated URL when it is rediscovered in its own year.
+                        # The fetched publication date is still checked against the window below.
+                        day = url_day(url)
+                        if day and window[0] <= day <= window[1]:
+                            row.archive_scope = [d.isoformat() for d in window]
                     if item.get("event_id") and not row.event_id:
                         row.event_id = item["event_id"]
                         row.origin = "event_discovery"

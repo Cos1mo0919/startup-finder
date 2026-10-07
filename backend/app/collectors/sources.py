@@ -11,7 +11,7 @@ from .archive import archive_links
 from ..db import Event, RegistrySource, Candidate
 from ..events import event_queries, followup_due
 from ..network import FetchError, safe_url, canonical_url
-from ..registry import due, record_check, seed_registry, source_for_url
+from ..registry import due, record_check, seed_registry, source_for_url, load_sources
 from .parsers import parse_article, parse_feed
 
 
@@ -51,6 +51,7 @@ class Discovery:
         self.clock = None
         self.archive_cache = {}
         self.archive_coverage = []
+        self.seed_configs = {s.id: s for s in load_sources(settings.sources_file)}
         if factory:
             seed_registry(factory, settings.sources_file)
             with factory() as session:
@@ -117,6 +118,15 @@ class Discovery:
 
     def collect(self, source, now, archive):
         if archive and self.window and source.collection_method != "search":
+            seed = self.seed_configs.get(source.id)
+            if (
+                seed
+                and seed.options.get("archive")
+                and not source.options.get("archive")
+                and seed.url == canonical_url(source.url)
+                and seed.collection_method == source.collection_method
+            ):
+                raise FetchError("archive_configuration_missing")
             return archive_links(self, source, self.window)
         method = source.collection_method
         if method == "RSS":

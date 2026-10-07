@@ -41,6 +41,11 @@ def main():
     parser.add_argument(
         "--force-sources", action="store_true", help="Manually check enabled sources regardless of frequency"
     )
+    parser.add_argument(
+        "--repair-archive-config",
+        action="store_true",
+        help="Add missing archive adapters for matching source endpoints; preserve enabled flags, existing options and health",
+    )
     parser.add_argument("--seed-sources", action="store_true", help="Import missing source registry entries")
     parser.add_argument(
         "--update-sources",
@@ -84,6 +89,15 @@ def main():
                     args.report.parent.mkdir(parents=True, exist_ok=True)
                     args.report.write_text(output)
                 print(output)
+            return 0
+        if args.repair_archive_config:
+            from .registry import repair_archive_config
+
+            try:
+                result = repair_archive_config(factory, settings.sources_file, args.source_id)
+            except ValueError as exc:
+                parser.error(str(exc))
+            print(json.dumps(result, ensure_ascii=False, indent=2))
             return 0
         if args.seed_sources or args.update_sources:
             print(

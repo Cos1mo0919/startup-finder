@@ -26,7 +26,8 @@ def source_json(s):
         "DISABLED"
         if not s.enabled
         else "NEEDS_CONFIG"
-        if s.last_error in ("requires_api_key", "source_requires_configuration")
+        if s.last_error
+        in ("requires_api_key", "source_requires_configuration", "archive_configuration_missing")
         else "ERROR"
         if s.consecutive_errors
         else "ACTIVE"
@@ -85,7 +86,8 @@ def radar_status(session, threshold):
             "failed": sum(
                 s.enabled
                 and s.consecutive_errors > 0
-                and s.last_error not in ("requires_api_key", "source_requires_configuration")
+                and s.last_error
+                not in ("requires_api_key", "source_requires_configuration", "archive_configuration_missing")
                 for s in sources
             ),
             "priority_5": sum(s.priority == 5 for s in sources),

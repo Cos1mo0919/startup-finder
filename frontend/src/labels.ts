@@ -30,6 +30,8 @@ export const errorLabels: Record<string, string> = {
   requires_api_key: "Qidiruv API kaliti kerak",
   event_requires_search_key: "Tadbir bo‘yicha qidiruv kaliti kerak",
   article_body_missing: "Maqola matni ajratilmadi",
+  archive_configuration_missing:
+    "Arxiv sozlamalari eskirgan; CLI orqali tiklash kerak",
   source_requires_configuration: "Manba adapterini sozlash kerak",
   translation_not_uzbek: "Tarjima o‘zbekcha tekshiruvdan o‘tmadi",
   fact_translation_not_uzbek: "Fakt tarjimasi o‘zbekcha emas",

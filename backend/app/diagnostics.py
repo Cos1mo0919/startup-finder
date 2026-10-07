@@ -108,7 +108,13 @@ def summarize_run(counts, errors, ai_enabled):
         "ai_unavailable": not ai_enabled,
         "pending": counts.get("pending", 0),
         "configuration_errors": sum(
-            e["code"] in ("requires_api_key", "event_requires_search_key", "source_requires_configuration")
+            e["code"]
+            in (
+                "requires_api_key",
+                "event_requires_search_key",
+                "source_requires_configuration",
+                "archive_configuration_missing",
+            )
             for e in errors
         ),
         "error_counts": dict(Counter(e["code"] for e in errors)),

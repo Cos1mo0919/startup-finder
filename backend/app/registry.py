@@ -125,3 +125,30 @@ def record_check(factory, source_id, now, count=0, error=""):
         else:
             source.last_success_at = now
             source.consecutive_errors = 0
+
+
+def repair_archive_config(factory, path, source_id=None):
+    """Explicit, additive repair; never reset operator settings or source health."""
+    seeds = {source.id: source for source in load_sources(path)}
+    updated, skipped = [], []
+    with factory.begin() as session:
+        query = select(RegistrySource).order_by(RegistrySource.id)
+        if source_id:
+            query = query.where(RegistrySource.id == source_id)
+        sources = list(session.scalars(query))
+        if source_id and not sources:
+            raise ValueError("Unknown source ID")
+        for source in sources:
+            seed = seeds.get(source.id)
+            if not seed or not seed.options.get("archive"):
+                reason = "no_seed_archive"
+            elif canonical_url(source.url) != seed.url or source.collection_method != seed.collection_method:
+                reason = "source_endpoint_or_method_changed"
+            elif "archive" in source.options:
+                reason = "archive_key_already_present"
+            else:
+                source.options = {**source.options, "archive": seed.options["archive"]}
+                updated.append(source.id)
+                continue
+            skipped.append({"id": source.id, "reason": reason})
+    return {"updated": updated, "skipped": skipped}
