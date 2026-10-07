@@ -1,6 +1,11 @@
 from collections import Counter
 
 REASON_LABELS = {
+    "needs_translation": "Tarjima kerak",
+    "ambiguous_project": "Loyiha nomi yoki mazmuni noaniq",
+    "missing_creator": "Muallif yoki jamoa kerak",
+    "insufficient_evidence": "Qo‘shimcha dalil kerak",
+    "needs_ai_analysis": "AI tahlili kerak",
     "not_project": "Aniq loyiha emas",
     "not_a_project": "Aniq loyiha emas",
     "missing_existence_evidence": "Mavjudlik dalili yo‘q",
@@ -56,9 +61,12 @@ def candidate_diagnostics(session):
     from .db import Candidate, Project, RejectedCandidate, Run
 
     candidates = list(session.scalars(select(Candidate)))
+    published = list(session.scalars(select(Project).where(Project.visible.is_(True))))
     reasons = Counter()
+    candidate_states = {c.url: c.status for c in candidates}
     for row in session.scalars(select(RejectedCandidate)):
-        reasons.update(row.reasons)
+        if candidate_states.get(row.url, "rejected") == "rejected":
+            reasons.update(row.reasons)
     origins = {}
     for c in candidates:
         b = origins.setdefault(c.origin or "other", Counter())
@@ -78,6 +86,10 @@ def candidate_diagnostics(session):
     reasons["duplicates"] = sum(r.counts.get("duplicates", 0) for r in session.scalars(select(Run)))
     return {
         "processing_summary": {
+            "published_without_ai": sum(p.content.get("analysis_mode") == "extractive" for p in published),
+            "deterministic_rated": sum(p.content.get("analysis_mode") == "extractive" for p in published),
+            "ai_rated": sum(p.content.get("analysis_mode") == "ai" for p in published),
+            "rejected": sum(c.status == "rejected" for c in candidates),
             "pending_ai": sum(
                 c.status == "pending"
                 or (
@@ -100,6 +112,8 @@ def candidate_diagnostics(session):
             for k, v in sorted(reasons.items())
             if v
         ],
+        "pending_reason_stats": dict(Counter(c.reason for c in candidates if c.status == "pending")),
+        "language_stats": dict(Counter(c.article.get("language") or "unknown" for c in candidates)),
         "origin_stats": [
             {"origin": k, "label": ORIGIN_LABELS.get(k, k), **dict(v)} for k, v in sorted(origins.items())
         ],

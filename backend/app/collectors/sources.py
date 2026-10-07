@@ -8,7 +8,7 @@ from sqlalchemy import select
 from ..dates import priority
 from ..queries import targeted_queries, freshness
 from .archive import archive_links
-from ..db import Event, RegistrySource
+from ..db import Event, RegistrySource, Candidate
 from ..events import event_queries, followup_due
 from ..network import FetchError, safe_url, canonical_url
 from ..registry import due, record_check, seed_registry, source_for_url
@@ -87,7 +87,7 @@ class Discovery:
             result.source_id = source.id if source else None
             return result
 
-    def page_links(self, url, pattern=""):
+    def page_links(self, url, pattern="", match_text=False):
         raw, final = self.web.get(url)
         soup = BeautifulSoup(raw, "html.parser")
         links = []
@@ -98,7 +98,9 @@ class Discovery:
                     link
                 ) == canonical_url(final):
                     continue
-                if pattern and not re.search(pattern, link):
+                if pattern and not re.search(
+                    pattern, link + (" " + anchor.get_text(" ", strip=True) if match_text else ""), re.I
+                ):
                     continue
                 links.append(
                     {"url": link, "title": anchor.get_text(" ", strip=True)[:500], "published_at": None}
@@ -199,10 +201,12 @@ class Discovery:
 
     def follow_events(self, now):
         with self.factory() as session:
+            rejected_urls = set(session.scalars(select(Candidate.url).where(Candidate.status == "rejected")))
             events = [
                 e
                 for e in session.scalars(select(Event).order_by(Event.discovered_at.desc()))
-                if followup_due(e, now)
+                if e.source_url not in rejected_urls
+                and (followup_due(e, now) or (self.force and e.status != "closed"))
             ]
         links, errors = [], []
         for event in events[: self.settings.max_event_followups]:
@@ -217,13 +221,27 @@ class Discovery:
                                 query, freshness(self.window) if self.window else "pm"
                             )
                         )
-                elif event.official_url:
+                elif event.official_url or event.source_url:
                     found = self.page_links(
-                        event.official_url,
-                        "winner|project|loyiha|g.olib|demo|startup|team|participant|natija",
+                        event.official_url or event.source_url,
+                        "winner|project|loyiha|g.olib|demo|startup|team|participant|natija|speaker|news|yangilik|победител|участник",
+                        match_text=True,
                     )
+                    # One bounded navigation level for official winners/team index pages.
+                    for item in list(found[:2]):
+                        try:
+                            found.extend(
+                                self.page_links(
+                                    item["url"],
+                                    "winner|project|loyiha|team|demo|g.olib|participant",
+                                    match_text=True,
+                                )[:5]
+                            )
+                        except FetchError as exc:
+                            errors.append({"source": item["url"], "stage": "event", "code": str(exc)})
+                    found = list({canonical_url(item["url"]): item for item in found}.values())
                 else:
-                    raise FetchError("event_requires_search_key")
+                    raise FetchError("event_source_missing")
                 links.extend(
                     {**item, "event_id": event.id, "source_id": event.source_id, "origin": "event_discovery"}
                     for item in found[:10]
@@ -248,14 +266,14 @@ def source_origin(source):
         return "web_search"
     if source.source_type == "university":
         return "university"
+    if "it-park.uz" in source.url:
+        return "it_park"
     if source.source_type == "hackathon":
         return "hackathon"
     if source.source_type == "accelerator":
         return "accelerator"
     if "uzhunt" in source.url:
         return "uzhunt"
-    if "it-park.uz" in source.url:
-        return "it_park"
     if source.collection_method == "RSS":
         return "rss"
     if source.source_type == "event":

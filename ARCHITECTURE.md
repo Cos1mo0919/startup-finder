@@ -20,7 +20,7 @@ Discovery prioritizes last hour, today, last 7 days and last 30 days. Older resu
 ## Collectors and AI
 Public RSS works without API keys. Brave's documented API is optional and has a replaceable search interface. A provider-compatible chat completions adapter uses AI_API_KEY (or OPENAI_API_KEY locally), configurable model and base URL. External pages are untrusted data, never instructions. Structured Pydantic output, known source URL checks and verbatim quote checks gate facts and identity fields. The analysis translates descriptions to Uzbek and preserves proper names/URLs. Missing or unsupported fields remain unknown. Generated scores are not accepted.
 
-Without AI, only conservative, already-Uzbek articles with a named project and concrete existence evidence can be published using extractive summaries. Foreign-language/ambiguous candidates wait for AI rather than receiving fake translations. A fixture analyzer exists only in tests. No sample projects are inserted into the live database. Reddit is not used in Stage 1.
+Without AI, named projects with attributed creators and concrete existence evidence can be published using extractive summaries. Uzbek descriptions, problems and audiences are copied from evidence; unsupported fields stay unknown. RU/EN input can supply narrow Uzbek structural templates with original names/quotes, not a claimed full translation. Ambiguous material remains pending with an explicit reason. A fixture analyzer exists only in tests. No sample projects are inserted into the live database. Reddit is not used in Stage 1.
 
 ## Ranking and deduplication
 Usefulness is computed from evidence-backed categorical inputs: practical benefit 0–2.5, problem addressed 0–2, audience 0–1.5, innovation 0–1.5, usability 0–1.5, source quality 0–1. Each component and explanation is stored. Unknown criteria contribute zero; this is an evidence-constrained editorial score, not a measured business outcome. Confidence uses source types, independent publishers, named creators and verifiable project links. An official status requires operator-configured source trust, not an LLM assertion.
@@ -72,3 +72,26 @@ identity across restarts. The hourly scheduler exists only while the API process
 No managed cron, worker or permanent hosting was provisioned. Public HTTPS is currently
 blocked by tunnel connectivity in the managed network; no successful external deployment
 is claimed. Stage 1 remains unaccepted.
+
+## Keyless extraction — 2026-10-07
+
+Fallback processing version 5 retries rejected/event/published candidates after
+extractor changes. `extraction_version` and computed `rating_method` are stored in
+content JSON; no destructive schema migration is needed. Improved analyses can
+correct the product name on the existing UUID while preserving historical dates and
+quotes. Mandatory creator/existence gates remain independent of the analyzer.
+Explicit company launches now supply creator evidence. Editorial interview series
+are rejected and old matching records become hidden, never deleted.
+
+Parser version 4 refetches cached articles: empty/truncated title metadata falls back
+to the article heading; source-specific body/date/exclusion selectors keep UzHunt
+recommendations out of product evidence. Official event navigation matches anchor
+labels as well as URLs, remains same-domain and bounded to two index pages plus up
+to five links each. It does not scrape search engines or bypass access controls.
+The one-project-per-source-article uniqueness model remains unchanged; multi-product
+lists need distinct product pages for complete individual ingestion.
+
+Diagnostics expose visible keyless/AI counts, candidate languages and pending reasons.
+Source origins distinguish IT Park from generic accelerators. New seed defaults use
+free sources; optional Brave profiles remain available but disabled. Source health,
+operator settings and historical data survive normal startup.

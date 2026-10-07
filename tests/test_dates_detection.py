@@ -72,5 +72,7 @@ def test_keyless_named_bot_with_real_launch_evidence():
     a.title = "Yangi chat-bot ishga tushirildi"
     a.text = "O‘zbekiston uchun yangi xizmat. @Example_bot Telegram-boti ommaviy foydalanish uchun test rejimida ishga tushgan."
     result = extractive_analysis(a)
-    assert result is not None
-    assert result.name == "@Example_bot"
+    assert result is None  # A launch alone cannot supply the mandatory creator.
+    from backend.app.fallback import pending_reason
+
+    assert pending_reason(a) == "missing_creator"

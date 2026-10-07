@@ -50,6 +50,7 @@ def serialize_project(project, detail=False):
         real_project_confidence=project.real_project_confidence,
         source_count=len(project.sources),
         analysis_mode=content["analysis_mode"],
+        rating_method="ai" if content["analysis_mode"] == "ai" else "deterministic_fallback",
     )
     if detail:
         result.update(

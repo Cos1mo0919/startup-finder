@@ -3,6 +3,10 @@
 ## Current stage
 **Stage 1 — Uzbekistan. Реализация и расширение Startup Radar подготовлены к проверке; пользователь ещё не принял этап.** Global и отдельный GitHub / Yangi dasturlar не начинались.
 
+**Последний результат (07.10.2026):** проверка без платных API завершена, в ленте
+3 проверенные карточки. Актуальные цифры и ограничения — в последнем разделе ниже
+и [KEYLESS_VALIDATION.md](docs/KEYLESS_VALIDATION.md). Ранние разделы отражают историю.
+
 ## Completed
 - Узбекский React/TypeScript сайт: лента, поиск, фильтры, карточки, факты и отдельный AI-анализ, подробный read-only `/status`.
 - Source Registry в SQL, 23 seed-записи `config/sources.json`, CLI импорта/обновления/включения источников. Индивидуальная частота, приоритет, надёжность и история ошибок.
@@ -86,3 +90,73 @@ anonymous tunnel, or an authenticated tunnel service with supported connectivity
 The user is not asked to create paid hosting. Public URL, external HTTPS checks and
 phone acceptance remain unfinished. **Stage 1 is not accepted; discovery acceptance
 work remains paused and Global must not begin.**
+
+## 2026-10-07 — keyless Uzbekistan acceptance run
+
+The user resumed discovery work and explicitly requested useful publication without
+AI/Search keys. This supersedes the earlier pause for preview. Stage 1 remains
+unaccepted; Global and GitHub / Yangi dasturlar were not started.
+
+- Fallback accepts explicitly attributed unquoted product names, company launches,
+  prototypes and supported multilingual constructions. Creator attribution must
+  refer to the product, not an unrelated person later in the article. Uzbek problem
+  statements/audiences are extracted without invented facts. Foreign material gets
+  only narrow structured templates or explicit pending reasons.
+- Stored/API `rating_method` distinguishes deterministic_fallback from ai; existing
+  evidence thresholds and scoring rubric remain. UI labels the missing AI analysis
+  and rule-based rating. Status adds published-without-AI, rating methods, languages
+  and pending reasons; obsolete rejection records do not inflate current statistics.
+- Parser v4 reads the UzHunt product body/date instead of recommendations and falls
+  back to h1 for broken title metadata. Official/source-page event links work without
+  Search API with bounded same-domain navigation. Rejected recruitment news do not
+  become events. `--drain` no longer initiates event discovery.
+- Processing v5 can improve old fallback cards on the same UUID. DMED was corrected
+  from Uzinfocom. Editorial series Ryukzakda nima bor? and the financing program
+  Ko‘mak were hidden after manual review, with records preserved. No quotas were used
+  to lower publication gates.
+- Probed 20 free seeds: 18 responded, TUIT/TerSU returned HTTP 503. Working Qarshi DU
+  article parsing and Gazeta RSS/article access enabled; unverified university
+  adapters remain disabled with notes. Four optional Brave profiles now default to
+  disabled. Ordinary startup continues to preserve operator settings.
+
+Live acceptance used explicitly empty AI_API_KEY, OPENAI_API_KEY and SEARCH_API_KEY:
+archive runs 24–28 covered 2022–2026-09, fresh run 29 completed, archival retry runs
+30–34 applied improved rules, and forced run 35 completed. All were partial, not
+claimed as exhaustive coverage. Retry run 30 still used the older in-process event
+navigation before the drain fix and found 14 links; the final code's no-discovery
+drain behavior is regression-tested.
+
+Final forced run: 11 free source listings succeeded, 163 URLs found, 325 candidates
+processed, 27 rejected, 286 pending, 11 parser/fetch errors; zero source/configuration
+errors and zero AI calls. It added no new card because qualifying stored projects
+had already been processed. Overall DB: 881 unique candidates (78 new this task),
+563 rejected, 286 pending, 11 errors, 15 events, 3 ecosystem candidates, 3 published.
+11 distinct candidates have fallback processing recorded; zero AI. Per-run duplicates
+and source/origin breakdowns are in the linked report, with repeated attempts clearly
+separated from unique counts.
+
+Visible cards: Uzbekistan Airways app (19.07.2022; creator Uzbekistan Airways;
+Foydalilik 3.85 / Tasdiqlanganlik 7.02), DMED (07.01.2025; Uzinfocom; 2.1 / 6.72),
+KotibAI (10.03.2026; Hikmatilla Ubaydullaev; 4.85 / 6.72). All use
+deterministic_fallback and have working Spot URLs, retained quotations and named
+creators. Qualified 2023/2024 cards were not found in this bounded sample. Three
+visible cards is a result of evidence review, not a guarantee of complete discovery.
+
+All 10 pre-existing project IDs/publication dates/first_seen and all 803 original
+candidate URLs were preserved. No projects or candidates were deleted. Two additional
+stored project rows include one hidden false positive (Ko‘mak), retained for audit.
+
+Validation: **146 backend tests, 6 desktop/mobile browser tests, Ruff and
+TypeScript/Vite build passed**. Existing Starlette/httpx deprecation warning remains.
+Actual-data mobile checks passed home, all 2022–2026 filters, DMED search, all three
+details with the missing-AI label, and `/status`; no horizontal overflow/JS errors.
+Health/assets/API checks and an owned backend restart passed: all three visible
+IDs and dates persisted. Original source URLs were fetched again with
+robots/TLS checks. Scheduler is enabled while this machine runs; next run observed
+at 15:00 Asia/Tashkent, not claimed as an already completed hourly tick.
+
+Full report: [docs/KEYLESS_VALIDATION.md](docs/KEYLESS_VALIDATION.md).
+Local artifacts/backup: `/workspace/artifacts/keyless/` (not committed). Setup/start
+instructions updated in the cloud configuration draft, not published automatically.
+Public preview remains a separate unresolved network limitation; local validation
+does not claim a public deployment. Stop for user review; **Stage 1 is not accepted**.

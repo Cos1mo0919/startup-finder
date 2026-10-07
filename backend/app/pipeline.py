@@ -106,7 +106,11 @@ class Pipeline:
                 selected = (
                     analysis
                     if previous.analysis_mode == "extractive"
-                    and (analysis.analysis_mode == "ai" or (not previous.creator and analysis.creator))
+                    and (
+                        analysis.analysis_mode == "ai"
+                        or (not previous.creator and analysis.creator)
+                        or analysis.extraction_version > previous.extraction_version
+                    )
                     else previous
                 )
                 facts = list(selected.facts)
@@ -117,6 +121,9 @@ class Pipeline:
                         keys.add((fact.source_url, fact.quote))
                 selected.facts = facts
                 project.content = selected.model_dump(mode="json")
+                if selected is analysis:
+                    project.name = selected.name
+                    project.normalized_project_name = normalize(selected.name)
                 project.aliases = list(dict.fromkeys([*project.aliases, *analysis.aliases, analysis.name]))[
                     :20
                 ]
@@ -222,7 +229,7 @@ class Pipeline:
                 self.discovery.discover(start, archive) if discover else ([], [], 0)
             )
             errors.extend(discovery_errors)
-            if hasattr(self.discovery, "follow_events"):
+            if discover and hasattr(self.discovery, "follow_events"):
                 event_links, event_errors = self.discovery.follow_events(start)
                 links = event_links + links
                 errors.extend(event_errors)
@@ -258,6 +265,8 @@ class Pipeline:
                     if item.get("event_id") and not row.event_id:
                         row.event_id = item["event_id"]
                         row.origin = "event_discovery"
+                    elif not row.event_id and item.get("origin"):
+                        row.origin = item["origin"]
                 reanalysis = set()
                 if self.settings.ai_key:
                     reanalysis = set(
@@ -273,7 +282,10 @@ class Pipeline:
                         .where(
                             or_(
                                 Candidate.status.in_(["queued", "pending", "error"]),
-                                and_(Candidate.processing_version < 3, Candidate.status == "rejected"),
+                                and_(
+                                    Candidate.processing_version < 5,
+                                    Candidate.status.in_(["rejected", "event", "published"]),
+                                ),
                                 Candidate.url.in_(reanalysis),
                                 and_(
                                     Candidate.reason.in_(
@@ -303,7 +315,7 @@ class Pipeline:
                 counts["candidates"] += 1
                 with self.factory.begin() as session:
                     row = session.get(Candidate, url)
-                    row.last_run_id, row.processing_version = run_id, 3
+                    row.last_run_id, row.processing_version = run_id, 5
                     row.attempts += 1
                 try:
                     cached = candidate.article
@@ -342,8 +354,14 @@ class Pipeline:
                         continue
                     stage = "classification"
                     classification = material_type(article)
-                    event_id, event_created = save_event(self.factory, article, start)
+                    event_id, event_created = (
+                        save_event(self.factory, article, start)
+                        if classification in ("PROJECT", "EVENT")
+                        else (None, False)
+                    )
                     counts["events"] += int(event_created)
+                    if event_id and classification == "PROJECT":
+                        article.event_id = article.event_id or event_id
                     if classification == "ECOSYSTEM_SIGNAL":
                         with self.factory.begin() as session:
                             if session.get(EcosystemSignal, url) is None:
@@ -377,7 +395,9 @@ class Pipeline:
                     stage = "ai" if self.settings.ai_key else "fallback"
                     analysis = self.analyzer.analyze([article])
                     if analysis is None:
-                        self.mark(url, "pending", "needs_ai_or_more_evidence")
+                        from .fallback import pending_reason
+
+                        self.mark(url, "pending", pending_reason(article))
                         counts["pending"] += 1
                         bucket["pending"] += 1
                         continue

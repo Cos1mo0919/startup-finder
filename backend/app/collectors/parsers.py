@@ -7,7 +7,7 @@ from ..dates import parse_date
 from ..network import FetchError, safe_url
 from ..schemas import Article
 
-PARSER_VERSION = 3
+PARSER_VERSION = 4
 
 
 def parse_feed(raw):
@@ -35,6 +35,11 @@ def parse_article(raw, url, publisher="", kind="unknown", feed_date=None, option
         if title_meta
         else (soup.title.get_text(" ", strip=True) if soup.title else "")
     )
+    heading = soup.find("h1")
+    if heading:
+        heading_text = heading.get_text(" ", strip=True)
+        if not title or (len(heading_text) > len(title) and heading_text.startswith(title)):
+            title = heading_text
     published = None
     # Publication date only: modified timestamps must never make old articles look new.
     for attrs in [
@@ -113,6 +118,9 @@ def parse_article(raw, url, publisher="", kind="unknown", feed_date=None, option
         or soup.body
         or soup
     )
+    for selector in options.get("exclude_selectors", []):
+        for element in body.select(selector):
+            element.decompose()
     text = " ".join(body.stripped_strings)[:24000]
     if options.get("body_selector") and not soup.select_one(options["body_selector"]):
         raise FetchError("article_body_missing")

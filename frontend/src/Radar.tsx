@@ -188,6 +188,10 @@ export function RadarAdmin({ status: s }: { status: Status }) {
             queued: "Navbatdagi URL",
             processed_ai: "AI bilan ishlangan",
             processed_fallback: "Qoidalar bilan ishlangan",
+            published_without_ai: "AI siz nashr qilingan",
+            deterministic_rated: "Qoidalar asosidagi reyting",
+            ai_rated: "AI tahliliga asoslangan reyting",
+            rejected: "Rad etilgan nomzodlar",
             ai_errors: "AI xatolari",
             translation_errors: "Tarjima xatolari",
           }).map(([key, label]) => (
@@ -196,6 +200,36 @@ export function RadarAdmin({ status: s }: { status: Status }) {
               <strong>{s.processing_summary[key] || 0}</strong>
             </div>
           ))}
+        </div>
+        <h3>Nomzodlar tili</h3>
+        <div className="radar-metrics">
+          {Object.entries(s.language_stats || {}).map(([language, count]) => (
+            <div key={language}>
+              <span>{language === "unknown" ? "Noma’lum" : language}</span>
+              <strong>{count}</strong>
+            </div>
+          ))}
+        </div>
+        <h3>Kutilayotgan nomzodlar sababi</h3>
+        <div className="radar-metrics">
+          {Object.entries(s.pending_reason_stats || {}).map(
+            ([reason, count]) => (
+              <div key={reason}>
+                <span>
+                  {(
+                    {
+                      needs_translation: "Tarjima kerak",
+                      ambiguous_project: "Loyiha noaniq",
+                      missing_creator: "Muallif kerak",
+                      insufficient_evidence: "Dalil yetarli emas",
+                      needs_ai_analysis: "AI tahlili kerak",
+                    } as Record<string, string>
+                  )[reason] || reason}
+                </span>
+                <strong>{count}</strong>
+              </div>
+            ),
+          )}
         </div>
         <p className="section-note">
           Quyidagi sabablar saqlangan nomzodlar bo‘yicha; bir yozuvda bir nechta

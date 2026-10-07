@@ -2,7 +2,7 @@ import re
 from sqlalchemy import select
 from .dates import valid_date
 from .db import Project, ProjectEvidence, RegistrySource, RejectedCandidate, now_utc
-from .detection import CONCRETE, IDEA_LIST, SPAM, normalize
+from .detection import CONCRETE, IDEA_LIST, SPAM, normalize, editorial_series, financial_program
 from .fallback import ACTION
 from .network import canonical_url
 from .ranking import publisher_group
@@ -80,24 +80,32 @@ def identified(analysis):
 def evidence_types(analysis, quote, kind):
     types = set()
     named = normalize(analysis.name) in normalize(quote)
+    # A future plan for an unrelated project at the end of a news article must
+    # neither prove nor veto existence of the named product.
+    existence_quote = " ".join(
+        sentence
+        for sentence in re.split(r"(?<=[.!?])\s+", quote)
+        if normalize(analysis.name) in normalize(sentence)
+        or re.match(r"(?:Uning|Ushbu|Loyiha|Tizim|Platforma|Ilova)\b", sentence)
+    )
     speculative = re.search(
         r"will be|will launch|not yet|rejalashtiril|yaratilishi mumkin|планируется|будет создан|будет запущен",
-        quote,
+        existence_quote,
         re.I,
     )
     if named and not speculative:
-        types.update(k for k, pattern in PATTERNS.items() if re.search(pattern, quote, re.I))
+        types.update(k for k, pattern in PATTERNS.items() if re.search(pattern, existence_quote, re.I))
         if (
-            CONCRETE.search(quote)
-            or ACTION.search(quote)
-            or re.search(r"created|developed|demonstrated|разработан|создан", quote, re.I)
+            CONCRETE.search(existence_quote)
+            or ACTION.search(existence_quote)
+            or re.search(r"created|developed|demonstrated|разработан|создан", existence_quote, re.I)
         ):
             types.add("project_exists")
     if identified(analysis) and any(
         v and normalize(v) in normalize(quote) for v in (analysis.creator, analysis.organization)
     ):
         if re.search(
-            r"tomonidan|yarat|ishlab chiq|created|develop|built|presented|team|jamoa|автор|разработ|созда|представил|asoschi|hammuassis|founder|основател|hamkorlikda",
+            r"tomonidan|yarat|ishlab chiq|ishga tush|created|develop|built|launched|presented|team|jamoa|автор|разработ|созда|запуст|представил|asoschi|hammuassis|founder|основател|hamkorlikda",
             quote,
             re.I,
         ):
@@ -221,6 +229,10 @@ def evaluate_project(session, project, threshold=5):
     if not types & EXISTENCE:
         reasons.append("existence_unconfirmed")
     text = project.name + " " + project.content.get("summary_uz", "")
+    if editorial_series(text):
+        reasons.append("not_project")
+    if financial_program(text):
+        reasons.append("ecosystem_signal")
     if IDEA_LIST.search(text):
         reasons.append("idea_list")
     if SPAM.search(text):

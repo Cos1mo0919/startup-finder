@@ -71,9 +71,16 @@ NOISE = re.compile(
     r"(?:mehmonxona|bino|ko‘chmas mulk|hotel|building|недвижимост|здани|гостиниц).{0,60}(?:sotil|sotuv|sale|прода)|lavozim.{0,40}tayin|direktor.{0,40}tayin|назначен|appointed|celebrity|знаменитост|aksiya.{0,30}(?:narxi|qimmat)|stock market|биржев|hamkorlik.{0,40}muhokama|деловая встреча|corporate meeting",
     re.I,
 )
+ORDINARY_NEWS = re.compile(
+    r"jarima|штраф|tarif|тариф|saylov|election|выбор|vakant|ваканси|lavozim|uchrashuv|uchrashdi|muhokama qildi|memorandum|"
+    r"tayinlandi|назначен|celebrity|qonun|законопроект|hamkorlikni (?:kengaytir|rivojlantir)",
+    re.I,
+)
 
 
 def early_reason(article):
+    if editorial_series(article.text):
+        return "not_project"
     if IDEA_LIST.search(article.title):
         return "idea_list"
     if SPAM.search(article.title + " " + article.text[:1000]):
@@ -81,9 +88,20 @@ def early_reason(article):
     from .fallback import project_name, ACTION
 
     concrete = bool(project_name(article) and ACTION.search(article.text))
-    if not concrete and NOISE.search(article.title):
+    if not concrete and (NOISE.search(article.title) or ORDINARY_NEWS.search(article.title)):
         return "noise_topic"
     return ""
+
+
+def editorial_series(text):
+    return bool(
+        re.search(r"nomli loyihani davom ettiradi", text[:1000], re.I)
+        and re.search(r"intervyu|suhbatlash", text[:1500], re.I)
+    )
+
+
+def financial_program(text):
+    return bool(re.search(r"dasturi doirasida.{0,100}(?:ssuda|grant|subsidiya)", text, re.I))
 
 
 def material_type(article):
@@ -91,6 +109,9 @@ def material_type(article):
     if reason:
         return "REJECT"
     from .fallback import project_name, ACTION
+
+    if financial_program(article.text) and len(project_name(article)) == 1:
+        return "ECOSYSTEM_SIGNAL"
 
     concrete = bool(project_name(article) and ACTION.search(article.text))
     if ECOSYSTEM.search(article.title) and not any(

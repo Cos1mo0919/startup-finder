@@ -39,7 +39,7 @@
         "target_pattern": "startup|startap|loyiha|project|prototype|prototip|hackathon|hakaton|demo|robot|platform|app|dastur|innovation|innovatsi|founder|student|university|univer|launch|kotib|mohir|tass|bilim|raqam|smart|digital|service|servis|med|health|edu|fintech|agro"
       }
     },
-    "notes": "Ruscha materiallar uchun AI tarjimasi kerak."
+    "notes": "Ruscha manbalardan aniq nom va muallif ajratilishi mumkin; to‘liq tarjima bo‘lmasa faqat tuzilmaviy fallback yoki pending."
   },
   {
     "id": "uzhunt",
@@ -54,9 +54,14 @@
     "collection_method": "direct_page",
     "kind": "unknown",
     "options": {
-      "link_pattern": "/p/[^/]+$"
+      "link_pattern": "/p/[^/]+$",
+      "body_selector": ".pmain",
+      "date_selector": ".cite-date",
+      "exclude_selectors": [
+        "article"
+      ]
     },
-    "notes": "Jonli HTML va robots.txt tekshirildi. Mahsulot havolalari olinadi; sanasiz sahifalar lentaga chiqmaydi. Platformadagi yozuv muallif yoki tashkilotning rasmiy tasdig‘i deb qabul qilinmaydi; qo‘shimcha dalil kerak."
+    "notes": "Mahsulot matni .pmain dan, to‘liq sana .cite-date dan olinadi. Tavsiya kartalari chiqariladi. O‘zbekiston aloqasi, muallif va mavjudlik alohida tekshiriladi; platforma o‘zi rasmiy tasdiq emas."
   },
   {
     "id": "itpark",
@@ -114,7 +119,7 @@
     "options": {
       "link_pattern": "post|news|yangilik"
     },
-    "notes": "2026-10-07: Ochiq tekshiruv xatosi: http_503. Himoya chetlab o‘tilmaydi."
+    "notes": "2026-10-07: robots yoki sahifa HTTP 503. Himoyani aylanib o‘tmasdan o‘chirilgan holatda qoldirildi."
   },
   {
     "id": "samdu",
@@ -131,7 +136,7 @@
     "options": {
       "link_pattern": "news|yangilik|post"
     },
-    "notes": "2026-10-07: Ochiq sahifa javob berdi, ammo maqola matni va ishonchli nashr sanasi adapteri hali tasdiqlanmagan; o‘chirilgan."
+    "notes": "2026-10-07: network_unavailable. O‘chirilgan holatda qoldirildi."
   },
   {
     "id": "bsu",
@@ -167,7 +172,7 @@
     "options": {
       "link_pattern": "news|yangilik|post"
     },
-    "notes": "2026-10-07: Ochiq sahifa javob berdi, ammo maqola matni va ishonchli nashr sanasi adapteri hali tasdiqlanmagan; o‘chirilgan."
+    "notes": "2026-10-07: Yangilik havolalari yoki maqola adapteri tasdiqlanmadi. O‘chirilgan holatda qoldirildi."
   },
   {
     "id": "adu",
@@ -231,7 +236,7 @@
     "options": {
       "link_pattern": "news|yangilik|post"
     },
-    "notes": "2026-10-07: Ochiq sahifa javob berdi, ammo maqola matni va ishonchli nashr sanasi adapteri hali tasdiqlanmagan; o‘chirilgan."
+    "notes": "2026-10-07: Yangilik havolalari yoki maqola adapteri tasdiqlanmadi. O‘chirilgan holatda qoldirildi."
   },
   {
     "id": "urdu",
@@ -248,7 +253,7 @@
     "options": {
       "link_pattern": "news|yangilik|post"
     },
-    "notes": "2026-10-07: Ochiq sahifa javob berdi, ammo maqola matni va ishonchli nashr sanasi adapteri hali tasdiqlanmagan; o‘chirilgan."
+    "notes": "2026-10-07: Nashr sanasi tasdiqlanmadi. O‘chirilgan holatda qoldirildi."
   },
   {
     "id": "navdu",
@@ -265,7 +270,7 @@
     "options": {
       "link_pattern": "news|yangilik|post"
     },
-    "notes": "2026-10-07: Ochiq sahifa javob berdi, ammo maqola matni va ishonchli nashr sanasi adapteri hali tasdiqlanmagan; o‘chirilgan."
+    "notes": "2026-10-07: Yangilik havolalari yoki maqola adapteri tasdiqlanmadi. O‘chirilgan holatda qoldirildi."
   },
   {
     "id": "qarshidu",
@@ -273,16 +278,16 @@
     "url": "https://qarshidu.uz/",
     "source_type": "university",
     "region": "Regional Uzbekistan — Qashqadaryo",
-    "priority": 2,
-    "check_frequency": 1440,
+    "priority": 4,
+    "check_frequency": 180,
     "reliability_score": 9,
-    "enabled": false,
+    "enabled": true,
     "collection_method": "direct_page",
     "kind": "university",
     "options": {
-      "link_pattern": "news|yangilik|post"
+      "link_pattern": "/oz/news/[0-9]+-"
     },
-    "notes": "2026-10-07: Ochiq sahifa javob berdi, ammo maqola matni va ishonchli nashr sanasi adapteri hali tasdiqlanmagan; o‘chirilgan."
+    "notes": "2026-10-07: bosh sahifa va ikki yangilik sahifasi tekshirildi; matn va metadata nashr sanasi mavjud. Ochiq HTML kollektor yoqildi."
   },
   {
     "id": "jizpi",
@@ -299,7 +304,7 @@
     "options": {
       "link_pattern": "news|yangilik|post"
     },
-    "notes": "2026-10-07: Ochiq sahifa javob berdi, ammo maqola matni va ishonchli nashr sanasi adapteri hali tasdiqlanmagan; o‘chirilgan."
+    "notes": "2026-10-07: Yangilik havolalari yoki maqola adapteri tasdiqlanmadi. O‘chirilgan holatda qoldirildi."
   },
   {
     "id": "guldu",
@@ -316,7 +321,7 @@
     "options": {
       "link_pattern": "news|yangilik|post"
     },
-    "notes": "2026-10-07: Ochiq sahifa javob berdi, ammo maqola matni va ishonchli nashr sanasi adapteri hali tasdiqlanmagan; o‘chirilgan."
+    "notes": "2026-10-07: Nashr sanasi tasdiqlanmadi. O‘chirilgan holatda qoldirildi."
   },
   {
     "id": "tersu",
@@ -333,7 +338,7 @@
     "options": {
       "link_pattern": "news|yangilik|post"
     },
-    "notes": "2026-10-07: Ochiq tekshiruv xatosi: http_503. Himoya chetlab o‘tilmaydi."
+    "notes": "2026-10-07: robots yoki sahifa HTTP 503. Himoyani aylanib o‘tmasdan o‘chirilgan holatda qoldirildi."
   },
   {
     "id": "gazeta",
@@ -344,11 +349,11 @@
     "priority": 4,
     "check_frequency": 180,
     "reliability_score": 7.5,
-    "enabled": false,
+    "enabled": true,
     "collection_method": "RSS",
     "kind": "news",
     "options": {},
-    "notes": "Oldingi tekshiruvda HTTP 403; cheklovlar chetlab o‘tilmaydi."
+    "notes": "2026-10-07: RSS va yangilik maqolasi ochildi, sana va asosiy matn tekshirildi. Avvalgi 403 qaytarilmadi; kirish cheklansa oddiy xato sifatida qayd etiladi."
   },
   {
     "id": "search-regional",
@@ -359,7 +364,7 @@
     "priority": 4,
     "check_frequency": 180,
     "reliability_score": 0,
-    "enabled": true,
+    "enabled": false,
     "collection_method": "search",
     "kind": "unknown",
     "options": {
@@ -379,7 +384,7 @@
         "Surxondaryo"
       ]
     },
-    "notes": "Brave Search API kaliti kerak. Natija manbasi alohida tekshiriladi."
+    "notes": "Ixtiyoriy Brave API profili. Kalitsiz rejimda o‘chirilgan; SEARCH_API_KEY sozlangach operator CLI orqali yoqishi mumkin."
   },
   {
     "id": "search-hackathons",
@@ -390,14 +395,14 @@
     "priority": 4,
     "check_frequency": 180,
     "reliability_score": 0,
-    "enabled": true,
+    "enabled": false,
     "collection_method": "search",
     "kind": "unknown",
     "options": {
       "query": "Uzbekistan hackathon tanlov demo day startup winner loyiha",
       "regions": []
     },
-    "notes": "Brave Search API kaliti kerak. Natija manbasi alohida tekshiriladi."
+    "notes": "Ixtiyoriy Brave API profili. Kalitsiz rejimda o‘chirilgan; SEARCH_API_KEY sozlangach operator CLI orqali yoqishi mumkin."
   },
   {
     "id": "search-government",
@@ -408,14 +413,14 @@
     "priority": 3,
     "check_frequency": 480,
     "reliability_score": 0,
-    "enabled": true,
+    "enabled": false,
     "collection_method": "search",
     "kind": "unknown",
     "options": {
       "query": "site:gov.uz Uzbekistan loyiha innovatsiya prototip grant",
       "regions": []
     },
-    "notes": "Brave Search API kaliti kerak. Natija manbasi alohida tekshiriladi."
+    "notes": "Ixtiyoriy Brave API profili. Kalitsiz rejimda o‘chirilgan; SEARCH_API_KEY sozlangach operator CLI orqali yoqishi mumkin."
   },
   {
     "id": "search-itpark-regions",
@@ -426,7 +431,7 @@
     "priority": 3,
     "check_frequency": 480,
     "reliability_score": 0,
-    "enabled": true,
+    "enabled": false,
     "collection_method": "search",
     "kind": "unknown",
     "options": {
@@ -446,7 +451,7 @@
         "Surxondaryo"
       ]
     },
-    "notes": "Brave Search API kaliti kerak. Natija manbasi alohida tekshiriladi."
+    "notes": "Ixtiyoriy Brave API profili. Kalitsiz rejimda o‘chirilgan; SEARCH_API_KEY sozlangach operator CLI orqali yoqishi mumkin."
   },
   {
     "id": "spot-startups",

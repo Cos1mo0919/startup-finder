@@ -47,6 +47,7 @@ export type Project = {
   images: { url: string; source_url: string; publisher: string }[];
   source_count: number;
   analysis_mode: string;
+  rating_method: string;
   main_url?: string;
   aliases?: string[];
   sources?: Source[];
@@ -99,6 +100,8 @@ export type Run = {
 };
 export type Status = {
   processing_summary: Record<string, number>;
+  pending_reason_stats: Record<string, number>;
+  language_stats: Record<string, number>;
   reject_reason_stats: { reason: string; label: string; count: number }[];
   origin_stats: ({ origin: string; label: string } & Record<
     string,

@@ -18,7 +18,16 @@ PERSON = rf"{TOKEN}(?:\s+{TOKEN}){{1,3}}"
 
 def project_name(article):
     candidates = []
+    # Unquoted brands must be directly described as a product, never just a company mention.
+    for m in re.finditer(
+        rf"\b({TOKEN}(?:[.-]{TOKEN})?)\s+(?:nomli\s+)?(?:startapi|startap|platformasi|platforma|ilovasi|ilova|tizimi|servisi|loyihasi|prototipi)\b",
+        article.title + " " + article.text[:7000],
+    ):
+        if m[1] not in {"Yangi", "Ushbu", "Mazkur", "Bu", "Startup", "Base"}:
+            candidates.append(m[1])
     for text in (article.title, article.text[:7000]):
+        for m in re.finditer(r'[“«"]([^”»"\n]{2,70})[”»"]\s+[^.!?]{0,90}mobil ilovani ishga tushirdi', text):
+            candidates.append(m[1].strip())
         for m in re.finditer(
             rf'[“«"]\s*([^”»"\n]{{2,90}}?)\s*[”»"]\s*(?:deb nomlangan\s+|nomli\s+)?(?:{PRODUCT})', text, re.I
         ):
@@ -36,17 +45,19 @@ def project_name(article):
         candidates.append(bot[1])
     # Unquoted named products next to explicit launch verbs.
     for m in re.finditer(
-        rf"(?:launched|presented|developed|создал|представил|разработал)\s+(?:a |the )?(?:{PRODUCT})\w*\s+({TOKEN}(?:[.-]{TOKEN})?)",
+        rf"(?:launched|presented|developed|built|created|demonstrated|создал|представил|разработал|запустил)\s+(?:a |the )?(?:{PRODUCT})\w*\s+({TOKEN}(?:[.-]{TOKEN})?)",
         article.text,
     ):
         candidates.append(m[1])
-    return list(dict.fromkeys(n for n in candidates if len(n.split()) <= 8))
+    return list(dict.fromkeys(n for n in candidates if len(n.split()) <= 8 and "?" not in n))
 
 
 def creator_in(text):
     patterns = [
+        r'[“«"]([^”»"\n]{2,70})[”»"]\s+(?:kompaniyasi\s+)?[^.!?]{0,100}(?:ilovani|platformani|tizimni)\s+ishga tushirdi',
+        rf"({TOKEN}(?:\s+{TOKEN}){{0,3}}\s+(?:jamoasi|kompaniyasi|universiteti))[^.!?]{{0,120}}(?:ishlab chiq|yarat|ishga tush)",
         rf"(?:asoschilari|asoschisi|hammuassisi|muallifi|founders?|основатель|основатели|автор)\s*(?:[—–:-]\s*)?({PERSON})",
-        rf"({PERSON})\s*(?:tomonidan|developed|created|built|launched|presented|разработал|создал|представил)",
+        rf"({PERSON})\s*(?:tomonidan|developed|created|built|launched|presented|demonstrated|won|разработал|создал|представил|запустил|победил)",
         rf"({TOKEN}(?:\s+{TOKEN}){{0,3}}\s+(?:University|universiteti|instituti|jamoasi|kompaniyasi))\s+tomonidan",
         rf"(?:created|developed|built|launched)\s+by\s+({PERSON})",
         rf"({PERSON})(?:ning)?\s+.{{0,80}}(?:yaratdi|ishlab chiqdi|taqdim etdi)",
@@ -56,8 +67,21 @@ def creator_in(text):
     for pattern in patterns:
         m = re.search(pattern, text)
         if m:
-            return re.sub(r"^(?:In )?(?:Uzbekistan|Узбекистане|O‘zbekiston)\s+", "", m[1].strip())
+            return re.sub(r"^(?:In Uzbekistan|В Узбекистане|O‘zbekistonda)\s+", "", m[1].strip())
     return ""
+
+
+def pending_reason(article):
+    names = project_name(article)
+    if not names:
+        return "ambiguous_project"
+    if not creator_in(article.text):
+        return "missing_creator"
+    if not ACTION.search(article.text):
+        return "insufficient_evidence"
+    from .detection import is_uzbek
+
+    return "needs_translation" if not is_uzbek(article.text) else "insufficient_evidence"
 
 
 def extract(article):
@@ -73,9 +97,22 @@ def extract(article):
         # A contiguous original passage; no stitched or translated quotation.
         begin = max(0, text.rfind(". ", 0, position) + 2) if ". " in text[:position] else 0
         quote = text[begin : begin + 1800]
-        if not ACTION.search(quote) or FUTURE.search(quote[:500]):
+        named_sentence = next(
+            (s for s in re.split(r"(?<=[.!?])\s+", quote) if name.lower() in s.lower()), quote
+        )
+        if not ACTION.search(quote) or FUTURE.search(named_sentence):
             continue
-        creator = creator_in(quote)
+        # Attribution must refer to this product, not another organization later
+        # in a long news article. Explicit anaphora is allowed within this passage.
+        creator = next(
+            (
+                creator_in(s)
+                for s in re.split(r"(?<=[.!?])\s+", quote)
+                if creator_in(s)
+                and (name.lower() in s.lower() or re.match(r"(?:Uning|Ushbu loyiha|Loyiha muallifi)\b", s))
+            ),
+            "",
+        )
         if not creator:
             # Explicit attribution elsewhere in the article is kept as a separate fact.
             identity_quote = next(
@@ -85,9 +122,9 @@ def extract(article):
             creator = creator_in(identity_quote)
         else:
             identity_quote = ""
-        native = is_uzbek(quote)
-        if not native and not creator:
+        if not creator:
             continue
+        native = is_uzbek(quote)
         description = (
             quote[:1400]
             if native
@@ -112,23 +149,69 @@ def extract(article):
             )
         prototype = bool(re.search(r"prototip|prototype|прототип", quote, re.I))
         launched = bool(re.search(r"ishga tush|launched|запуст", quote, re.I))
+        in_use = bool(re.search(r"foydalanmoqda|foydalanilmoqda|customers use|используют", quote, re.I))
+        # Only copy explicitly stated Uzbek functions and audiences, never infer a benefit.
+        sentences = re.split(r"(?<=[.!?])\s+", quote)
+        problem = next(
+            (
+                s
+                for s in sentences
+                if native
+                and re.search(r"muammo|yordam beradi|imkon(?:ini|iyat)|osonlashtir|avtomatlashtir", s, re.I)
+            ),
+            "",
+        )
+        normalized_quote = re.sub(r"[ʻʼ’'`]", "‘", quote.lower())
+        groups = [
+            word
+            for word in (
+                "talabalar",
+                "shifokorlar",
+                "yo‘lovchilar",
+                "tadbirkorlar",
+                "kompaniyalar",
+                "fermerlar",
+            )
+            if native and word in normalized_quote
+        ]
+        business = "kompaniyalar" in groups or "tadbirkorlar" in groups
+        individuals = any(g not in ("kompaniyalar", "tadbirkorlar") for g in groups)
+        organization = (
+            creator if re.search(r"universitet|institut|kompaniya|jamoasi|University", creator, re.I) else ""
+        )
         return Analysis(
             is_project=True,
             uzbekistan_related=True,
             name=name,
             creator=creator,
+            organization=organization,
+            university=organization if re.search(r"universitet|University", organization, re.I) else "",
             summary_uz=description,
             what_uz=description,
+            problem_uz=problem[:1500],
+            audience_groups=groups,
+            audience="both"
+            if business and individuals
+            else "business"
+            if business
+            else "individual"
+            if individuals
+            else "unknown",
             facts=facts,
             evidence=Evidence(
-                practical="prototype" if prototype else "described",
+                practical="in_use" if in_use else "prototype" if prototype else "described",
                 practical_fact=0,
                 usability="available" if launched else "demo" if prototype else "unknown",
                 usability_fact=0 if launched or prototype else None,
+                problem="stated" if problem else "unknown",
+                problem_fact=0 if problem else None,
+                audience="specific" if groups else "unknown",
+                audience_fact=0 if groups else None,
             ),
             limitations_uz=[
                 "Qoidalar asosida ajratilgan ma’lumot. To‘liq tahlil va noma’lum tafsilotlar uchun qo‘shimcha dalil kerak."
             ],
             analysis_mode="extractive",
+            extraction_version=5,
         )
     return None

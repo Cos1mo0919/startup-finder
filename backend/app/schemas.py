@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Literal
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field
 
 SourceKind = Literal["official", "university", "event", "news", "unknown"]
 CATEGORIES = {
@@ -34,7 +34,7 @@ CATEGORIES = {
 class Article(BaseModel):
     source_id: str | None = None
     event_id: str | None = None
-    parser_version: int = 3
+    parser_version: int = 4
     url: str
     publisher: str
     title: str
@@ -108,3 +108,10 @@ class Analysis(BaseModel):
     ai_analysis_uz: str = Field(default="", max_length=4000)
     evidence: Evidence = Field(default_factory=Evidence)
     analysis_mode: Literal["ai", "extractive"] = "ai"
+
+    extraction_version: int = 1
+
+    @computed_field
+    @property
+    def rating_method(self) -> str:
+        return "ai" if self.analysis_mode == "ai" else "deterministic_fallback"

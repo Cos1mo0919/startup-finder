@@ -156,7 +156,8 @@ export function Detail() {
             {p.analysis_mode === "extractive" ? (
               <p>
                 AI tahlili hali bajarilmagan. Quyidagi qisqa tavsif manbadan
-                olingan; taxminiy foyda va xulosalar qo‘shilmagan.
+                olingan; taxminiy foyda va xulosalar qo‘shilmagan. Foydalilik
+                reytingi qoidalar asosida hisoblangan; ekspert AI bahosi emas.
               </p>
             ) : (
               <>
