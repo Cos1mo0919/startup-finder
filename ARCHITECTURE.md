@@ -189,3 +189,28 @@ An event overview may be recognized when its title describes projects being
 demonstrated and its body explicitly identifies a forum or exhibition, even if
 the title omits the event-type word. This lets the ordinary event-specific
 attribution gate process named products such as BITO on a direct article fetch.
+
+## Second pass — 2026-10-08
+
+The frontend adds a tokenized graphite/teal presentation layer after the
+existing stylesheet. Dashboard API project previews include cited problem and
+market group scores when present plus the stored evidence-confidence value;
+unknown score groups remain null. The dashboard uses separate entity sections
+and limits its preview to three projects; the feed and archive APIs are intact.
+
+The address-specific `--process-url` CLI queues a public HTTPS URL only when
+an enabled registered source owns its host. It then invokes the normal
+queue-only archive pipeline, retaining fetch, robots, publication-date,
+classification, evidence and dedup gates. Explicit processing does not
+enable disabled sources or bypass source protection. A new extractive version
+can repair a misidentified, hidden project in place while retaining UUID,
+first_seen and previous evidence.
+
+For event reports whose headline omits the forum name, a named forum in the
+lead supplies a useful follow-up query. Keyless navigation prioritizes
+winner/finalist index links rather than generic news links. When the article
+itself identifies an event, that direct event ID outranks the ID inherited
+from a follow-up queue; a stale, sole-source project event association can be
+corrected without duplicating the project. Evidence and score gates remain
+unchanged except for recognizing an explicit current-product statement in a
+named startup interview. No automatic scoring is inferred from the redesign.

@@ -5,7 +5,7 @@ from .schemas import Analysis, Fact, Evidence
 
 PRODUCT = r"startap|startup|стартап|loyiha|проект|project|platforma|платформ|platform|ilova|приложени|app|dastur|software|qurilma|устройств|device|tizim|систем|system|prototip|prototype|прототип|servis|сервис|service|bot|ekotizim|onlayn maydon"
 ACTION = re.compile(
-    r"yarat(?:di|ildi|ilgan|gan)|ishlab chiq(?:di|ildi|ilgan|qan)|ishga tush(?:ir)?(?:di|irildi|irilgan|gan)|taqdim et(?:di|ildi|ilgan)|namoyish et|faoliyat (?:yurit|ko‘rsat)|ish boshlagan|foydalan(?:moqda|ilmoqda)|taklif etadi|developed|created|built|launched|presented|demonstrated|won (?:a |the )?hackathon|разработа[лн]|созда[лн]|представи[лв]|запусти[лв]|победил.{0,30}хакатон|g[‘’ʻ']olib bo[‘’ʻ']ldi",
+    r"yarat(?:di|ildi|ilgan|gan)|ishlab chiq(?:di|ildi|ilgan|qan)|ishga tush(?:ir)?(?:di|irildi|irilgan|gan)|taqdim et(?:di|ildi|ilgan)|namoyish et|faoliyat (?:yurit|ko‘rsat)|ish boshlagan|foydalan(?:moqda|ilmoqda)|taklif etadi|mahsulotlarga ega|developed|created|built|launched|presented|demonstrated|won (?:a |the )?hackathon|разработа[лн]|созда[лн]|представи[лв]|запусти[лв]|победил.{0,30}хакатон|g[‘’ʻ']olib bo[‘’ʻ']ldi",
     re.I,
 )
 FUTURE = re.compile(
@@ -67,12 +67,15 @@ def project_name(article):
     return list(dict.fromkeys(
         n for n in candidates
         if len(n.split()) <= 8 and "?" not in n
-        and n.casefold() not in {"startaplar alleyasi", "app store", "play market"}
+        and not re.search(r"\breklama\b", n, re.I)
+        and not any(mark in n for mark in "“”«»")
+        and n.casefold() not in {"ai", "si", "sfa", "startaplar alleyasi", "app store", "play market"}
     ))
 
 
 def creator_in(text):
     patterns = [
+        r"\bloyiha asoschisi\s+([A-Z][\w‘’ʻʼ'-]+\s+[A-Z][\w‘’ʻʼ'-]+)\b",
         r'^([A-Z][^.!?]{2,90}?\s+vazirligi)\s+[“«"][^”»"\n]{2,70}[”»"]\s+[^.!?]{0,90}ilovasini ishga tushirdi',
         r"\bLoyiha asoschisi\s+([A-Z][\w‘’ʻʼ'-]+\s+[A-Z][\w‘’ʻʼ'-]+)\b",
         r'[“«"]([^”»"\n]{2,70})[”»"]\s+(?:kompaniyasi\s+)?[^.!?]{0,100}(?:ilovani|platformani|tizimni)\s+ishga tushirdi',
@@ -139,6 +142,31 @@ def extract(article, names=None):
             ),
             "",
         )
+        identity_quote = ""
+        if not creator:
+            # A news lead may name the product, then identify its founder in
+            # the immediately following "Bu haqda" sentence. Keep this local
+            # to the lead so a later interviewee cannot be borrowed.
+            lead = quote[:350]
+            adjacent = re.search(
+                r"(?:^|[.!?]\s+)Bu\s+haqda\s+loyiha\s+asoschisi\s+"
+                r"([A-Z][\w‘’ʻʼ'-]+\s+[A-Z][\w‘’ʻʼ'-]+)\b[^.!?]*[.!?]",
+                lead,
+            )
+            if adjacent and name.lower() in lead[:adjacent.start()].lower():
+                creator = adjacent[1]
+                identity_quote = adjacent[0].lstrip(". ")
+        if not creator and article.title.casefold().startswith(name.casefold() + ":"):
+            # An interview headed with the product name can attribute its
+            # founder in the introduction, before the interview body starts.
+            introduction = quote[:1100]
+            match = re.search(
+                r"\bloyiha asoschisi\s+([A-Z][\w‘’ʻʼ'-]+\s+[A-Z][\w‘’ʻʼ'-]+)\b[^.!?]*[.!?]",
+                introduction,
+            )
+            if match:
+                creator = match[1]
+                identity_quote = match[0]
         if not creator:
             # Explicit attribution elsewhere in the article is kept as a separate fact.
             identity_quote = next(
@@ -146,8 +174,6 @@ def extract(article, names=None):
                 "",
             )
             creator = creator_in(identity_quote)
-        else:
-            identity_quote = ""
         if not creator:
             continue
         native = is_uzbek(quote)
@@ -238,6 +264,6 @@ def extract(article, names=None):
                 "Qoidalar asosida ajratilgan ma’lumot. To‘liq tahlil va noma’lum tafsilotlar uchun qo‘shimcha dalil kerak."
             ],
             analysis_mode="extractive",
-            extraction_version=5,
+            extraction_version=6,
         )
     return None

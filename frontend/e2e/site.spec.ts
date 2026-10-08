@@ -11,7 +11,12 @@ test("Uzbek feed, search, filters and project evidence", async ({
   ).toBeVisible();
   await expect(page.getByRole("link", { name: "AgroKo‘mak" })).toBeVisible();
   await expect(page.locator("html")).toHaveAttribute("lang", "uz");
-  await expect(page.getByText("Rasm mavjud emas").first()).toBeVisible();
+  await expect(page.getByText("Qanday muammoni hal qiladi?").first()).toBeVisible();
+  if (info.project.name === "mobile") {
+    await expect(page.getByText("Rasm mavjud emas").first()).toBeHidden();
+  } else {
+    await expect(page.getByText("Rasm mavjud emas").first()).toBeVisible();
+  }
   await page.getByRole("link", { name: "Batafsil", exact: true }).click();
   await expect(page.getByRole("heading", { name: "AgroKo‘mak" })).toBeVisible();
   await expect(

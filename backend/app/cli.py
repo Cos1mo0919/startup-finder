@@ -56,6 +56,7 @@ def main():
     parser.add_argument("--reanalyze-problems", action="store_true", help="Recheck stored projects against cached source quotes")
     parser.add_argument("--reclassify-candidates", action="store_true", help="Queue a bounded batch of rejected candidates for the current classifier")
     parser.add_argument("--reclassify-url", help="Reprocess one stored candidate URL with current rules, without fetching sources")
+    parser.add_argument("--process-url", help="Fetch and process one public URL from an enabled registered source")
     parser.add_argument("--local-problems", action="store_true", help="Run due Uzbekistan local problem scan")
     parser.add_argument("--global-trends", action="store_true", help="Run due monthly cross-country problem scan")
     parser.add_argument("--source-id")
@@ -165,6 +166,42 @@ def main():
                 result = pipeline.run(archive=True, discover=False, only_urls=[url])
             finally:
                 pipeline.close()
+            if args.report:
+                args.report.parent.mkdir(parents=True, exist_ok=True)
+                args.report.write_text(json.dumps(result, ensure_ascii=False, indent=2))
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 0 if result["status"] in ("completed", "partial") else 1
+        if args.process_url:
+            from .db import Candidate
+            from .network import FetchError, canonical_url
+            from .registry import source_for_url
+
+            try:
+                url = canonical_url(args.process_url)
+            except FetchError as exc:
+                parser.error(str(exc))
+            with factory.begin() as session:
+                source = source_for_url(session, url)
+                if source is None or not source.enabled or source.collection_method == "search":
+                    parser.error("URL must belong to an enabled registered public source")
+                row = session.get(Candidate, url)
+                if row is None:
+                    session.add(Candidate(
+                        url=url, article={"_queued": True, "_fetch_url": url},
+                        status="queued", source_id=source.id, origin="manual",
+                    ))
+                elif row.status != "published":
+                    row.article = {"_queued": True, "_fetch_url": url}
+                    row.status = "queued"
+                    row.reason = ""
+            pipeline = Pipeline(settings, factory)
+            try:
+                result = pipeline.run(archive=True, discover=False, only_urls=[url])
+            finally:
+                pipeline.close()
+            if args.report:
+                args.report.parent.mkdir(parents=True, exist_ok=True)
+                args.report.write_text(json.dumps(result, ensure_ascii=False, indent=2))
             print(json.dumps(result, ensure_ascii=False, indent=2))
             return 0 if result["status"] in ("completed", "partial") else 1
         if args.local_problems or args.global_trends:

@@ -4,12 +4,13 @@ test("dashboard, archive and intelligence views remain usable", async ({ page })
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Muammo. Yechim. Imkoniyat." })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Bugungi topilmalar" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Izlanish", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Eng kuchli imkoniyatlar" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Yangi loyihalar" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Yangi muammolar" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Muammolar", exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Yechim g‘oyalari" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Muhim signallar" })).toBeVisible();
+  expect(await page.locator("body").evaluate((element) => getComputedStyle(element).backgroundImage)).not.toBe("none");
   await page.goto("/muammolar");
   await expect(page.getByRole("heading", { name: "Muammolar", exact: true })).toBeVisible();
   await page.goto("/goyalar");

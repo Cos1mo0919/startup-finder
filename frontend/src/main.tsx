@@ -7,6 +7,7 @@ import { Home } from "./Home";
 import { ArchivePage, DashboardPage, ProblemsPage, ProblemDetailPage, IdeasPage, IdeaDetailPage, SignalsPage, SectorsPage, SourcesPage } from "./Intelligence";
 import { StatusPage } from "./StatusPage";
 import "./style.css";
+import "./intelligence-theme.css";
 function NotFound() {
   return (
     <main className="page empty-state">

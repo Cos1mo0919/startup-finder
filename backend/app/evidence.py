@@ -86,7 +86,7 @@ def evidence_types(analysis, quote, kind):
         sentence
         for sentence in re.split(r"(?<=[.!?])\s+", quote)
         if normalize(analysis.name) in normalize(sentence)
-        or re.match(r"(?:Uning|Ushbu|Loyiha|Tizim|Platforma|Ilova)\b", sentence)
+        or re.match(r"(?:Uning|Ushbu|Loyiha|Tizim|Platforma|Ilova|Bugungi kunda startap)\b", sentence)
     )
     speculative = re.search(
         r"will be|will launch|not yet|rejalashtiril|yaratilishi mumkin|планируется|будет создан|будет запущен",

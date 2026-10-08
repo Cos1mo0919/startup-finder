@@ -73,6 +73,9 @@ def dashboard(session):
             "problem_gate_status": p.problem_gate_status,
             "opportunity_score": p.opportunity_score,
             "opportunity_grade": p.opportunity_grade,
+            "problem_score": (p.opportunity_details or {}).get("groups", {}).get("problem"),
+            "market_score": (p.opportunity_details or {}).get("groups", {}).get("market"),
+            "evidence_score": p.confidence,
             "country": p.country, "sector": p.primary_sector,
             "published_at": iso(p.published_at), "source_count": len(p.sources),
         } for p in session.scalars(select(Project).where(

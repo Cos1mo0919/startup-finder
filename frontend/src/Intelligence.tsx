@@ -7,7 +7,7 @@ import type { Project, RegistrySource } from "./types";
 type Problem = { id: string; title_uz: string; description_uz: string; scope: string; sector: string; affected_users: string; evidence_level: number; source_count: number; first_seen_at: string; first_evidence_published_at: string | null; evidence?: {source_url: string; quote: string; evidence_type: string}[]; projects?: {id: string; name: string}[]; ideas?: Idea[] };
 type Idea = { id: string; problem_id: string; idea_title: string; idea_summary: string; target_user: string; proposed_solution: string; current_alternatives: string; why_current_alternatives_fail: string; business_model_hypothesis: string; mvp_hypothesis: string; main_risks: string; evidence_basis: string[]; status: string };
 type Signal = {url: string; title: string; summary_uz: string; signal_type: string; country: string; sector: string; published_at: string; why_it_matters_uz: string};
-type ProjectPreview = {id:string;name:string;problem:string;affected_users:string;problem_gate_status:string;opportunity_score:number|null;opportunity_grade:string;country:string;sector:string;published_at:string;source_count:number};
+type ProjectPreview = {id:string;name:string;problem:string;affected_users:string;problem_gate_status:string;opportunity_score:number|null;opportunity_grade:string;problem_score:number|null;market_score:number|null;evidence_score:number;country:string;sector:string;published_at:string;source_count:number};
 type Dashboard = {today: Record<string,number>; total: Record<string,number>; strong_opportunities: {id:string;name:string;score:number;grade:string;problem:string}[]; latest_projects: ProjectPreview[]; latest_problems: Problem[]; latest_ideas: Idea[]; latest_signals: Signal[]};
 const scopeLabels: Record<string,string> = {EVERYDAY:"Kundalik muammo", UZBEKISTAN_LOCAL:"O‘zbekiston muammosi", GLOBAL:"Jahon tendensiyasi"};
 const signalLabels: Record<string,string> = {ecosystem:"Ekotizim", TECHNOLOGY:"Texnologiya", REGULATION:"Qonunchilik", PROGRAM:"Dastur", INVESTMENT:"Investitsiya", FUND:"Jamg‘arma", DEMAND:"Talab"};
@@ -15,52 +15,52 @@ function Empty({children}:{children:string}) { return <p className="intel-empty"
 function ProblemCard({p}:{p:Problem}) {return <article className="intel-card"><span className="tag">{scopeLabels[p.scope] || p.scope}</span><h3><Link to={`/muammo/${p.id}`}>{p.title_uz}</Link></h3><p>Kimda: {p.affected_users || "Aniqlanmagan"}</p><small>{p.source_count || 1} ta manba · {date(p.first_evidence_published_at || p.first_seen_at)}</small></article>}
 function SignalCard({s}:{s:Signal}) {return <article className="intel-card"><span className="tag">{signalLabels[s.signal_type]||s.signal_type}</span><h3>{s.title}</h3><p>{s.summary_uz}</p><small>{s.country} · {date(s.published_at)}</small><div><External href={s.url}>Asl manba</External></div></article>}
 function ProjectPreviewCard({p}:{p:ProjectPreview}) {
-  return <article className="intel-card">
-    <span className="tag">{p.opportunity_score === null ? "Imkoniyat bahosi kutilmoqda" : p.opportunity_score + "/100 · " + p.opportunity_grade}</span>
-    <h3><Link to={"/loyiha/" + p.id}>{p.name}</Link></h3>
-    <p><strong>Qanday muammoni hal qiladi?</strong> {p.problem || "Muammo haqidagi dalil tekshirilmoqda."}</p>
-    <p>Kim uchun: {p.affected_users || "Aniqlanmagan"}</p>
+  const metrics:[string,number|null][] = [["Muammo",p.problem_score],["Bozor",p.market_score],["Dalil",p.evidence_score],["Yechim",null]];
+  return <article className="intel-project-card">
+    <div className="intel-project-top"><h3><Link to={"/loyiha/" + p.id}>{p.name}</Link></h3><span>{p.sector === "other" ? "Loyiha" : p.sector}</span></div>
+    <div className="intel-project-problem"><strong>Qanday muammoni hal qiladi?</strong><p>{p.problem || "Muammo dalili tekshirilmoqda."}</p></div>
+    <p className="intel-project-audience">Kim uchun <strong>{p.affected_users || "Aniqlanmagan"}</strong></p>
+    <div className="intel-project-opportunity"><span>Imkoniyat</span><strong>{p.opportunity_score === null ? "Dalil kutilmoqda" : p.opportunity_score + "/100 · " + p.opportunity_grade}</strong></div>
+    <dl className="intel-project-scores">{metrics.map(([label,value])=><div key={label}><dt>{label}</dt><dd>{value === null ? "—" : value.toFixed(1)}</dd></div>)}</dl>
     <small>{date(p.published_at)} · {p.country} · {p.source_count} ta manba</small>
   </article>;
 }
 export function DashboardPage() {
   const {data,loading}=useApi<Dashboard>("/api/intelligence/dashboard");
   if(loading)return <main className="page"><Loading/></main>;
-  return <main className="page intel-page">
-    <div className="intel-hero">
-      <span className="eyebrow">IZLANISH · O‘ZBEKISTON</span>
-      <h1>Muammo. Yechim. Imkoniyat.</h1>
-      <p>Haqiqiy muammolar, tasdiqlangan loyihalar va bozor signallari — har biri o‘z manbasi bilan.</p>
+  return <main className="page intel-page intel-dashboard">
+    <section className="intel-overview">
+      <div className="intel-overview-copy"><h1>Izlanish</h1><p>Haqiqiy muammolar, tekshirilgan loyihalar, yechim g‘oyalari va bozor signallari — har biri o‘z manbasi bilan.</p></div>
+      <div className="intel-metrics">{[
+        ["Loyihalar",data?.total.projects],
+        ["Muammolar",data?.total.problems],
+        ["Yechim g‘oyalari",data?.total.ideas],
+        ["Signallar",data?.total.signals],
+        ["Bugun tekshirilgan manbalar",data?.today.sources_checked],
+      ].map(([label,value])=><div key={String(label)}><strong>{value ?? 0}</strong><span>{label}</span></div>)}</div>
+    </section>
+    <section className="intel-opportunities">
+      <div className="intel-heading"><h2>Eng kuchli imkoniyatlar</h2><Link to="/loyihalar?period=all">Loyihalarni ko‘rish →</Link></div>
+      {data?.strong_opportunities.length?<div className="intel-grid">{data.strong_opportunities.slice(0,4).map(o=><article className="intel-card" key={o.id}><span className="tag">{o.grade} · {o.score}/100</span><h3><Link to={"/loyiha/" + o.id}>{o.name}</Link></h3><p>{o.problem}</p></article>)}</div>:<div className="intel-quiet-state"><strong>Hozircha A/B darajali imkoniyat tasdiqlanmadi.</strong><span>Radar yangi dalillarni kuzatishda davom etmoqda.</span></div>}
+    </section>
+    <div className="intel-dashboard-grid">
+      <section className="intel-section intel-projects">
+        <div className="intel-heading"><h2>Yangi loyihalar</h2><Link to="/loyihalar?period=all">Barchasi →</Link></div>
+        {data?.latest_projects.length?<div className="intel-project-grid">{data.latest_projects.slice(0,3).map(p=><ProjectPreviewCard p={p} key={p.id}/>)}</div>:<div className="intel-quiet-state"><strong>Bugun yangi tasdiqlangan loyiha topilmadi.</strong><span>Radar ishlashda davom etmoqda.</span></div>}
+      </section>
+      <section className="intel-section intel-problems">
+        <div className="intel-heading"><h2>Muammolar</h2><Link to="/muammolar">Barchasi →</Link></div>
+        {data?.latest_problems.length?<div className="intel-list">{data.latest_problems.map(p=><ProblemCard p={p} key={p.id}/>)}</div>:<div className="intel-quiet-state"><strong>Yangi muammo tasdiqlanmadi.</strong><span>Manbalar kuzatilmoqda.</span></div>}
+      </section>
+      <section className="intel-section intel-ideas">
+        <div className="intel-heading"><h2>Yechim g‘oyalari</h2><Link to="/goyalar">Barchasi →</Link></div>
+        {data?.latest_ideas.length?<div className="intel-list">{data.latest_ideas.map(i=><article className="intel-card" key={i.id}><span className="tag">GIPOTEZA</span><h3><Link to={"/goya/" + i.id}>{i.idea_title}</Link></h3><p>{i.idea_summary}</p></article>)}</div>:<div className="intel-quiet-state"><strong>Dalilga asoslangan yangi g‘oya yo‘q.</strong><span>Yechim gipotezalari tasdiqlangan muammolardan kelib chiqadi.</span></div>}
+      </section>
+      <section className="intel-section intel-signals">
+        <div className="intel-heading"><h2>Muhim signallar</h2><Link to="/signallar">Barchasi →</Link></div>
+        {data?.latest_signals.length?<div className="intel-list">{data.latest_signals.map(s=><SignalCard s={s} key={s.url}/>)}</div>:<div className="intel-quiet-state"><strong>Yangi signal qayd etilmadi.</strong><span>Manbalar kuzatilmoqda.</span></div>}
+      </section>
     </div>
-    <h2>Bugungi topilmalar</h2>
-    <div className="intel-metrics">{[
-      ["Tekshirilgan manbalar",data?.today.sources_checked],
-      ["Ko‘rilgan havolalar",data?.today.links_seen],
-      ["Yangi loyihalar",data?.today.projects],
-      ["Yangi muammolar",data?.today.problems],
-      ["Yechim g‘oyalari",data?.today.ideas],
-      ["Bozor signallari",data?.today.signals],
-    ].map(([label,value])=><div key={String(label)}><strong>{value ?? 0}</strong><span>{label}</span></div>)}</div>
-    <section className="intel-section">
-      <h2>Eng kuchli imkoniyatlar</h2>
-      {data?.strong_opportunities.length?<div className="intel-grid">{data.strong_opportunities.map(o=><article className="intel-card" key={o.id}><span className="tag">{o.grade} · {o.score}/100</span><h3><Link to={"/loyiha/" + o.id}>{o.name}</Link></h3><p>{o.problem}</p></article>)}</div>:<Empty>Hozircha A yoki B darajali, yetarli dalilga ega imkoniyat yo‘q.</Empty>}
-    </section>
-    <section className="intel-section">
-      <div className="intel-heading"><h2>Yangi loyihalar</h2><Link to="/loyihalar?period=all">Barchasi →</Link></div>
-      {data?.latest_projects.length?<div className="intel-grid">{data.latest_projects.map(p=><ProjectPreviewCard p={p} key={p.id}/>)}</div>:<Empty>Hozircha tasdiqlangan loyiha yo‘q.</Empty>}
-    </section>
-    <section className="intel-section">
-      <div className="intel-heading"><h2>Yangi muammolar</h2><Link to="/muammolar">Barchasi →</Link></div>
-      {data?.latest_problems.length?<div className="intel-grid">{data.latest_problems.map(p=><ProblemCard p={p} key={p.id}/>)}</div>:<Empty>Hozircha manba bilan tasdiqlangan muammo topilmadi.</Empty>}
-    </section>
-    <section className="intel-section">
-      <div className="intel-heading"><h2>Yechim g‘oyalari</h2><Link to="/goyalar">Barchasi →</Link></div>
-      {data?.latest_ideas.length?<div className="intel-grid">{data.latest_ideas.map(i=><article className="intel-card" key={i.id}><span className="tag">GIPOTEZA</span><h3><Link to={"/goya/" + i.id}>{i.idea_title}</Link></h3><p>{i.idea_summary}</p></article>)}</div>:<Empty>Hozircha dalilga asoslangan yechim g‘oyasi yaratilmagan.</Empty>}
-    </section>
-    <section className="intel-section">
-      <div className="intel-heading"><h2>Muhim signallar</h2><Link to="/signallar">Barchasi →</Link></div>
-      {data?.latest_signals.length?<div className="intel-grid">{data.latest_signals.map(s=><SignalCard s={s} key={s.url}/>)}</div>:<Empty>Hozircha signal yo‘q.</Empty>}
-    </section>
   </main>;
 }
 

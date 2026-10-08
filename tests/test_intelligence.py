@@ -370,6 +370,80 @@ def test_event_report_without_event_word_in_title_still_extracts_project(setting
     assert result["counts"]["event_projects"] == 1
 
 
+def test_event_report_uses_named_forum_for_followup_queries():
+    from backend.app.events import detect_event, event_queries
+
+    article = sample_article()
+    article.title = "CEVF’da qanday loyihalar namoyish etildi?"
+    article.text = (
+        "3-aprel kuni Toshkentda Markaziy Yevroosiyo venchur forumi (CEVF) bo‘lib o‘tdi. "
+        "Unda O‘zbekiston loyihalari namoyish etildi."
+    )
+    event = detect_event(article)
+    assert event["name"] == "Markaziy Yevroosiyo venchur forumi (CEVF)"
+    assert all("Markaziy Yevroosiyo" in q for q in event_queries(type("Event", (), event)()))
+
+
+def test_event_report_overrides_unrelated_followup_event(settings, factory):
+    from backend.app.db import Event, now_utc
+    from backend.app.pipeline import Pipeline
+    from tests.conftest import FakeDiscovery
+
+    article = sample_article()
+    article.title = "CEVF’da qanday loyihalar namoyish etildi?"
+    article.text = (
+        "O‘zbekiston forumida loyihalar namoyish etildi. "
+        "Navbatdagi loyiha BITO deb nomlanadi. "
+        "Loyiha asoschisi Umidjon Po‘latov BITO platformasining yaratilish tarixi haqida so‘zlab berdi. "
+        "BITO — tadbirkorlar uchun savdo va ombor ishlarini birlashtiradigan platforma."
+    )
+    with factory.begin() as session:
+        stale = Event(
+            name="Boshqa tadbir", event_type="competition", organizer="", country="Uzbekistan",
+            city="", source_url="https://news.example/unrelated-event", source_id=None,
+            evidence_quote="Boshqa tadbir", status="discovered", discovered_at=now_utc(),
+        )
+        session.add(stale)
+        session.flush()
+        article.event_id = stale.id
+    Pipeline(settings, factory, FakeDiscovery([article])).run()
+    with factory() as session:
+        project = session.scalar(select(Project))
+        own_event = session.get(Event, project.event_id)
+        assert own_event.source_url == article.url
+        assert own_event.name == article.title
+
+
+def test_keyless_real_product_lead_and_interview_do_not_capture_advertising():
+    from backend.app.fallback import extract, project_name
+
+    article = sample_article(name="Tilmoch")
+    article.title = "Tilmoch onlayn tarjimoni investitsiya jalb qildi"
+    article.text = (
+        "Tilmoch AI uchta venchur fondidan sarmoya jalb qildi. "
+        "Bu haqda loyiha asoschisi Muhammadsaid Mamasaidov Spot’ga ma’lum qildi. "
+        "Tilmoch AI — o‘zbek va turkiy tillar uchun yaratilgan tarjima platformasi. "
+        "Tilmoch startapi O‘zbekiston foydalanuvchilariga xizmat taklif etadi."
+    )
+    analysis = extract(article)
+    assert analysis and analysis.name == "Tilmoch"
+    assert analysis.creator == "Muhammadsaid Mamasaidov"
+    assert all(f.quote in article.text for f in analysis.facts)
+
+    interview = sample_article(name="Tahrirchi")
+    interview.title = "Tahrirchi: startap tarixi"
+    interview.text = (
+        "Toshkentdagi universitet talabalari “Tahrirchi” loyihasini tuzdi. "
+        "Bugungi kunda startap imlo tekshiruvi kabi mahsulotlarga ega. "
+        '"Spot.uz"da reklama “Spot” loyiha asoschisi Muhammadsaid Mamasaidov bilan suhbatlashdi. '
+        "Jamoa O‘zbekiston uchun ishlab chiqqan mahsulotlardan foydalanmoqda."
+    )
+    assert project_name(interview) == ["Tahrirchi"]
+    analysis = extract(interview)
+    assert analysis and analysis.name == "Tahrirchi"
+    assert analysis.creator == "Muhammadsaid Mamasaidov"
+
+
 def test_existing_hidden_project_first_publication_is_counted_as_new(settings, factory):
     from backend.app.pipeline import Pipeline
     from tests.conftest import FakeDiscovery, FakeAnalyzer

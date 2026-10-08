@@ -65,7 +65,9 @@ export function StatusPage() {
       <div className="notice">
         <Clock3 size={18} />
         <p>
-          Loyiha qidiruvi har soatda, moslashtirish esa 08:00 va 23:30 da tekshiriladi. Mahalliy muammolar haftalik, jahon tendensiyalari oylik ko‘riladi; manbalar o‘z davriga ega. Barcha vaqtlar Toshkent vaqti bilan ko‘rsatilgan. Bu sahifa har
+          {s.scheduler_enabled
+            ? "Loyiha qidiruvi har soatda, moslashtirish esa 08:00 va 23:30 da tekshiriladi. Mahalliy muammolar haftalik, jahon tendensiyalari oylik ko‘riladi; manbalar o‘z davriga ega."
+            : "Avtomatik qidiruv jadvali hozir o‘chirilgan. Qo‘lda ishga tushirilgan qidiruv natijalari shu yerda ko‘rinadi."} Barcha vaqtlar Toshkent vaqti bilan ko‘rsatilgan. Bu sahifa har
           30 soniyada yangilanadi.
         </p>
       </div>
@@ -73,7 +75,7 @@ export function StatusPage() {
         <section className="detail-section">
           <h2>
             Oxirgi ishga tushirish{" "}
-            <span className="tag">
+            <span className={`tag status-${run?.status || "waiting"}`}>
               {run ? statusLabels[run.status] : "Kutilmoqda"}
             </span>
           </h2>
@@ -142,13 +144,13 @@ export function StatusPage() {
           </div>
           <div className="service">
             <span>AI tahlili va tarjima</span>
-            <span className="tag">
+            <span className={`tag ${s.ai_enabled ? "" : "health-needs_config"}`}>
               {s.ai_enabled ? "Sozlangan" : "Kalit kutilmoqda"}
             </span>
           </div>
           <div className="service">
             <span>Internet qidiruvi</span>
-            <span className="tag">
+            <span className={`tag ${s.search_enabled ? "" : "health-needs_config"}`}>
               {s.search_enabled ? "Sozlangan" : "Kalit kutilmoqda"}
             </span>
           </div>

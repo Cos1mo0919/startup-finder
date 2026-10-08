@@ -53,8 +53,8 @@ export function Header() {
           <NavLink to="/goyalar">Yechim g‘oyalari</NavLink>
           <NavLink to="/signallar">Signallar</NavLink>
           <NavLink to="/sektorlar">Sektorlar</NavLink>
-          <NavLink to="/manbalar">Manbalar</NavLink>
           <NavLink to="/arxiv">Arxiv</NavLink>
+          <NavLink to="/manbalar">Manbalar</NavLink>
           <NavLink to="/status" aria-label="Tizim holati">
             <Activity size={16} />
             <span>Tizim holati</span>
@@ -139,8 +139,10 @@ export function Card({
             {p.name}
             <ArrowUpRight size={20} />
           </Link>
-          <p className="summary">{p.summary_uz}</p>
           <p className="card-problem"><strong>Qanday muammoni hal qiladi?</strong> {p.problem_statement || "Muammo dalili tekshirilmoqda."}</p>
+          <p className="card-audience"><span>Kim uchun</span><strong>{p.audience_groups.join(", ") || audienceLabels[p.audience]}</strong></p>
+          <div className="card-opportunity"><span>Imkoniyat</span><strong>{p.opportunity_score === null ? "Dalil kutilmoqda" : p.opportunity_score + "/100 · " + p.opportunity_grade}</strong></div>
+          <p className="summary">{p.summary_uz}</p>
           <dl className="card-facts">
             <div>
               <dt>Kim yaratgan</dt>
@@ -149,12 +151,6 @@ export function Card({
             <div>
               <dt>Qayerda taqdim etilgan</dt>
               <dd>{p.event || "Manbada ko‘rsatilmagan"}</dd>
-            </div>
-            <div>
-              <dt>Kim uchun foydali</dt>
-              <dd>
-                {p.audience_groups.join(", ") || audienceLabels[p.audience]}
-              </dd>
             </div>
           </dl>
         </div>

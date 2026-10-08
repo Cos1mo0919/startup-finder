@@ -154,7 +154,16 @@ class Pipeline:
                         setattr(project, field, getattr(selected, field))
                 if not project.main_url and selected.main_url:
                     project.main_url = canonical_url(selected.main_url)
-            if not project.event_id and articles[0].event_id:
+            if articles[0].event_id and (
+                not project.event_id
+                or (
+                    len(project.sources) == 1
+                    and project.sources[0].url == canonical_url(articles[0].url)
+                    and project.event_id != articles[0].event_id
+                )
+            ):
+                # Repair a stale follow-up association when the project's only
+                # source is itself a report about a different, named event.
                 project.event_id = articles[0].event_id
             known = {s.url for s in project.sources}
             for article in articles:
@@ -425,7 +434,9 @@ class Pipeline:
                     )
                     counts["events"] += int(event_created)
                     if event_id and classification == "PROJECT":
-                        article.event_id = article.event_id or event_id
+                        # An event identified on this page is stronger context
+                        # than a follow-up queue's inherited event ID.
+                        article.event_id = event_id
                     if public_type == "SIGNAL":
                         with self.factory.begin() as session:
                             if session.get(EcosystemSignal, url) is None:

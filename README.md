@@ -471,3 +471,33 @@ hamda manbalari bilan beshta karta haqidagi batafsil natija:
 qo‘shilmaydi; boshqa muhit shu natijani olish uchun backfill/navbat buyruqlarini
 o‘z SQLite bazasida ishlatishi kerak. Cheklangan birinchi pass 2023 yoki 2024
 arxivini to‘liq qamrab olgani deb talqin qilinmaydi.
+
+## Stage 1: ikkinchi vizual va discovery pass (08.10.2026)
+
+Bosh sahifa endi to‘q grafit/teal intelligence panelidir: loyihalar, muammolar,
+dalilga asoslangan g‘oyalar va signallar alohida ko‘rsatiladi. To‘liq loyiha
+lentasi va eski filtrlar `/loyihalar` da saqlangan. Karta avval muammo va
+foydalanuvchini ko‘rsatadi; yetarli dalil bo‘lmasa imkoniyat balli berilmaydi.
+`/status` scheduler o‘chirilgan bo‘lsa buni ochiq ko‘rsatadi.
+
+Ro‘yxatdan o‘tgan **yoqilgan** manbadagi bitta aniq maqolani oddiy pipeline
+orqali tekshirish:
+
+```bash
+AI_API_KEY= SEARCH_API_KEY= TRUSTED_EGRESS_PROXY=true \
+  .venv/bin/python -m backend.app.cli \
+  --process-url 'https://www.spot.uz/oz/2025/09/12/tilmoch/' \
+  --report /tmp/tilmoch-run.json
+```
+
+Buyruq HTTPS/robots, sana, loyiha mavjudligi, muallif, dedup va stop-filtrni
+chetlab o‘tmaydi. Mavjud yozuv qayta tekshiriladi; nomzod manbasi o‘chirilgan
+bo‘lsa qayta yoqilmaydi. `--backfill` va `--drain` kengroq tarixiy qidiruvni
+cheklangan byudjet bilan davom ettiradi. Baza va navbat o‘chirilmaydi.
+
+Ikkinchi pass ikki yangi manbali kartani ko‘rsatdi: Tahrirchi (2023) va
+Tilmoch (2025). Ikkisining mavjudligi va asoschisi tasdiqlangan; muammo
+dalili yetarli emasligi sabab imkoniyat darajasi `PENDING`. Joriy muhitdagi
+sanalar, manbalar, rad etish/queue holati va testlar
+[SECOND_PASS_VALIDATION.md](docs/SECOND_PASS_VALIDATION.md) da. Bu natija
+boshqa Codespace bazasiga avtomatik ko‘chmaydi.

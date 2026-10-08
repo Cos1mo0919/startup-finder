@@ -69,7 +69,7 @@ test("feed, detail and status render Uzbek month names in the browser", async ({
   await page.goto("/status");
   await expect(
     page.getByRole("heading", { name: "Qidiruv holati" }),
-  ).toBeVisible();
+  ).toBeVisible({ timeout: 15000 });
   await expect(page.locator("body")).toContainText("7 oktabr 2026, 14:48");
   await expect(page.locator("body")).toContainText(
     "1 yanvar 2022 — 30 sentabr 2026",

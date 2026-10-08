@@ -50,6 +50,16 @@ def detect_event(article):
         return None
     quoted = re.search(r'[“«"]([^”»"\n]{3,150})[”»"]', article.title)
     name = quoted[1] if quoted else article.title[:300]
+    if not any(re.search(pattern, article.title, re.I) for pattern in EVENT_TYPES.values()):
+        # A report headed "which projects were shown?" can name the actual
+        # forum only in its lead. Keep that name for useful follow-up queries.
+        lead = article.text[:900]
+        named_forum = re.search(
+            r"((?:Markaziy|Central|International)\s+[^.!?\n]{4,75}?\b(?:venchur\s+forumi|innovation\s+forum|startup\s+forum))\s*\(([A-Z]{2,9})\)",
+            lead,
+        )
+        if named_forum:
+            name = named_forum[1].strip() + " (" + named_forum[2] + ")"
     dates = re.findall(r"\b20\d{2}-\d{2}-\d{2}\b", article.text)
     start = parse_date(dates[0]) if dates else None
     end = parse_date(dates[1]) if len(dates) > 1 else None
@@ -78,6 +88,8 @@ def save_event(factory, article, now):
     with factory.begin() as session:
         item = session.scalar(select(Event).where(Event.source_url == data["source_url"]))
         if item:
+            if item.name == article.title[:300] and data["name"] != item.name:
+                item.name = data["name"]
             return item.id, False
         item = Event(**data, discovered_at=now)
         session.add(item)

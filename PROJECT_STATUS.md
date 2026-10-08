@@ -233,6 +233,30 @@ Muammo, Bozor, Dalil, Yechim and Imkoniyat, with unknown values left blank rathe
 than invented. Desktop/mobile browser tests passed (12). The API and all new
 routes answered HTTP 200 in a local backend smoke check.
 
+## 08.10.2026 — visual second pass and bounded keyless discovery
+
+Stage 1 remains unaccepted. A graphite/teal token system, distinct dashboard
+sections, problem-first cards and status health treatment now replace the prior
+uniform feed-like overview. The project feed, archive, database and scheduler
+architecture remain. Desktop/tablet/mobile layouts were visually checked with
+no horizontal overflow. Scheduler-disabled status wording is explicit.
+
+The existing Cloud SQLite file was backed up before discovery. Forced current
+source checks (12 enabled sources) and bounded 2024–2025 backfill completed
+partially; one queue drain left durable work. Two real Spot-backed project
+rows became visible: Tahrirchi (2023) and Tilmoch (2025), both founded by
+Muhammadsaid Mamasaidov and both `PENDING` for problem/opportunity analysis.
+There are now 15 project rows / 7 visible, 3 problems, 3 signals, 0 ideas,
+212 queued, 304 pending and 549 rejected candidates. No quality threshold
+was lowered. BITO's incorrect PizzaPitch event association was repaired to
+the cited CEVF report. Detailed counts, sources, citations and limits are in
+[SECOND_PASS_VALIDATION.md](docs/SECOND_PASS_VALIDATION.md).
+
+189 backend tests, 12 Playwright desktop/mobile tests, Ruff, TypeScript and
+production frontend build passed. Exa/Vercel were unavailable and no deploy
+was attempted. Archive backlog remains; user review and acceptance are still
+pending. Global has not been started.
+
 Before reprocessing, a SQLite backup was made through the backup API. All 12
 existing project IDs, publication dates and first-seen timestamps remained
 identical. Cited prescription-error text now links DMED to a local problem;

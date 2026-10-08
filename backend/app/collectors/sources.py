@@ -245,11 +245,12 @@ class Discovery:
                 elif event.official_url or event.source_url:
                     found = self.page_links(
                         event.official_url or event.source_url,
-                        "winner|project|loyiha|g.olib|demo|startup|team|participant|natija|speaker|news|yangilik|победител|участник",
+                        "winner|project|loyiha|g.olib|demo|startup|startap|team|participant|natija|final|победител|участник",
                         match_text=True,
                     )
-                    # One bounded navigation level for official winners/team index pages.
-                    for item in list(found[:2]):
+                    # Follow index/finalist pages, not arbitrary news links.
+                    index_pattern = re.compile(r"winner|g.olib|final|participant|ishtirok|natija|победител|участник", re.I)
+                    for item in [x for x in found if index_pattern.search(x["url"] + " " + x.get("title", ""))][:2]:
                         try:
                             found.extend(
                                 self.page_links(

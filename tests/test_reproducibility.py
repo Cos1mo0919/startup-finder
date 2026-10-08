@@ -1,7 +1,7 @@
 from datetime import date
 import pytest
 from sqlalchemy import select
-from backend.app.db import Candidate, RejectedCandidate, Run
+from backend.app.db import Candidate, RejectedCandidate, RegistrySource, Run
 from backend.app.diagnostics import inspect_candidate
 from backend.app.pipeline import Pipeline
 from tests.conftest import FakeDiscovery, sample_article
@@ -83,6 +83,43 @@ def test_archive_cli_explains_that_force_is_not_backfill(settings, monkeypatch, 
     monkeypatch.setattr("sys.argv", ["cli", "--archive", "--force-sources"])
     assert cli.main() == 0
     assert "--backfill --from-date 2022-01-01 --to-date 2026-09-30" in capsys.readouterr().err
+
+
+def test_process_url_queues_only_enabled_registered_sources(settings, factory, monkeypatch):
+    import json
+    from backend.app import cli
+    from backend.app.registry import seed_registry
+
+    settings.sources_file.write_text(json.dumps([{
+        "id": "spot", "name": "Spot", "url": "https://www.spot.uz/oz/rss",
+        "enabled": True, "collection_method": "RSS", "source_type": "news",
+    }]))
+    seed_registry(factory, settings.sources_file)
+
+    class InspectPipeline:
+        def __init__(self, config, session_factory):
+            with session_factory() as session:
+                row = session.get(Candidate, "https://www.spot.uz/oz/2025/09/12/tilmoch")
+                assert row.status == "queued"
+                assert row.article["_fetch_url"] == row.url
+                assert row.source_id == "spot"
+
+        def run(self, **kwargs):
+            assert kwargs == {"archive": True, "discover": False,
+                              "only_urls": ["https://www.spot.uz/oz/2025/09/12/tilmoch"]}
+            return {"status": "completed"}
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(cli, "Settings", lambda: settings)
+    monkeypatch.setattr(cli, "Pipeline", InspectPipeline)
+    monkeypatch.setattr("sys.argv", ["cli", "--process-url", "https://www.spot.uz/oz/2025/09/12/tilmoch/"])
+    assert cli.main() == 0
+    with factory.begin() as session:
+        session.get(RegistrySource, "spot").enabled = False
+    with pytest.raises(SystemExit):
+        cli.main()
 
 
 def test_pending_list_and_stable_id_do_not_reprocess(factory):
