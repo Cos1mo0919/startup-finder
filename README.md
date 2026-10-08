@@ -361,3 +361,113 @@ Cloudflare Quick Tunnel бесплатный, без SLA, с лимитом 200 
 - Реальные ключи AI/Search в текущую среду не добавлены; ограниченный fallback и публичные архивы не заменяют их возможности. Живые RSS и HTML-источники проверены отдельно; оплачиваемые API подтверждены только mock-тестами.
 
 Подробности — в [ARCHITECTURE.md](ARCHITECTURE.md), состояние этапа — в [PROJECT_STATUS.md](PROJECT_STATUS.md), результаты проверок — в [docs/VALIDATION.md](docs/VALIDATION.md).
+
+## Muammo → yechim → imkoniyat (Stage 1 kengaytmasi)
+
+Bosh sahifa `/` endi loyihalar, muammolar va signallar uchun o‘zbekcha
+intelligence panelidir. Oldingi loyiha lentasi, qidiruv va arxiv
+`/loyihalar` va `/arxiv?period=all` da saqlangan. Alohida sahifalar:
+`/muammolar`, `/goyalar`, `/signallar`, `/sektorlar`, `/manbalar`, `/status`.
+API: `/api/intelligence/dashboard`, `/api/problems`, `/api/problems/{id}`,
+`/api/ideas`, `/api/ideas/{id}`, `/api/signals`, `/api/sectors/intelligence`.
+Barcha yozuvlar haqiqiy manbalardan; bo‘sh sahifa sun’iy kartochka bilan
+«to‘ldirilmaydi».
+
+**Muammo darvozasi.** Loyiha haqidagi dalil alohida tekshiriladi. Aniq muammo,
+zarar ko‘rayotgan foydalanuvchi va loyiha bilan bog‘liq manba iqtibosi topilsa
+`PASS`; yetarli dalil bo‘lmasa `PENDING/pending_problem_analysis`; faqat
+kichik interfeys o‘zgarishi bo‘lsa `REJECT/minor_feature`. Avvalgi tasdiqlangan
+kartochkalar o‘chirilmaydi, ammo muammo isbotlanmaguncha ularga kuchli
+«imkoniyat» bahosi berilmaydi. Faktlar iqtibos va URL bilan, tizim
+xulosalari alohida ko‘rsatiladi. `SOLUTION_IDEA` mavjud mahsulot emas, gipoteza;
+bitta maqoladan avtomatik g‘oya yasalmaydi.
+
+**Baholash.** Ichki 15 mezon muammo (og‘riq, takrorlanish, majburiylik,
+xarajat), bozor (mijozlar, to‘lov istagi, kengayish), biznes modeli
+(takroriy tushum, mijozga yetish, kapital, huquqiy xavf), amalga oshirish
+(MVP tezligi, raqobat, bajarish imkoniyati, O‘zbekistonga moslik) bo‘yicha
+1–5 ball oladi. Har bir bahoga sabab va dalil URL kerak. Hammasi dalillanmasa
+raqam va A/B darajasi ko‘rsatilmaydi. To‘liq bahoda to‘rtta guruhning 0–10
+ballari o‘rtachasi ×10, keyin dalil darajasi koeffitsiyenti (1→0,45;
+2→0,60; 3→0,75; 4→0,90; 5→1,00) qo‘llanadi. A ≥80, B ≥65,
+C ≥50, qolganlari D; fatal stop-filtr `REJECTED`. AI yoki skraper to‘lov,
+pilot, mijoz suhbatini dalilsiz tasdiqlay olmaydi. Eski Foydalilik va
+Tasdiqlanganlik baholari mustaqil qoladi.
+
+**Jadval.** Soatlik loyiha qidiruvi manbaning o‘z chastotasiga bo‘ysunadi.
+Har 15 daqiqadagi nazoratchi 08:00 va 23:30 Toshkent vaqti moslashtirishini,
+haftalik O‘zbekiston muammolari va oylik xalqaro muammo/signallar skanini
+tekshiradi. Server o‘chiq bo‘lgan vaqtdagi slot keyingi ishga tushishda
+qoplanadi; holat SQL `scheduler_checkpoints` da saqlanadi. Faqat API jarayoni
+yoqilganida scheduler ishlaydi. Xalqaro qidiruvning hozirgi faol qismi
+Show HN ochiq RSS orqali past ishonchli texnologiya signallarini oladi;
+bu hali dunyo muammolari va tendensiyalarining to‘liq tahlili emas.
+
+```bash
+.venv/bin/python -m backend.app.cli --local-problems
+.venv/bin/python -m backend.app.cli --global-trends
+.venv/bin/python -m backend.app.cli --list-sources
+.venv/bin/python -m backend.app.cli --list-candidates --candidate-status problem
+.venv/bin/python -m backend.app.cli --inspect-url 'https://manba.example/maqola'
+```
+
+`config/sources.json` da 64 ta boshlang‘ich manba konsepti mavjud. 11 ta avval
+ishlagan integratsiya va 1 ta Show HN signal manbasi yoqilgan; yangi konseptlar endpoint, robots.txt va parser
+tekshiruvigacha o‘chirilgan. Boshlang‘ich import mavjud manbalarning faqat bo‘sh
+meta maydonlarini boyitadi; operator o‘chirgan manbani yoqmaydi. AI_API_KEY va
+SEARCH_API_KEY ixtiyoriy. Haqiqiy kalitlar `.env` yoki hosting env vars ichida,
+Gitda emas. Mavjud SQLite migratsiya vaqtida o‘chirilmaydi; ishlab chiqarishda
+barqaror disk yoki sozlangan PostgreSQL kerak. Arxivning 2022-01-01 —
+2026-09-30 oraliqdagi eski buyruqlari va yozuvlari saqlangan.
+
+Tarixiy muammo uchun yil filtri birinchi dalilning asl nashr sanasini ishlatadi;
+`first_seen_at` esa tizim topgan vaqt bo‘lib qoladi. Muayyan saqlangan
+nomzodni yangi qoidalar bilan qayta tekshirish:
+
+```bash
+.venv/bin/python -m backend.app.cli --reclassify-url 'https://www.spot.uz/oz/2022/04/11/humo-app'
+.venv/bin/python -m backend.app.cli --reanalyze-problems
+.venv/bin/python -m backend.app.cli --reclassify-candidates
+.venv/bin/python -m backend.app.cli --drain --archive
+```
+
+`--reclassify-url` tarmoqdan yangi material qidirmaydi; saqlangan maqolani
+manba/iqtibos qoidalari bilan qayta baholaydi. `--reclassify-candidates` eski
+rad etilgan yozuvlarning cheklangan partiyasini navbatga qaytaradi. Yangi
+real muammo misoli: [Spot HUMO uzilishlari](https://www.spot.uz/oz/2022/04/11/humo-app),
+11 aprel 2022; bu maqola asosida mahsulot yoki yechim g‘oyasi to‘qib
+chiqarilmagan. Show HN orqali kelgan signallar tasdiqlangan loyiha deb
+ko‘rsatilmaydi.
+
+Bitta tadbir maqolasida har bir nomlangan loyiha uchun alohida muallif/yaratish
+iqtibosi bo‘lsa, bir maqola URL manbasi bir necha PROJECT kartasiga bog‘lanishi
+mumkin. `project_sources` ning yangi `(project_id, url)` cheklovi bilan
+migratsiya eski manba ID va URLlarini saqlaydi; SQLite uchun migratsiyadan
+oldin `.pre-multisource-backup` nusxasi olinadi. Oddiy maqola URL bo‘yicha
+dedup avvalgidek qat’iy qoladi.
+
+KotibAI maqolasidagi jurnalistlarning bir soatlik suhbatni matnga ko‘chirishga
+uch soat sarflagani haqidagi asl iqtibos unga `EVERYDAY` muammo havolasini
+beradi. DMED maqolasidagi retsept xatolarini bartaraf etish haqidagi iqtibos
+`UZBEKISTAN_LOCAL` muammoga bog‘lanadi. Uzbekistan Airways, Agroko‘makchi va
+BITO uchun mustaqil muammo dalili yetarli emas: mavjud loyiha kartalari
+saqlanadi, ammo ularning imkoniyat bahosi `PENDING` bo‘lib qoladi. To‘liq 15
+mezon bo‘lmagani uchun KotibAI va DMED ham A/B bahosini olmaydi.
+
+2026-10-08 dagi manba bilan tekshirilgan qayta ishlash CEVF tadbir maqolasidan
+BITO (asoschisi Umidjon Po‘latov) va oldin saqlangan Spot maqolasidan
+Agroko‘makchi (Qishloq xo‘jaligi vazirligi) kartalarini ko‘rsatdi. Ikkala
+manba sahifasi HTTP 200 qaytardi. Bu kartalar mavjud mahsulot daliliga ega,
+lekin kuchli biznes imkoniyati deb tasdiqlanmagan. Birinchi marta ko‘rinadigan
+oldingi yashirin loyiha endi run hisobotida yangi e’lon deb hisoblanadi.
+Yillik arxivda cheklangan qayta ishlash byudjeti avval shu yilga mos URL/feed
+sanasiga ega loyiha sarlavhalariga sarflanadi. Bu faqat navbat tartibi:
+maqolaning haqiqiy nashr sanasi yuklangach yana tekshiriladi, sanasi noma’lum
+materiallar esa navbatdan yo‘qotilmaydi.
+
+2026-10-08 dagi yangi, API kalitsiz va bo‘sh bazadan boshlagan arxiv tekshiruvi
+hamda manbalari bilan beshta karta haqidagi batafsil natija:
+[PROBLEM_FIRST_VALIDATION.md](docs/PROBLEM_FIRST_VALIDATION.md). Baza Gitga
+qo‘shilmaydi; boshqa muhit shu natijani olish uchun backfill/navbat buyruqlarini
+o‘z SQLite bazasida ishlatishi kerak. Cheklangan birinchi pass 2023 yoki 2024
+arxivini to‘liq qamrab olgani deb talqin qilinmaydi.

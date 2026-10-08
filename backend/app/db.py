@@ -60,6 +60,17 @@ class Project(Base):
     detection_signals: Mapped[list] = mapped_column(JSON, default=list)
     real_project_confidence: Mapped[float] = mapped_column(Float, default=0)
     event_id: Mapped[str | None] = mapped_column(ForeignKey("events.id"), nullable=True)
+    problem_statement: Mapped[str] = mapped_column(Text, default="")
+    problem_subject: Mapped[str] = mapped_column(String(300), default="")
+    problem_scope: Mapped[str] = mapped_column(String(40), default="")
+    problem_frequency: Mapped[str] = mapped_column(String(100), default="")
+    problem_severity: Mapped[str] = mapped_column(String(100), default="")
+    problem_evidence_summary: Mapped[str] = mapped_column(Text, default="")
+    problem_gate_status: Mapped[str] = mapped_column(String(30), default="PENDING")
+    problem_gate_reason: Mapped[str] = mapped_column(String(100), default="pending_problem_analysis")
+    opportunity_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    opportunity_grade: Mapped[str] = mapped_column(String(20), default="PENDING")
+    opportunity_details: Mapped[dict] = mapped_column(JSON, default=dict)
     evidence_records: Mapped[list["ProjectEvidence"]] = relationship(
         cascade="all, delete-orphan", lazy="selectin"
     )
@@ -70,10 +81,11 @@ class Project(Base):
 
 class Source(Base):
     __tablename__ = "project_sources"
+    __table_args__ = (UniqueConstraint("project_id", "url"),)
     source_id: Mapped[str | None] = mapped_column(ForeignKey("sources.id"), nullable=True)
     id: Mapped[int] = mapped_column(primary_key=True)
     project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), index=True)
-    url: Mapped[str] = mapped_column(Text, unique=True)
+    url: Mapped[str] = mapped_column(Text)
     publisher: Mapped[str] = mapped_column(String(300))
     kind: Mapped[str] = mapped_column(String(30))
     published_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
@@ -88,6 +100,8 @@ class Candidate(Base):
     analysis_mode: Mapped[str] = mapped_column(String(20), default="")
     last_run_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     archive_scope: Mapped[list] = mapped_column(JSON, default=list)
+    entity_type: Mapped[str] = mapped_column(String(30), default="IGNORE")
+    project_ids: Mapped[list] = mapped_column(JSON, default=list)
     source_id: Mapped[str | None] = mapped_column(ForeignKey("sources.id"), nullable=True)
     event_id: Mapped[str | None] = mapped_column(ForeignKey("events.id"), nullable=True)
     __tablename__ = "candidates"
@@ -139,6 +153,17 @@ class RegistrySource(Base):
     new_projects: Mapped[int] = mapped_column(Integer, default=0)
     last_error: Mapped[str] = mapped_column(String(100), default="")
     notes: Mapped[str] = mapped_column(Text, default="")
+    country: Mapped[str] = mapped_column(String(100), default="")
+    sector: Mapped[str] = mapped_column(String(80), default="")
+    purpose: Mapped[str] = mapped_column(Text, default="")
+    provides_projects: Mapped[bool] = mapped_column(Boolean, default=False)
+    provides_problem_signals: Mapped[bool] = mapped_column(Boolean, default=False)
+    provides_market_signals: Mapped[bool] = mapped_column(Boolean, default=False)
+    parser_type: Mapped[str] = mapped_column(String(80), default="")
+    last_error_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_http_status: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
 
 
 class Event(Base):
@@ -194,6 +219,91 @@ class EcosystemSignal(Base):
     published_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     discovered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
     quote: Mapped[str] = mapped_column(Text)
+    summary_uz: Mapped[str] = mapped_column(Text, default="")
+    why_it_matters_uz: Mapped[str] = mapped_column(Text, default="")
+    country: Mapped[str] = mapped_column(String(100), default="Uzbekistan")
+    region: Mapped[str] = mapped_column(String(120), default="")
+    sector: Mapped[str] = mapped_column(String(80), default="")
+    confidence: Mapped[float] = mapped_column(Float, default=0)
+
+
+class Problem(Base):
+    __tablename__ = "problems"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    fingerprint: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    title_uz: Mapped[str] = mapped_column(String(300))
+    description_uz: Mapped[str] = mapped_column(Text)
+    problem_type: Mapped[str] = mapped_column(String(40), default="EVERYDAY")
+    scope: Mapped[str] = mapped_column(String(40), default="EVERYDAY", index=True)
+    country: Mapped[str] = mapped_column(String(100), default="")
+    region: Mapped[str] = mapped_column(String(120), default="")
+    sector: Mapped[str] = mapped_column(String(80), default="other")
+    affected_users: Mapped[str] = mapped_column(String(300), default="")
+    aliases: Mapped[list] = mapped_column(JSON, default=list)
+    status: Mapped[str] = mapped_column(String(30), default="PENDING")
+    confidence: Mapped[float] = mapped_column(Float, default=0)
+    evidence_level: Mapped[int] = mapped_column(Integer, default=1)
+    scores: Mapped[dict] = mapped_column(JSON, default=dict)
+    first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    first_evidence_published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+
+
+class ProblemEvidence(Base):
+    __tablename__ = "problem_evidence"
+    __table_args__ = (UniqueConstraint("problem_id", "source_url", "quote"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    problem_id: Mapped[str] = mapped_column(ForeignKey("problems.id"), index=True)
+    source_id: Mapped[str | None] = mapped_column(ForeignKey("sources.id"), nullable=True)
+    source_url: Mapped[str] = mapped_column(Text)
+    quote: Mapped[str] = mapped_column(Text)
+    publication_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    retrieved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    evidence_type: Mapped[str] = mapped_column(String(50), default="PROBLEM_EXISTS")
+    confidence: Mapped[float] = mapped_column(Float, default=0)
+
+
+class ProjectProblemLink(Base):
+    __tablename__ = "project_problem_links"
+    __table_args__ = (UniqueConstraint("project_id", "problem_id"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), index=True)
+    problem_id: Mapped[str] = mapped_column(ForeignKey("problems.id"), index=True)
+    solution_strength_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    is_primary_problem: Mapped[bool] = mapped_column(Boolean, default=True)
+    evidence_summary: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+
+
+class SolutionIdea(Base):
+    __tablename__ = "solution_ideas"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    problem_id: Mapped[str] = mapped_column(ForeignKey("problems.id"), index=True)
+    idea_title: Mapped[str] = mapped_column(String(300))
+    idea_summary: Mapped[str] = mapped_column(Text)
+    target_user: Mapped[str] = mapped_column(String(300))
+    proposed_solution: Mapped[str] = mapped_column(Text)
+    current_alternatives: Mapped[str] = mapped_column(Text, default="")
+    why_current_alternatives_fail: Mapped[str] = mapped_column(Text, default="")
+    business_model_hypothesis: Mapped[str] = mapped_column(Text, default="")
+    mvp_hypothesis: Mapped[str] = mapped_column(Text, default="")
+    main_risks: Mapped[str] = mapped_column(Text, default="")
+    evidence_basis: Mapped[list] = mapped_column(JSON, default=list)
+    generated_by: Mapped[str] = mapped_column(String(30), default="deterministic")
+    status: Mapped[str] = mapped_column(String(30), default="HYPOTHESIS")
+    opportunity_details: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+
+
+class SchedulerCheckpoint(Base):
+    __tablename__ = "scheduler_checkpoints"
+    name: Mapped[str] = mapped_column(String(80), primary_key=True)
+    last_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_success_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_processed_item_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    cursor: Mapped[dict] = mapped_column(JSON, default=dict)
 
 
 def make_db(url):

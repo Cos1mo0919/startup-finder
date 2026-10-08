@@ -107,3 +107,85 @@ Candidate diagnostic IDs are SHA-256 of the existing canonical URL primary key (
 Legacy registry archive repair is explicit and additive: `--repair-archive-config` fills only a missing options.archive key when seed ID, canonical endpoint and collection method match. Existing archive settings (including empty), operator flags, schedule, trust and health are preserved. A yearly collection with a missing expected seed adapter fails clearly with archive_configuration_missing / NEEDS_CONFIG instead of silently collecting only the current RSS. Normal fresh collection and sources without any seed archive adapter retain their behavior. Detection, fallback and evidence thresholds are unchanged.
 
 When an unprocessed queued URL with an explicit date path is rediscovered in its matching yearly window, its archive_scope is routed to that window. This prevents a URL first encountered on a current listing during 2022 from being stuck in 2022 when rediscovered for 2026. Article publication metadata still must pass the ordinary date gate; URL dates do not become verified timestamps. Existing sitemap sampling and processing budgets are unchanged.
+
+## Problem-first intelligence extension — 2026-10-07
+
+The old standalone Global stage is superseded by this product design. Uzbekistan
+remains the primary region. A monthly cross-country **problem/trend scan** is a
+separate analysis scope, not a Global project feed. The prior project collector,
+queue, source citations, archive and stop filter remain in place.
+
+Schema version 4 adds structured project problem-gate fields, `problems`,
+`problem_evidence`, `project_problem_links`, `solution_ideas`, richer source/signal
+metadata and `scheduler_checkpoints`. It adds columns and tables in place;
+existing UUIDs, dates, `first_seen`, citations and visibility survive. On app
+start, cached article text is conservatively checked for a source-backed problem.
+If no explicit quote and affected user are available, a legacy project is marked
+`PENDING/pending_problem_analysis` and receives no opportunity grade. This does
+not rewrite its historical publication or falsely claim the product never existed.
+
+Candidate types are PROJECT, PROBLEM, SOLUTION_IDEA, SIGNAL or IGNORE. Event
+records remain separate. A source article may become a problem with a verbatim
+Uzbek quote and stable fingerprint; repeated identical statements append evidence.
+Project links require a cited problem and solution mechanism. Minor UI features
+without independent pain are rejected before analysis. Source quotes and facts
+are displayed separately from opportunity hypotheses. No automatic solution idea
+is created from a single article.
+
+Opportunity inputs are fifteen 1–5 criteria across problem, market, business
+model and execution. Every nonempty criterion requires a reason and evidence URL.
+All fifteen are required for a numeric score. The four normalized group scores
+are averaged and multiplied by evidence level: 1→0.45, 2→0.60, 3→0.75,
+4→0.90, 5→1.00. A≥80, B≥65, C≥50, else D. Missing problem/evidence yields
+PENDING; a fatal stop reason yields REJECTED. Automated collection alone does
+not claim customer interviews, payment or pilot evidence levels 4–5. The older
+Foydalilik and Tasdiqlanganlik metrics remain independent.
+
+The scheduler keeps hourly due-source discovery and its database lease. A
+15-minute watchdog catches missed 08:00/23:30 Asia/Tashkent reconciliation
+and due weekly local/monthly cross-country scans after restart. Checkpoint slots,
+attempts and successful completions persist in SQL. Reconciliation cannot be
+described as a completed scan merely because its job exists; status exposes the
+last attempt and success. The monthly job currently checks only the public
+Show HN signal feed; broader international problem coverage remains unverified.
+
+The read-only API exposes a dashboard, problems/evidence/linked projects, ideas,
+signals, sector counts and expanded status. The Uzbek React dashboard links to
+the existing project feed/archive and dedicated intelligence views. Source seeds
+grow from 24 to 64 entries. A public Show HN RSS mirror and its HN article pages
+are the sole newly active international signal source; submissions are low
+confidence TECHNOLOGY signals, never confirmed projects. Other new concepts
+remain disabled, and startup metadata enrichment does not overwrite operator
+source switches or health. Monthly scanning is currently a bounded signal
+sample, not a comprehensive global trend study.
+
+Schema version 5 changes citation uniqueness from URL alone to
+`(project_id, url)`. A SQLite table rebuild preserves citation IDs and creates
+`data/finder.sqlite3.pre-multisource-backup` before changing an existing DB;
+PostgreSQL drops the URL-only constraint. One event article can cite multiple
+named projects when each has its own attributable creation quote. Candidate
+`project_ids` records the linked UUIDs. Ordinary single-project URL dedup stays
+strict; shared URL matching is enabled only during event multi-extraction.
+
+The dashboard API now returns separate latest project/problem/idea/signal groups,
+and status exposes score method, evidence level and pending grade distributions.
+Public cards show the five score groups with an explicit unknown marker for
+criteria that lack cited evidence. Time filters on the intelligence views use
+original publication dates and do not change stored timestamps.
+
+When a previously hidden project becomes visible after reprocessing, a run
+counts its first publication as `new_projects` rather than a duplicate. The
+pipeline snapshots hidden UUIDs before the legacy evidence audit, which can
+otherwise mark them visible before candidate processing. Source citations and
+existing project UUIDs remain unchanged. Plant-clinic language is removed from
+human-health sector matching, so agricultural apps stay in agritech.
+
+For bounded yearly backfill, queued candidates are processed first when a URL
+date or feed date points to the requested year; matching project-like titles
+precede generic headlines. Undated material follows, then explicit dates from
+other years. This is only queue order: fetched publication metadata remains the
+validation source, and mismatched/undated records remain in the durable queue.
+An event overview may be recognized when its title describes projects being
+demonstrated and its body explicitly identifies a forum or exhibition, even if
+the title omits the event-type word. This lets the ordinary event-specific
+attribution gate process named products such as BITO on a direct article fetch.

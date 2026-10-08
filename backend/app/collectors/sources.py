@@ -51,6 +51,7 @@ class Discovery:
         self.clock = None
         self.archive_cache = {}
         self.archive_coverage = []
+        self.allowed_source_ids = None
         self.seed_configs = {s.id: s for s in load_sources(settings.sources_file)}
         if factory:
             seed_registry(factory, settings.sources_file)
@@ -58,6 +59,12 @@ class Discovery:
                 self.sources = list(session.scalars(select(RegistrySource)))
             if settings.trusted_egress_proxy:
                 web.proxy_hosts.update(urlsplit(s.url).hostname for s in self.sources if s.enabled)
+                for s in self.sources:
+                    if s.enabled:
+                        web.proxy_hosts.update(
+                            urlsplit(safe_url("https://" + host + "/")).hostname
+                            for host in s.options.get("article_hosts", [])
+                        )
         else:
             self.sources = []
         self.search = search or (
@@ -131,7 +138,9 @@ class Discovery:
         method = source.collection_method
         if method == "RSS":
             raw, _ = self.web.get(source.url)
-            return parse_feed(raw)
+            links = parse_feed(raw)
+            pattern = source.options.get("link_pattern")
+            return [item for item in links if re.search(pattern, item["url"], re.I)] if pattern else links
         if method == "direct_page":
             if source.options.get("single_article"):
                 self.web.get(source.url)
@@ -173,6 +182,8 @@ class Discovery:
                 )
             )
         for source in sources:
+            if self.allowed_source_ids is not None and source.id not in self.allowed_source_ids:
+                continue
             if not due(source, now, self.force or bool(self.window)):
                 continue
             checked += 1

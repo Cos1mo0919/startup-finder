@@ -40,11 +40,18 @@ export function Detail() {
   if (error || !p)
     return (
       <main className="page">
-        <Link to="/">← Lentaga qaytish</Link>
+        <Link to="/loyihalar">← Lentaga qaytish</Link>
         <ErrorBox retry={() => setRetry(retry + 1)} />
       </main>
     );
   const c = p.content!;
+  const opportunity = p.opportunity_details as { criteria?: Record<string, { score: number; reason: string; evidence_refs: string[] }>; groups?: Record<string, number>; evidence_level?: number; reasons?: string[] } | undefined;
+  const rubric: [string, [string, string][]][] = [
+    ["Muammo", [["pain_strength","Muammoning og‘irligi"],["frequency","Takrorlanish"],["mandatory_pressure","Majburiy talab"],["current_cost","Hozirgi xarajat"]]],
+    ["Bozor", [["potential_customer_count","Mijozlar soni"],["willingness_to_pay","To‘lov istagi"],["expansion_potential","Kengayish imkoniyati"]]],
+    ["Biznes modeli", [["recurring_revenue_potential","Takroriy tushum"],["customer_accessibility","Mijozga yetish"],["low_capital_requirement","Kam kapital talabi"],["low_legal_risk","Huquqiy xavf"]]],
+    ["Amalga oshirish", [["mvp_speed","MVP tezligi"],["competition_attractiveness","Raqobat"],["implementation_feasibility","Amalga oshirish imkoniyati"],["uzbekistan_applicability","O‘zbekistonga moslik"]]],
+  ];
   const labels: Record<string, string> = {
     official: "Rasmiy sayt",
     github: "GitHub",
@@ -55,7 +62,7 @@ export function Detail() {
   };
   return (
     <main className="page detail">
-      <Link className="back-link" to="/">
+      <Link className="back-link" to="/loyihalar">
         <ArrowLeft size={16} /> Loyihalar lentasiga
       </Link>
       <div className="detail-heading">
@@ -81,6 +88,19 @@ export function Detail() {
       </div>
       <div className="detail-grid">
         <div>
+          <section className="detail-section">
+            <h2>Qanday muammoni hal qiladi?</h2>
+            <p>{p.problem_statement || "Muammo haqidagi aniq dalil tekshirilmoqda."}</p>
+            <p className="section-note">Holat: {p.problem_gate_status === "PASS" ? "Manbaga asoslangan" : p.problem_gate_status === "REJECT" ? "Rad etilgan" : "Qo‘shimcha tahlil kutilmoqda"}. Imkoniyat: {p.opportunity_score === null ? "baholanmagan" : `${p.opportunity_score}/100 · ${p.opportunity_grade}`}.</p>
+            {p.related_problems?.map(problem => <p key={problem.id}><Link to={`/muammo/${problem.id}`}>{problem.title_uz} →</Link></p>)}
+          </section>
+          <section className="detail-section">
+            <h2>Imkoniyat bahosi</h2>
+            <p className="section-note">Har bir mezon manbali izoh talab qiladi. Noma’lum qiymat taxminiy o‘rtacha ball bilan to‘ldirilmaydi.</p>
+            <p>{p.opportunity_score === null ? "To‘liq baho uchun dalil yetarli emas." : `${p.opportunity_score}/100 · ${p.opportunity_grade}`}</p>
+            {rubric.map(([group, fields]) => <div className="analysis-block" key={group}><h3>{group}</h3><dl className="intel-rubric">{fields.map(([key,label]) => {const item=opportunity?.criteria?.[key];return <div key={key}><dt>{label}</dt><dd>{item?`${item.score}/5 — ${item.reason}`:"Dalil yetarli emas"}</dd></div>})}</dl></div>)}
+            {opportunity?.evidence_level && <p>Dalil darajasi: {opportunity.evidence_level}/5</p>}
+          </section>
           <section className="detail-section">
             <div className="detail-images">
               {p.images.length ? (

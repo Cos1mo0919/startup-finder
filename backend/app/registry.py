@@ -5,7 +5,7 @@ from typing import Literal
 from urllib.parse import urlsplit
 from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import select
-from .db import RegistrySource, aware
+from .db import RegistrySource, aware, now_utc
 from .network import safe_url, canonical_url
 
 FREQUENCIES = {5: 60, 4: 180, 3: 480, 2: 1440, 1: 10080}
@@ -37,6 +37,13 @@ class SourceConfig(BaseModel):
     kind: Literal["official", "university", "event", "news", "unknown"] = "news"
     options: dict = Field(default_factory=dict)
     notes: str = ""
+    country: str = ""
+    sector: str = ""
+    purpose: str = ""
+    provides_projects: bool = False
+    provides_problem_signals: bool = False
+    provides_market_signals: bool = False
+    parser_type: str = ""
 
     @model_validator(mode="after")
     def defaults(self):
@@ -59,6 +66,13 @@ def seed_registry(factory, path, update=False):
                 select(RegistrySource).where(RegistrySource.url == config.url)
             )
             if source and not update:
+                # A one-time metadata backfill. Later operator edits, including False,
+                # must never be undone by ordinary startup.
+                if source.updated_at is None:
+                    for field in ("country", "sector", "purpose", "parser_type",
+                                  "provides_projects", "provides_problem_signals", "provides_market_signals"):
+                        setattr(source, field, getattr(config, field))
+                    source.updated_at = now_utc()
                 continue
             if source is None:
                 source = RegistrySource(id=config.id)
@@ -68,6 +82,7 @@ def seed_registry(factory, path, update=False):
             for key, value in fields.items():
                 setattr(source, key, value)
             source.trust_kind = config.kind
+            source.updated_at = now_utc()
     return added
 
 
@@ -122,9 +137,12 @@ def record_check(factory, source_id, now, count=0, error=""):
         source.last_error = error
         if error:
             source.consecutive_errors += 1
+            source.last_error_at = now
+            source.last_http_status = int(error[5:]) if error.startswith("http_") and error[5:].isdigit() else None
         else:
             source.last_success_at = now
             source.consecutive_errors = 0
+            source.last_http_status = 200
 
 
 def repair_archive_config(factory, path, source_id=None):

@@ -31,7 +31,7 @@ def main():
     parser.add_argument(
         "--candidate-status",
         default="pending",
-        choices=["all", "queued", "pending", "rejected", "published", "error", "event", "ecosystem"],
+        choices=["all", "queued", "pending", "rejected", "published", "problem", "error", "event", "ecosystem"],
     )
     parser.add_argument(
         "--debug-report",
@@ -53,6 +53,11 @@ def main():
         help="Explicitly apply seed configuration changes, preserving health",
     )
     parser.add_argument("--list-sources", action="store_true")
+    parser.add_argument("--reanalyze-problems", action="store_true", help="Recheck stored projects against cached source quotes")
+    parser.add_argument("--reclassify-candidates", action="store_true", help="Queue a bounded batch of rejected candidates for the current classifier")
+    parser.add_argument("--reclassify-url", help="Reprocess one stored candidate URL with current rules, without fetching sources")
+    parser.add_argument("--local-problems", action="store_true", help="Run due Uzbekistan local problem scan")
+    parser.add_argument("--global-trends", action="store_true", help="Run due monthly cross-country problem scan")
     parser.add_argument("--source-id")
     toggle = parser.add_mutually_exclusive_group()
     toggle.add_argument("--enable-source", action="store_true")
@@ -129,6 +134,45 @@ def main():
             audit_existing(factory, settings.evidence_min_score)
             print("Evidence and visibility updated")
             return 0
+        if args.reanalyze_problems:
+            from .intelligence import migrate_existing_problems
+
+            migrate_existing_problems(factory)
+            print("Stored project problem gates rechecked")
+            return 0
+        if args.reclassify_candidates:
+            from .db import Candidate
+
+            with factory.begin() as session:
+                rows = session.scalars(select(Candidate).where(
+                    Candidate.status == "rejected", Candidate.processing_version < 6
+                ).order_by(Candidate.updated_at).limit(settings.max_candidates)).all()
+                for row in rows:
+                    row.status = "queued"
+                    row.processing_version = 6
+            print(json.dumps({"queued_for_reclassification": len(rows)}))
+            return 0
+        if args.reclassify_url:
+            from .db import Candidate
+            from .network import canonical_url
+
+            url = canonical_url(args.reclassify_url)
+            with factory() as session:
+                if session.get(Candidate, url) is None:
+                    parser.error("Candidate URL not stored")
+            pipeline = Pipeline(settings, factory)
+            try:
+                result = pipeline.run(archive=True, discover=False, only_urls=[url])
+            finally:
+                pipeline.close()
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 0 if result["status"] in ("completed", "partial") else 1
+        if args.local_problems or args.global_trends:
+            from .scheduler import run_deep_scan
+
+            result = run_deep_scan(settings, factory, "local_weekly" if args.local_problems else "global_monthly")
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 0 if result["status"] in ("completed", "partial", "not_due", "not_configured") else 1
         if args.archive and not args.backfill and not args.drain:
             print(
                 "--archive permits old publication dates but searches current listings only. "

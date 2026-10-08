@@ -180,3 +180,81 @@ does not claim a public deployment. Stop for user review; **Stage 1 is not accep
 Причина повторного расхождения подтверждена присланным пользователем debug: в его БД у Spot UZ/RU и IT Park отсутствует archive, хотя в seed он есть; coverage всех пяти годовых runs пустой. Прислан полный список 8 pending, ни Uzbekistan Airways, ни DMED среди них нет. Добавлено узкое восстановление `--repair-archive-config` и явная ошибка конфигурации вместо скрытого RSS fallback. 157 backend-тестов, 10 browser-тестов, Ruff и build прошли. Операторские настройки и quality gates сохранены. Подробности и результаты новых live-проверок — [CODESPACE_ARCHIVE_REPAIR.md](docs/CODESPACE_ARCHIVE_REPAIR.md).
 
 Финальная проверка: в пустой базе со старым seed после точечного repair и backfill 200/12 воспроизведены все 3 проекта (2022/2025/2026), всего 603 кандидата, queued=0. В отдельном чистом контроле выявлена и исправлена ошибочная привязка unprocessed queued URL к первому году: теперь повторно найденный dated URL маршрутизируется в свой год, но настоящая дата статьи по-прежнему проверяется. После поправки чистые defaults 30/20 + один drain дают DMED и KotibAI, queued=1089; Airways отсутствует в выборке 20 sitemap (это не quality rejection). Покрытие при 12/20 различается; алгоритм выборки не менялся. 160 backend-тестов, 10 browser-тестов, Ruff/build и startup/API smoke прошли; ID/даты 3 карточек сохранены. Требуется применить опубликованный repair в рабочем Codespace и проверить результат там; доступ к его БД остаётся у пользователя.
+
+## 07.10.2026 — problem-first architecture (review pending)
+
+Latest user instruction replaces the earlier product direction with a
+problem/startup/opportunity intelligence system while keeping Uzbekistan primary.
+The old standalone Global stage is not started or accepted. A concise migration
+plan is in `docs/PROBLEM_FIRST_PLAN.md`.
+
+Version 4 adds problem, problem-evidence, project/problem link, solution-idea,
+checkpoint tables and structured project gate/opportunity fields without clearing
+projects/candidates or changing historical IDs/dates/first_seen. The three formerly visible Cloud projects remain visible. KotibAI now links to a source-backed everyday transcription problem; DMED and Uzbekistan Airways remain `pending_problem_analysis`. None has an unsupported opportunity grade.
+Source seeds now contain 64 concepts, 12 active and 52 disabled until adapters
+are verified. Existing scheduler keeps hourly discovery and adds checkpointed
+08:00/23:30 reconciliation and weekly/local and monthly/cross-country scan
+attempts. One public Show HN RSS signal source is active internationally, but this
+is only bounded signal sampling, not a deep global trend study. API and Uzbek dashboard expose problem, idea, signal, sector and
+source views while keeping the project feed/archive.
+
+The problem detector is intentionally narrow; exact and selected deterministic paraphrase dedup work, with original quotes retained. Bounded event pages can now yield two separately evidenced projects from one URL. Broad semantic dedup, general non-Uzbek problem translation and validated international problem adapters remain outstanding. No actual solution ideas have
+been generated because evidence for a plausible mechanism/alternatives is
+insufficient. This extension must be reviewed as incomplete until those gaps
+and live discovery coverage are addressed.
+
+Live keyless validation for this extension: a clean 11-source forced sample collected
+146 links, processed 12 (budget 6 × 2), rejected 8 and left 4 pending; zero
+projects/signals/problems passed. A neutral university sentence initially
+misclassified as a problem; the detector was narrowed and the clean sample
+repeated with zero false problem records. Separately, the public Show HN RSS
+adapter checked one HN article and produced one low-confidence TECHNOLOGY signal,
+no project. A historical, live-accessible Spot article about HUMO card outages
+(11.04.2022) was reclassified from a stored candidate into one evidenced
+UZBEKISTAN_LOCAL problem; original URL and source publication date are retained.
+The three historical project cards and IDs remain unchanged. KotibAI now has a source-backed problem link; the other two await problem analysis.
+No solution idea is published because current evidence does not support one.
+
+Follow-up: schema version 5 migrated the citation table without losing its 12
+rows. A two-project hackathon fixture now produces two visible, separately
+cited project cards from one source URL. The existing KotibAI article explicitly
+states that journalists spent three hours transcribing a one-hour interview;
+this verbatim quote links KotibAI to a second real everyday problem. DMED and
+Uzbekistan Airways remain pending problem evidence. No A/B opportunity grade
+was inferred for any existing project. Backend restart retained all three
+project UUIDs and the HUMO problem UUID.
+
+## 08.10.2026 — intelligence extension validation
+
+The problem-first backend and Uzbek frontend are integrated. The dashboard now
+separates projects, problems, solution ideas and signals; the archive and status
+include period filters and scoring diagnostics. Main project cards display
+Muammo, Bozor, Dalil, Yechim and Imkoniyat, with unknown values left blank rather
+than invented. Desktop/mobile browser tests passed (12). The API and all new
+routes answered HTTP 200 in a local backend smoke check.
+
+Before reprocessing, a SQLite backup was made through the backup API. All 12
+existing project IDs, publication dates and first-seen timestamps remained
+identical. Cited prescription-error text now links DMED to a local problem;
+KotibAI remains linked to its sourced transcription problem. The historical
+Uzbekistan Airways card remains visible with `PENDING` problem analysis.
+Reprocessing stored, reachable Spot articles published BITO (06.04.2026,
+Umidjon Po‘latov) and surfaced the existing Agroko‘makchi row (22.11.2023,
+Qishloq xo‘jaligi vazirligi). The latter now correctly belongs to agritech.
+These two cards have `PENDING` problem gates; neither is claimed as a strong
+opportunity. The live database currently has 13 project rows, 5 visible
+projects, 3 distinct problems, 3 signals and 0 solution ideas. Existing
+provenance and candidate backlog were retained.
+
+Validation: 185 backend tests, 12 desktop/mobile browser tests, Ruff and
+TypeScript/Vite build passed; one existing Starlette/httpx deprecation warning
+remains. A separate clean keyless 2022–2026-09 backfill and targeted processing
+of two URLs discovered by it produced five visible real cards. Three were
+published by the bounded yearly run; Agroko‘makchi and BITO were completed from
+its durable candidate queue. Detailed counts, URL citations, yearly results
+and limits are in [PROBLEM_FIRST_VALIDATION.md](docs/PROBLEM_FIRST_VALIDATION.md).
+The monthly
+cross-country scan still samples a single public HN signal feed and is not
+comprehensive global intelligence. Strong opportunity scores are still pending
+because 15 cited criteria cannot yet be established. No synthetic idea or
+project has been inserted. Product review and acceptance remain with the user.

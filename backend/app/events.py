@@ -42,6 +42,10 @@ def detect_event(article):
     event_type = next(
         (key for key, pattern in EVENT_TYPES.items() if re.search(pattern, article.title, re.I)), None
     )
+    if (not event_type
+            and re.search(r"\bloyihalar\b.{0,80}\bnamoyish etildi\b", article.title, re.I)
+            and re.search(r"\b(?:forum|tadbir|ko‘rgazma|hackathon)\w*", article.text[:2500], re.I)):
+        event_type = "exhibition"
     if not event_type:
         return None
     quoted = re.search(r'[“«"]([^”»"\n]{3,150})[”»"]', article.title)

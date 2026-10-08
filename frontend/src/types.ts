@@ -48,6 +48,15 @@ export type Project = {
   source_count: number;
   analysis_mode: string;
   rating_method: string;
+  problem_statement: string;
+  problem_subject: string;
+  problem_scope: string;
+  problem_gate_status: string;
+  problem_gate_reason: string;
+  opportunity_score: number | null;
+  opportunity_grade: string;
+  opportunity_details?: Record<string, unknown>;
+  related_problems?: { id: string; title_uz: string }[];
   main_url?: string;
   aliases?: string[];
   sources?: Source[];
@@ -99,6 +108,14 @@ export type Run = {
   duration_seconds: number | null;
 };
 export type Status = {
+  intelligence_counts?: Record<string, number>;
+  entity_type_counts?: Record<string, number>;
+  problem_gate_counts?: Record<string, number>;
+  scoring_summary?: {scored:number;pending:number;rejected_by_stop_filter:number;average_opportunity:number|null;problem_evidence_levels:Record<string,number>;rating_methods:Record<string,number>};
+  scan_checkpoints?: { name: string; last_attempt_at: string | null; last_success_at: string | null; last_processed_item_at: string | null; cursor: Record<string, unknown> }[];
+  last_successful_scan_at?: string | null;
+  last_successful_source_check_at?: string | null;
+  last_processed_item_at?: string | null;
   processing_summary: Record<string, number>;
   pending_reason_stats: Record<string, number>;
   language_stats: Record<string, number>;
@@ -200,6 +217,12 @@ export type RegistrySource = {
   candidates_found: number;
   new_projects: number;
   last_error: string;
+  last_http_status?: number | null;
+  country?: string;
+  purpose?: string;
+  provides_projects?: boolean;
+  provides_problem_signals?: boolean;
+  provides_market_signals?: boolean;
   notes: string;
 };
 export type SectorStats = {

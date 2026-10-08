@@ -28,11 +28,18 @@ def semantic_similarity(a, b):
     return sum(v * y.get(k, 0) for k, v in x.items()) / denominator if denominator else 0
 
 
-def find_duplicate(session, analysis, urls):
+def find_duplicate(session, analysis, urls, allow_shared_source=False):
     canonical = [canonical_url(u) for u in urls]
     source = session.scalar(select(Source).where(Source.url.in_(canonical)))
-    if source:
+    if source and not allow_shared_source:
         return source.project
+    if allow_shared_source:
+        for existing in session.scalars(select(Source).where(Source.url.in_(canonical))):
+            if normalize(analysis.name) in {
+                existing.project.normalized_project_name,
+                *(normalize(alias) for alias in existing.project.aliases),
+            }:
+                return existing.project
     if analysis.main_url:
         project = session.scalar(select(Project).where(Project.main_url == canonical_url(analysis.main_url)))
         if project:

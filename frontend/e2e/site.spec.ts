@@ -5,7 +5,7 @@ test("Uzbek feed, search, filters and project evidence", async ({
 }, info) => {
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
-  await page.goto("/");
+  await page.goto("/loyihalar");
   await expect(
     page.getByRole("heading", { name: "Bugun O‘zbekistonda" }),
   ).toBeVisible();
@@ -66,7 +66,7 @@ test("status and empty-state layouts are usable", async ({ page }, info) => {
       () => document.documentElement.scrollWidth <= window.innerWidth,
     ),
   ).toBe(true);
-  await page.goto("/?period=all&q=missing");
+  await page.goto("/loyihalar?period=all&q=missing");
   await expect(
     page.getByRole("heading", { name: "Mos loyiha topilmadi" }),
   ).toBeVisible();
@@ -77,7 +77,7 @@ test("status and empty-state layouts are usable", async ({ page }, info) => {
 });
 
 test("sector statistics and radar diagnostics", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/loyihalar");
   const sectors = page.getByRole("region", { name: "Sektorlar statistikasi" });
   await expect(sectors).toContainText("1 ta tasdiqlangan loyiha");
   await sectors.getByRole("link").first().click();

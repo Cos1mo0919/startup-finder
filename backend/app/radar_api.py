@@ -51,12 +51,21 @@ def source_json(s):
             "candidates_found",
             "new_projects",
             "last_error",
+            "last_http_status",
             "notes",
+            "country",
+            "sector",
+            "purpose",
+            "provides_projects",
+            "provides_problem_signals",
+            "provides_market_signals",
+            "parser_type",
         )
     } | {
         "status": status,
         "last_checked_at": iso(s.last_checked_at),
         "last_success_at": iso(s.last_success_at),
+        "last_error_at": iso(s.last_error_at),
         "next_check_at": iso(aware(s.last_checked_at) + timedelta(minutes=s.check_frequency))
         if s.enabled and s.last_checked_at
         else None,

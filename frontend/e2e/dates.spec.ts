@@ -32,7 +32,7 @@ test("Uzbek dates use explicit month names and Tashkent components", () => {
 test("feed, detail and status render Uzbek month names in the browser", async ({
   page,
 }) => {
-  await page.goto("/");
+  await page.goto("/loyihalar");
   await expect(page.locator(".card-date").first()).toHaveText(
     /\d{1,2} [a-z]+ 20\d{2}/,
   );

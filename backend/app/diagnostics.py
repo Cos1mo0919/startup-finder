@@ -44,6 +44,8 @@ def inspect_candidate(session, url):
         "attempts": candidate.attempts if candidate else 0,
         "processing_version": candidate.processing_version if candidate else None,
         "analysis_mode": candidate.analysis_mode if candidate else None,
+        "entity_type": candidate.entity_type if candidate else None,
+        "project_ids": candidate.project_ids if candidate else [],
         "last_run_id": candidate.last_run_id if candidate else None,
         "language": candidate.article.get("language") if candidate else None,
         "published_at": candidate.article.get("published_at") if candidate else None,
@@ -53,6 +55,9 @@ def inspect_candidate(session, url):
             "name": project.name,
             "visible": project.visible,
             "stop_reasons": project.stop_reasons,
+            "problem_gate_status": project.problem_gate_status,
+            "problem_gate_reason": project.problem_gate_reason,
+            "opportunity_grade": project.opportunity_grade,
         }
         if project
         else None,
@@ -84,6 +89,8 @@ REASON_LABELS = {
     "blocked_source": "Manbaga kirish cheklangan",
     "parser_failure": "Sahifani o‘qish xatosi",
     "needs_ai_or_more_evidence": "AI yoki qo‘shimcha dalil kutilmoqda",
+    "minor_feature": "Mustaqil muammoni hal qilmaydigan kichik funksiya",
+    "pending_problem_analysis": "Muammo dalili qo‘shimcha tekshirilmoqda",
 }
 ORIGIN_LABELS = {
     "web_search": "Internet qidiruvi",

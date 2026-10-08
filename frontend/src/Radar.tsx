@@ -87,7 +87,7 @@ export function SectorOverview() {
       {items.length ? (
         <div className="sector-buttons">
           {items.slice(0, 8).map((s) => (
-            <Link key={s.sector} to={`/?period=30d&category=${s.sector}`}>
+            <Link key={s.sector} to={`/loyihalar?period=30d&category=${s.sector}`}>
               <span>{s.label}</span>
               <strong>{s.count}</strong>
               <small>Bugun: {s.today}</small>

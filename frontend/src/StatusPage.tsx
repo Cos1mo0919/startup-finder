@@ -34,7 +34,7 @@ export function StatusPage() {
           <Activity size={16} /> SHAFFOF JARAYON
         </div>
         <h1>Qidiruv holati</h1>
-        <p>Manbalardan loyihalar lentasigacha — tizimning joriy holati.</p>
+        <p>Manbalardan muammo, loyiha va signallargacha — tizimning joriy holati.</p>
         <button
           className="outline-button"
           onClick={() => setRefresh(refresh + 1)}
@@ -65,8 +65,7 @@ export function StatusPage() {
       <div className="notice">
         <Clock3 size={18} />
         <p>
-          Jadval har soatda tekshiriladi; har bir manba o‘z tekshiruv davriga
-          ega. Barcha vaqtlar Toshkent vaqti bilan ko‘rsatilgan. Bu sahifa har
+          Loyiha qidiruvi har soatda, moslashtirish esa 08:00 va 23:30 da tekshiriladi. Mahalliy muammolar haftalik, jahon tendensiyalari oylik ko‘riladi; manbalar o‘z davriga ega. Barcha vaqtlar Toshkent vaqti bilan ko‘rsatilgan. Bu sahifa har
           30 soniyada yangilanadi.
         </p>
       </div>
@@ -168,6 +167,25 @@ export function StatusPage() {
         </section>
       </div>
       <RadarAdmin status={s} />
+      <section className="detail-section">
+        <h2>Muammo va signal jarayoni</h2>
+        <div className="run-counts">
+          {Object.entries(s.intelligence_counts || {}).map(([key, value]) => <div key={key}><span>{{projects:"Loyihalar",problems:"Muammolar",ideas:"G‘oyalar",signals:"Signallar",candidates:"Nomzodlar",sources:"Manbalar"}[key] || key}</span><strong>{value}</strong></div>)}
+        </div>
+        <p>Muammo darvozasi: {Object.entries(s.problem_gate_counts || {}).map(([key,value]) => `${key}: ${value}`).join(" · ") || "Hali ma’lumot yo‘q"}</p>
+        <h3>Imkoniyat baholari</h3>
+        <div className="run-counts">
+          <div><span>To‘liq baholangan</span><strong>{s.scoring_summary?.scored ?? 0}</strong></div>
+          <div><span>Dalil kutilmoqda</span><strong>{s.scoring_summary?.pending ?? 0}</strong></div>
+          <div><span>Stop-filtr rad etgan</span><strong>{s.scoring_summary?.rejected_by_stop_filter ?? 0}</strong></div>
+          <div><span>O‘rtacha imkoniyat</span><strong>{s.scoring_summary?.average_opportunity === null || s.scoring_summary?.average_opportunity === undefined ? "Baholanmagan" : s.scoring_summary.average_opportunity + "/100"}</strong></div>
+        </div>
+        <p>Muammo dalil darajalari: {Object.entries(s.scoring_summary?.problem_evidence_levels || {}).map(([level,count]) => level + "/5: " + count).join(" · ") || "Hali ma’lumot yo‘q"}</p>
+        <p>Baholash usuli: qoidalar — {s.scoring_summary?.rating_methods.extractive ?? 0}, AI — {s.scoring_summary?.rating_methods.ai ?? 0}.</p>
+        <h3>Tekshiruv nuqtalari</h3>
+        <p>Oxirgi muvaffaqiyatli qidiruv: {date(s.last_successful_scan_at, true)} · manba tekshiruvi: {date(s.last_successful_source_check_at, true)} · material ishlovi: {date(s.last_processed_item_at, true)}</p>
+        {s.scan_checkpoints?.length ? s.scan_checkpoints.map(c => <p key={c.name}>{c.name}: oxirgi urinish {date(c.last_attempt_at, true)}, muvaffaqiyat {date(c.last_success_at, true)}</p>) : <p>Chuqur tekshiruv hali boshlanmagan.</p>}
+      </section>
       <section className="detail-section">
         <h2>Qidiruvlar tarixi</h2>
         {s.runs.length ? (

@@ -73,7 +73,7 @@ export function Home() {
           : period === "30d"
             ? "Oxirgi 30 kun"
             : "Barcha loyihalar";
-  const activeFilters = ["category", "city", "audience", "min_rating"].filter(
+  const activeFilters = ["category", "city", "audience", "min_rating", "grade", "problem_scope", "min_evidence"].filter(
     (k) => params.get(k),
   ).length;
   return (
@@ -184,6 +184,29 @@ export function Home() {
                   {v} va undan yuqori
                 </option>
               ))}
+            </select>
+          </label>
+          <label>
+            Imkoniyat darajasi
+            <select value={params.get("grade") || ""} onChange={(e) => change("grade", e.target.value)}>
+              <option value="">Barcha holatlar</option>
+              {[["A", "A"], ["B", "B"], ["C", "C"], ["D", "D"], ["PENDING", "Tahlil kutilmoqda"], ["REJECTED", "Rad etilgan"]].map(([value,label]) => <option key={value} value={value}>{label}</option>)}
+            </select>
+          </label>
+          <label>
+            Muammo turi
+            <select value={params.get("problem_scope") || ""} onChange={(e) => change("problem_scope", e.target.value)}>
+              <option value="">Barcha turlar</option>
+              <option value="EVERYDAY">Kundalik</option>
+              <option value="UZBEKISTAN_LOCAL">O‘zbekiston</option>
+              <option value="GLOBAL">Jahon</option>
+            </select>
+          </label>
+          <label>
+            Eng kam tasdiqlanganlik
+            <select value={params.get("min_evidence") || ""} onChange={(e) => change("min_evidence", e.target.value)}>
+              <option value="">Barcha darajalar</option>
+              {[3, 5, 7, 9].map(value => <option key={value} value={value}>{value}/10 dan yuqori</option>)}
             </select>
           </label>
           <button

@@ -1,0 +1,33 @@
+import { test, expect } from "@playwright/test";
+
+test("dashboard, archive and intelligence views remain usable", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "Muammo. Yechim. Imkoniyat." })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Bugungi topilmalar" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Yangi loyihalar" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Yangi muammolar" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Yechim g‘oyalari" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Muhim signallar" })).toBeVisible();
+  await page.goto("/muammolar");
+  await expect(page.getByRole("heading", { name: "Muammolar", exact: true })).toBeVisible();
+  await page.goto("/goyalar");
+  await expect(page.getByText("mavjud startap emas")).toBeVisible();
+  await page.goto("/signallar");
+  await expect(page.getByRole("heading", { name: "Signallar" })).toBeVisible();
+  await page.goto("/sektorlar");
+  await expect(page.getByRole("heading", { name: "Sektorlar" })).toBeVisible();
+  await page.goto("/manbalar");
+  await expect(page.getByRole("heading", { name: "Manbalar" })).toBeVisible();
+  await page.goto("/loyihalar?period=all");
+  await expect(page.getByRole("heading", { name: "Barcha loyihalar" })).toBeVisible();
+  await page.goto("/arxiv?type=PROJECT");
+  await expect(page.getByRole("heading", { name: "Arxiv" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Oxirgi 7 kun" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "AgroKo‘mak" })).toBeVisible();
+  await page.getByRole("button", { name: "Muammolar" }).click();
+  await expect(page.getByText("Bu filtrlar uchun tasdiqlangan yozuv yo‘q.")).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  expect(errors).toEqual([]);
+});

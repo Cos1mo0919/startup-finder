@@ -99,6 +99,10 @@ def evidence_types(analysis, quote, kind):
             CONCRETE.search(existence_quote)
             or ACTION.search(existence_quote)
             or re.search(r"created|developed|demonstrated|разработан|создан", existence_quote, re.I)
+            or (
+                re.search(rf"\bloyiha\s+{re.escape(analysis.name)}\s+deb nomlanadi", quote, re.I)
+                and re.search(rf"\bLoyiha asoschisi\s+[\w‘’ʻʼ'-]+\s+[\w‘’ʻʼ'-]+\s+{re.escape(analysis.name)}\s+platforma", quote, re.I)
+            )
         ):
             types.add("project_exists")
     if identified(analysis) and any(

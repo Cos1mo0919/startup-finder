@@ -18,14 +18,29 @@ PERSON = rf"{TOKEN}(?:\s+{TOKEN}){{1,3}}"
 
 def project_name(article):
     candidates = []
+    body = article.text.split("\nHavolalar:", 1)[0]
     # Unquoted brands must be directly described as a product, never just a company mention.
     for m in re.finditer(
         rf"\b({TOKEN}(?:[.-]{TOKEN})?)\s+(?:nomli\s+)?(?:startapi|startap|platformasi|platforma|ilovasi|ilova|tizimi|servisi|loyihasi|prototipi)\b",
-        article.title + " " + article.text[:7000],
+        article.title + " " + body[:7000],
     ):
-        if m[1] not in {"Yangi", "Ushbu", "Mazkur", "Bu", "Startup", "Base"}:
+        if m[1] not in {"Yangi", "Ushbu", "Mazkur", "Bu", "Startup", "Base", "Hozirda"}:
             candidates.append(m[1])
-    for text in (article.title, article.text[:7000]):
+    # An event report can introduce a named product after "loyiha", then
+    # describe its founder and function in the following sentences.
+    for m in re.finditer(
+        r"\b(?:loyiha|startap)\s+([A-Z][A-Za-z0-9]{2,40})\s+deb nomlanadi\b",
+        body[:7000],
+        re.I,
+    ):
+        candidates.append(m[1])
+    for m in re.finditer(
+        rf"\b({TOKEN})\s*[—–]\s*[^.!?]{{0,100}}(?:{PRODUCT})",
+        body[:7000],
+        re.I,
+    ):
+        candidates.append(m[1])
+    for text in (article.title, body[:7000]):
         for m in re.finditer(r'[“«"]([^”»"\n]{2,70})[”»"]\s+[^.!?]{0,90}mobil ilovani ishga tushirdi', text):
             candidates.append(m[1].strip())
         for m in re.finditer(
@@ -36,24 +51,30 @@ def project_name(article):
             candidates.append(m[1].strip())
     # Branded interview headings, e.g. "Brand: ..."; require a definition in the body.
     heading = re.match(r"([A-Z][A-Za-z0-9.-]{2,45})\s*[:—–]", article.title)
-    if heading and re.search(re.escape(heading[1]) + rf"\s*[—–-].{{0,200}}(?:{PRODUCT})", article.text, re.I):
+    if heading and re.search(re.escape(heading[1]) + rf"\s*[—–-].{{0,200}}(?:{PRODUCT})", body, re.I):
         candidates.insert(0, heading[1])
     bot = re.search(
-        r"(@[A-Za-z][A-Za-z0-9_]{4,63})\s+(?:Telegram[- ]?bot|chat[- ]?bot|bot)", article.text, re.I
+        r"(@[A-Za-z][A-Za-z0-9_]{4,63})\s+(?:Telegram[- ]?bot|chat[- ]?bot|bot)", body, re.I
     )
     if bot:
         candidates.append(bot[1])
     # Unquoted named products next to explicit launch verbs.
     for m in re.finditer(
         rf"(?:launched|presented|developed|built|created|demonstrated|создал|представил|разработал|запустил)\s+(?:a |the )?(?:{PRODUCT})\w*\s+({TOKEN}(?:[.-]{TOKEN})?)",
-        article.text,
+        body,
     ):
         candidates.append(m[1])
-    return list(dict.fromkeys(n for n in candidates if len(n.split()) <= 8 and "?" not in n))
+    return list(dict.fromkeys(
+        n for n in candidates
+        if len(n.split()) <= 8 and "?" not in n
+        and n.casefold() not in {"startaplar alleyasi", "app store", "play market"}
+    ))
 
 
 def creator_in(text):
     patterns = [
+        r'^([A-Z][^.!?]{2,90}?\s+vazirligi)\s+[“«"][^”»"\n]{2,70}[”»"]\s+[^.!?]{0,90}ilovasini ishga tushirdi',
+        r"\bLoyiha asoschisi\s+([A-Z][\w‘’ʻʼ'-]+\s+[A-Z][\w‘’ʻʼ'-]+)\b",
         r'[“«"]([^”»"\n]{2,70})[”»"]\s+(?:kompaniyasi\s+)?[^.!?]{0,100}(?:ilovani|platformani|tizimni)\s+ishga tushirdi',
         rf"({TOKEN}(?:\s+{TOKEN}){{0,3}}\s+(?:jamoasi|kompaniyasi|universiteti))[^.!?]{{0,120}}(?:ishlab chiq|yarat|ishga tush)",
         rf"(?:asoschilari|asoschisi|hammuassisi|muallifi|founders?|основатель|основатели|автор)\s*(?:[—–:-]\s*)?({PERSON})",
@@ -84,13 +105,13 @@ def pending_reason(article):
     return "needs_translation" if not is_uzbek(article.text) else "insufficient_evidence"
 
 
-def extract(article):
+def extract(article, names=None):
     from .detection import is_candidate, is_uzbek
 
     if not is_candidate(article):
         return None
     text = article.text.split("\nHavolalar:")[0]
-    for name in project_name(article):
+    for name in names if names is not None else project_name(article):
         position = text.lower().find(name.lower())
         if position < 0:
             continue
@@ -100,7 +121,12 @@ def extract(article):
         named_sentence = next(
             (s for s in re.split(r"(?<=[.!?])\s+", quote) if name.lower() in s.lower()), quote
         )
-        if not ACTION.search(quote) or FUTURE.search(named_sentence):
+        event_founder = bool(
+            article.event_id
+            and re.search(rf"\bloyiha\s+{re.escape(name)}\s+deb nomlanadi", quote, re.I)
+            and re.search(rf"\bLoyiha asoschisi\s+[A-Z][\w‘’ʻʼ'-]+\s+[A-Z][\w‘’ʻʼ'-]+\s+{re.escape(name)}\s+platforma", quote, re.I)
+        )
+        if not (ACTION.search(quote) or event_founder) or FUTURE.search(named_sentence):
             continue
         # Attribution must refer to this product, not another organization later
         # in a long news article. Explicit anaphora is allowed within this passage.

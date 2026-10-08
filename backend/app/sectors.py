@@ -58,6 +58,14 @@ def classify_sectors(analysis):
     if mapped in SECTORS and mapped != "other":
         supplied.append(mapped)
     text = (analysis.name + " " + analysis.summary_uz + " " + " ".join(analysis.keywords)).lower()
+    # A plant clinic is an agricultural service, not evidence of human healthcare.
+    plant_clinics = ("o‘simlik klinik", "o'simlik klinik", "ўсимлик клиник")
+    if any(plant_clinic in text for plant_clinic in plant_clinics) and not any(
+        term in text for term in ("tibbiyot", "shifokor", "hospital", "patient", "medical")
+    ):
+        supplied = [sector for sector in supplied if sector != "healthtech"]
+    for plant_clinic in plant_clinics:
+        text = text.replace(plant_clinic, "")
     supplied.extend(k for k, terms in PATTERNS.items() if any(t in text for t in terms))
     values = list(dict.fromkeys(supplied))[:8] or ["other"]
     return values[0], values

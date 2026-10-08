@@ -4,8 +4,6 @@ import {
   ArrowUpRight,
   Layers3,
   Leaf,
-  ShieldCheck,
-  Sparkles,
   Sprout,
 } from "lucide-react";
 import React, { useState } from "react";
@@ -48,8 +46,15 @@ export function Header() {
         </Link>
         <nav aria-label="Asosiy menyu">
           <NavLink to="/" end>
-            <span className="flag">●</span> O‘zbekiston
+            <span className="flag">●</span> Bosh sahifa
           </NavLink>
+          <NavLink to="/loyihalar">Loyihalar</NavLink>
+          <NavLink to="/muammolar">Muammolar</NavLink>
+          <NavLink to="/goyalar">Yechim g‘oyalari</NavLink>
+          <NavLink to="/signallar">Signallar</NavLink>
+          <NavLink to="/sektorlar">Sektorlar</NavLink>
+          <NavLink to="/manbalar">Manbalar</NavLink>
+          <NavLink to="/arxiv">Arxiv</NavLink>
           <NavLink to="/status" aria-label="Tizim holati">
             <Activity size={16} />
             <span>Tizim holati</span>
@@ -111,6 +116,14 @@ export function Card({
   project: Project;
   categories: Record<string, string>;
 }) {
+  const groups = (p.opportunity_details as {groups?: Record<string, number>} | undefined)?.groups;
+  const publicScores: [string, string][] = [
+    ["Muammo", groups?.problem === undefined ? "—" : groups.problem.toFixed(1) + "/10"],
+    ["Bozor", groups?.market === undefined ? "—" : groups.market.toFixed(1) + "/10"],
+    ["Dalil", p.confidence.toFixed(1) + "/10"],
+    ["Yechim", "—"],
+    ["Imkoniyat", p.opportunity_score === null ? "Kutilmoqda" : p.opportunity_score + "/100 · " + p.opportunity_grade],
+  ];
   return (
     <article className="project-card">
       <div className="card-top">
@@ -127,6 +140,7 @@ export function Card({
             <ArrowUpRight size={20} />
           </Link>
           <p className="summary">{p.summary_uz}</p>
+          <p className="card-problem"><strong>Qanday muammoni hal qiladi?</strong> {p.problem_statement || "Muammo dalili tekshirilmoqda."}</p>
           <dl className="card-facts">
             <div>
               <dt>Kim yaratgan</dt>
@@ -153,16 +167,10 @@ export function Card({
           </span>
         ))}
       </div>
+      <div className="public-score-row" aria-label="Loyiha baholari">
+        {publicScores.map(([label,value])=><div key={label}><span>{label}</span><strong>{value}</strong></div>)}
+      </div>
       <div className="card-bottom">
-        <span className="score">
-          <Sparkles size={15} />
-          <strong>{p.rating.toFixed(1)}</strong>
-          <span>/ 10 foydalilik</span>
-        </span>
-        <span className="confidence">
-          <ShieldCheck size={15} />
-          {p.confidence.toFixed(1)} ishonchlilik
-        </span>
         <Link to={`/loyiha/${p.id}`}>
           Batafsil <ArrowRight size={16} />
         </Link>
