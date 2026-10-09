@@ -194,3 +194,42 @@ footer, footer p { color: var(--text-muted); }
   .card-audience, .card-opportunity { flex-wrap: wrap; }
   .status-page .page-heading > button { position: static; margin-top: 16px; }
 }
+
+/* Public catalog and owner tools reuse the established dark surface system. */
+.public-home .intel-overview { min-height: 220px; }
+.public-home .intel-overview-copy p { max-width: 560px; }
+.public-home .intel-project-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.public-home .intel-project-card p { overflow-wrap: anywhere; }
+.catalog-page, .archive-page, .public-sources, .admin-page { padding-top: 38px; }
+.catalog-heading { margin-bottom: 28px; }
+.catalog-heading h1 { margin-bottom: 8px; }
+.catalog-heading p, .catalog-count { color: var(--text-secondary); }
+.catalog-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin: 22px 0; }
+.catalog-controls .intel-tabs { margin: 0; }
+.catalog-search { display: flex; align-items: center; gap: 9px; min-width: min(100%, 320px); }
+.catalog-search input { flex: 1; min-width: 0; }
+.catalog-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.catalog-grid .project-card { min-width: 0; }
+.catalog-grid .project-card .card-body { align-items: start; }
+.catalog-grid .project-card .summary { display: block; overflow: hidden; }
+.catalog-grid .project-card .card-evidence { color: var(--accent); font-size: 12px; }
+.public-detail-layout { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 24px; }
+.public-detail-main { min-width: 0; }
+.public-detail-aside { align-self: start; padding: 18px; border: 1px solid var(--border); border-radius: 15px; background: var(--surface); }
+.public-detail-aside img, .public-detail-aside .image-placeholder { width: 100%; height: auto; max-height: 240px; }
+.public-detail-aside dl { display: grid; gap: 11px; }
+.public-detail-aside dt { color: var(--text-muted); font-size: 12px; }
+.public-detail-aside dd { margin: 3px 0 0; }
+.public-analysis > summary { cursor: pointer; font-weight: 650; }
+.source-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.source-list article { border: 1px solid var(--border); border-radius: 12px; padding: 16px; background: var(--surface); }
+.source-list h3 { margin: 0 0 8px; }
+.admin-nav { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding-top: 18px; padding-bottom: 0; }
+.admin-review-list { display: grid; gap: 14px; }
+.admin-review-list blockquote { max-height: 100px; overflow: auto; }
+.admin-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.admin-yield-table { overflow-x: auto; }
+.admin-yield-table table { width: 100%; border-collapse: collapse; min-width: 740px; }
+.admin-yield-table th, .admin-yield-table td { border-bottom: 1px solid var(--border); padding: 10px; text-align: left; }
+@media (max-width: 900px) { .public-home .intel-project-grid, .catalog-grid { grid-template-columns: 1fr; } }
+@media (max-width: 700px) { .public-detail-layout, .source-list { grid-template-columns: 1fr; } .catalog-controls { align-items: stretch; flex-direction: column; } }

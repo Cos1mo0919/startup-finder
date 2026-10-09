@@ -40,6 +40,7 @@ class Project(Base):
     city: Mapped[str] = mapped_column(String(100), default="")
     event: Mapped[str] = mapped_column(String(300), default="")
     main_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    discovery_source_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     fingerprint: Mapped[str] = mapped_column(String(64), index=True)
     aliases: Mapped[list] = mapped_column(JSON, default=list)
     first_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc, index=True)
@@ -71,6 +72,9 @@ class Project(Base):
     opportunity_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     opportunity_grade: Mapped[str] = mapped_column(String(20), default="PENDING")
     opportunity_details: Mapped[dict] = mapped_column(JSON, default=dict)
+    publication_status: Mapped[str] = mapped_column(String(30), default="DISCOVERED", index=True)
+    publication_reason: Mapped[str] = mapped_column(String(100), default="")
+    secondary_problems: Mapped[list] = mapped_column(JSON, default=list)
     evidence_records: Mapped[list["ProjectEvidence"]] = relationship(
         cascade="all, delete-orphan", lazy="selectin"
     )
@@ -102,6 +106,8 @@ class Candidate(Base):
     archive_scope: Mapped[list] = mapped_column(JSON, default=list)
     entity_type: Mapped[str] = mapped_column(String(30), default="IGNORE")
     project_ids: Mapped[list] = mapped_column(JSON, default=list)
+    detector_result: Mapped[str] = mapped_column(String(30), default="NEEDS_EXTRACTION")
+    review_decision: Mapped[str] = mapped_column(String(30), default="")
     source_id: Mapped[str | None] = mapped_column(ForeignKey("sources.id"), nullable=True)
     event_id: Mapped[str | None] = mapped_column(ForeignKey("events.id"), nullable=True)
     __tablename__ = "candidates"
@@ -225,6 +231,7 @@ class EcosystemSignal(Base):
     region: Mapped[str] = mapped_column(String(120), default="")
     sector: Mapped[str] = mapped_column(String(80), default="")
     confidence: Mapped[float] = mapped_column(Float, default=0)
+    intelligence_status: Mapped[str] = mapped_column(String(30), default="ACTIVE")
 
 
 class Problem(Base):

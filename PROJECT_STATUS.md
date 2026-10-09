@@ -1,7 +1,7 @@
 # Project status
 
 ## Current stage
-**Stage 1 — Uzbekistan. Реализация и расширение Startup Radar подготовлены к проверке; пользователь ещё не принял этап.** Global и отдельный GitHub / Yangi dasturlar не начинались.
+**Stage 1 ещё не принят. По явному новому разрешению пользователя начат отдельный Global discovery; Узбекистан остаётся основным направлением.** Актуальное состояние см. в последнем разделе этого файла; старые разделы сохранены как история работ.
 
 **Последняя доработка (07.10.2026):** исправление старых архивных настроек в Source Registry и года queued-кандидатов; [актуальный отчёт Codespace](docs/CODESPACE_ARCHIVE_REPAIR.md). Ранее добавлены диагностика воспроизводимости и узбекское отображение дат. Точный сценарий Codespace проверен на отдельной пустой базе; он не равен годовому backfill. Подробности и результаты — [ARCHIVE_REPRODUCIBILITY.md](docs/ARCHIVE_REPRODUCIBILITY.md). Прежние 3 карточки Cloud и историческая статистика описаны в [KEYLESS_VALIDATION.md](docs/KEYLESS_VALIDATION.md); они не являются результатом одиночного запуска на чистой базе.
 
@@ -38,7 +38,7 @@
 - PostgreSQL deployment/миграция, GitHub Actions и публичное размещение не проверены. Есть предупреждение стороннего Starlette/httpx; тесты проходят.
 
 ## Next stage
-Остановиться после отчёта. **Не начинать Global** до явного принятия текущего этапа и отдельного разрешения пользователя.
+Историческое ограничение на Global заменено явным разрешением пользователя в октябре 2026 года; текущий объём работ описан в последнем разделе.
 
 ## 2026-10-07 — discovery repair, then deployment priority
 User explicitly kept Stage 1 unaccepted and then changed the immediate priority to a public HTTPS preview. Existing discovery changes are preserved separately from deployment work; further discovery changes are paused.
@@ -282,3 +282,42 @@ cross-country scan still samples a single public HN signal feed and is not
 comprehensive global intelligence. Strong opportunity scores are still pending
 because 15 cited criteria cannot yet be established. No synthetic idea or
 project has been inserted. Product review and acceptance remain with the user.
+
+## 2026-10-09 — public catalog, publication gate and Global discovery
+
+The user's later instruction explicitly authorized Global project discovery
+while keeping Uzbekistan coverage. Stage 1 remains unaccepted. The public
+site now has four navigation items: Bosh sahifa, Loyihalar, Arxiv, Manbalar.
+Technical intelligence entities remain stored and available for owner/admin
+work. Public cards show the cited problem, target user, solution and evidence;
+unfinished score groups and the former top opportunities panel are hidden.
+The detail page places confirmed facts before optional detailed scoring.
+
+Schema v6 adds a conservative `PUBLISHED` gate, lifecycle and review metadata,
+secondary problem references and article-vs-project URL provenance. Seven
+old rows still pass the earlier project-existence evidence check, but only
+DMED and KotibAI also have complete source-backed problem analysis. The other
+five are retained for review; 2 of 15 stored project rows fail fatal gates.
+All 15 prior IDs and first-seen/publication timestamps matched the pre-change
+SQLite backup, with 15 source links and 56 evidence records unchanged.
+Old candidate `published` labels are synchronized with the project gate so
+public/admin counts agree. As of validation, 2 public projects, 11 project
+rows requiring review, 2 rejected; 206 candidates queued, 271 pending, 5
+in review, 609 rejected, 17 errors. The 6 ecosystem signals remain stored;
+2 irrelevant education/tax items are marked ignored, not deleted.
+
+The Show HN RSS adapter now retains the maker URL and HN discovery URL
+separately. Keyless fallback preserves international origin and will not
+invent a translation. A targeted real Show HN run found 29 links and
+processed 20, with 10 rejected, 7 pending and 3 page errors; 0 new public
+Global projects. A targeted Spot Startups run found 29 links and processed
+6, with 3 rejected, 2 pending and 0 new public Uzbekistan projects. These
+were bounded source samples, not full coverage. Quality gates stayed active.
+Source-yield, rejection distribution, historical preservation and exact
+source URLs are recorded in [PUBLIC_GLOBAL_VALIDATION.md](docs/PUBLIC_GLOBAL_VALIDATION.md).
+
+`ADMIN_API_KEY` must be configured privately for the owner area. No API keys
+were committed. No deployment was made. Checks: 200 backend tests, 10
+desktop/mobile browser tests, Ruff and production TypeScript/Vite build passed.
+The existing Starlette/httpx dependency warning remains. User acceptance is
+still pending.

@@ -97,7 +97,7 @@ def test_api_filters_detail_status_and_not_found(settings, factory):
         )
         assert client.get("/api/projects", params={"min_rating": 11}).status_code == 422
         assert client.get("/api/projects/missing").status_code == 404
-        status = client.get("/api/status").json()
+        status = client.get("/api/admin/status", headers={"X-Admin-Key": "test-admin-key"}).json()
         assert status["last_run"]["counts"]["new_projects"] == 1
         assert status["next_run"] is None
         assert status["ai_enabled"] is False
@@ -105,12 +105,12 @@ def test_api_filters_detail_status_and_not_found(settings, factory):
         assert "api_key" not in str(status)
 
 
-def test_today_uses_first_seen_not_publication(settings, factory):
+def test_today_uses_publication_not_first_seen(settings, factory):
     article = sample_article()
     article.published_at = datetime(2022, 5, 1, tzinfo=timezone.utc)
     Pipeline(settings, factory, FakeDiscovery([])).persist(sample_analysis(article), [article], now_utc())
     with TestClient(create_app(settings)) as client:
-        assert client.get("/api/projects?period=today").json()["total"] == 1
+        assert client.get("/api/projects?period=today").json()["total"] == 0
         assert client.get("/api/projects?period=all&year=2022").json()["total"] == 1
 
 

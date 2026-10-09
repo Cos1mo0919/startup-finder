@@ -180,7 +180,7 @@ def test_source_failure_is_isolated_and_status_explains_pending(settings, factor
     assert result["status"] == "partial" and result["counts"]["new_projects"] == 1
     assert result["details"]["summary"]["source_errors"] == 1
     with TestClient(create_app(settings)) as client:
-        s = client.get("/api/status").json()
+        s = client.get("/api/admin/status", headers={"X-Admin-Key": "test-admin-key"}).json()
         assert s["processing_summary"]["processed_fallback"] == 1
         assert s["origin_stats"][0]["origin"] == "university"
         assert s["last_run"]["details"]["summary"]["source_errors"] == 1
@@ -207,7 +207,7 @@ def test_unknown_date_and_noise_rejection_statistics(settings, factory):
     a.published_at = None
     Pipeline(settings, factory, FakeDiscovery([a])).run()
     with TestClient(create_app(settings)) as client:
-        data = client.get("/api/status").json()
+        data = client.get("/api/admin/status", headers={"X-Admin-Key": "test-admin-key"}).json()
         assert any(
             r["reason"] == "unknown_publication_date" and r["count"] == 1 for r in data["reject_reason_stats"]
         )

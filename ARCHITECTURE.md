@@ -214,3 +214,45 @@ from a follow-up queue; a stale, sole-source project event association can be
 corrected without duplicating the project. Evidence and score gates remain
 unchanged except for recognizing an explicit current-product statement in a
 named startup interview. No automatic scoring is inferred from the redesign.
+
+## Public publication and international discovery — 2026-10-09
+
+Schema v6 adds `publication_status`, `publication_reason`, secondary problem
+links and the original discovery URL on projects; candidates store the cheap
+project-detector result and an admin review decision. Existing project IDs,
+publication dates, `first_seen`, source records and evidence stay in place.
+The original `visible` flag remains an evidence-gate diagnostic. Public API
+queries require `publication_status=PUBLISHED` and use `published_at` for
+recent and archive periods. A status can remain `REVIEW_REQUIRED` even if the
+entity has passed the `VERIFIED_PROJECT` stage: review disposition and quality
+progress are distinct. The quality progression is available as a computed
+`lifecycle_stage`: DISCOVERED, VERIFIED_PROJECT, ANALYZED, PUBLISHED.
+
+The pipeline first calls a low-cost detector (`PROJECT_CANDIDATE`,
+`NEEDS_EXTRACTION`, `SIGNAL_ONLY`, `NON_PROJECT`). Only project candidates
+enter evidence and problem-solution analysis. A cited project may have one
+primary problem and secondary cited problems. An item with missing creator,
+clear problem, target user, solution or publication evidence stays in review;
+it does not appear in cards or detail API. Admin ACCEPT requeues the normal
+pipeline. REJECT stores a typed reason. IGNORE-classified signals remain in
+SQL with `intelligence_status=IGNORED` for audit, excluded from active signal
+metrics.
+
+The public frontend uses only four top-level pages and a hidden owner area.
+`ADMIN_API_KEY` protects owner APIs with constant-time header comparison;
+keys stay in environment settings. `/api/public/sources` returns a small
+source directory without health or queue details. The admin API reports
+queue items, source yield, rejection reasons and existing scheduler status.
+Public score formulas and stored evidence are unchanged; incomplete score
+groups do not appear on cards. Project detail opens with problem, audience,
+solution and cited facts, with deeper analysis below.
+
+The enabled Show HN RSS collector now keeps the maker's URL as the candidate
+site and HN comments URL separately as discovery provenance. Official site
+content is fetched subject to existing robots/TLS/size controls. A global
+site is not assigned Uzbekistan origin by keyless fallback. Primary source,
+named creator, dates, problem and audience are still required before public
+publication. The CLI `--only-source` constrains both collection and queued
+processing for source-yield analysis without changing operator enable flags.
+Uzbekistan hourly polling, weekly local problem scan and monthly global
+trend scan remain separate scheduler jobs.

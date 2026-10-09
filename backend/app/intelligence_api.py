@@ -1,10 +1,11 @@
 """Read-only problem, idea, signal and opportunity views."""
 
+from datetime import timedelta
 from sqlalchemy import func, select
 from .db import (Candidate, EcosystemSignal, Problem, ProblemEvidence, Project,
                  RegistrySource, Run, SchedulerCheckpoint, SolutionIdea)
 from .dates import today_start
-from .db import now_utc
+from .db import aware, now_utc
 from .radar_api import iso
 from .sectors import SECTORS
 
@@ -47,26 +48,27 @@ def dashboard(session):
         "today": {
             "sources_checked": sum(r.counts.get("sources_checked", 0) for r in today_runs),
             "links_seen": sum(r.counts.get("candidates_found", 0) for r in today_runs),
-            "projects": session.scalar(select(func.count()).select_from(Project).where(Project.visible.is_(True), Project.first_seen >= start)),
+            "projects": session.scalar(select(func.count()).select_from(Project).where(Project.publication_status == "PUBLISHED", Project.published_at >= start)),
             "problems": session.scalar(select(func.count()).select_from(Problem).where(Problem.first_seen_at >= start)),
             "ideas": session.scalar(select(func.count()).select_from(SolutionIdea).where(SolutionIdea.created_at >= start)),
             "signals": session.scalar(select(func.count()).select_from(EcosystemSignal).where(EcosystemSignal.discovered_at >= start)),
         },
         "total": {
-            "projects": session.scalar(select(func.count()).select_from(Project).where(Project.visible.is_(True))),
+            "projects": session.scalar(select(func.count()).select_from(Project).where(Project.publication_status == "PUBLISHED")),
             "problems": session.scalar(select(func.count()).select_from(Problem)),
             "ideas": session.scalar(select(func.count()).select_from(SolutionIdea)),
-            "signals": session.scalar(select(func.count()).select_from(EcosystemSignal)),
+            "signals": session.scalar(select(func.count()).select_from(EcosystemSignal).where(EcosystemSignal.intelligence_status == "ACTIVE")),
             "candidates": session.scalar(select(func.count()).select_from(Candidate)),
             "sources": session.scalar(select(func.count()).select_from(RegistrySource)),
         },
         "strong_opportunities": [{"id": p.id, "name": p.name, "score": p.opportunity_score,
                                   "grade": p.opportunity_grade, "problem": p.problem_statement}
                                  for p in session.scalars(select(Project).where(
-                                     Project.visible.is_(True), Project.opportunity_grade.in_(["A", "B"])
+                                     Project.publication_status == "PUBLISHED", Project.opportunity_grade.in_(["A", "B"])
                                  ).order_by(Project.opportunity_score.desc()).limit(6))],
         "latest_projects": [{
             "id": p.id, "name": p.name, "problem": p.problem_statement,
+            "solution": (p.content or {}).get("how_uz") or (p.content or {}).get("what_uz") or "",
             "affected_users": p.problem_subject or ", ".join(
                 group for group in (p.content or {}).get("audience_groups", []) if isinstance(group, str)
             ),
@@ -79,20 +81,20 @@ def dashboard(session):
             "country": p.country, "sector": p.primary_sector,
             "published_at": iso(p.published_at), "source_count": len(p.sources),
         } for p in session.scalars(select(Project).where(
-            Project.visible.is_(True)
-        ).order_by(Project.first_seen.desc()).limit(5))],
+            Project.publication_status == "PUBLISHED", Project.published_at >= now - timedelta(days=30)
+        ).order_by(Project.published_at.desc()).limit(5))],
         "latest_problems": [problem_json(p, session.scalar(select(func.count(func.distinct(ProblemEvidence.source_url))).where(ProblemEvidence.problem_id == p.id))) for p in session.scalars(select(Problem).order_by(Problem.last_seen_at.desc()).limit(5))],
         "latest_ideas": [idea_json(i) for i in session.scalars(
             select(SolutionIdea).order_by(SolutionIdea.created_at.desc()).limit(5)
         )],
-        "latest_signals": [signal_json(s) for s in session.scalars(select(EcosystemSignal).order_by(EcosystemSignal.discovered_at.desc()).limit(5))],
+        "latest_signals": [signal_json(s) for s in session.scalars(select(EcosystemSignal).where(EcosystemSignal.intelligence_status == "ACTIVE").order_by(EcosystemSignal.discovered_at.desc()).limit(5))],
     }
 
 
 def status_extra(session):
     checkpoints = list(session.scalars(select(SchedulerCheckpoint)))
     projects = list(session.scalars(select(Project)))
-    visible = [p for p in projects if p.visible]
+    visible = [p for p in projects if p.publication_status == "PUBLISHED"]
     scored = [p.opportunity_score for p in visible if p.opportunity_score is not None]
     evidence_levels = dict(session.execute(
         select(Problem.evidence_level, func.count()).group_by(Problem.evidence_level)
@@ -106,6 +108,14 @@ def status_extra(session):
     processed_item = session.scalar(select(Candidate.updated_at).where(Candidate.status != "queued").order_by(Candidate.updated_at.desc()).limit(1))
     return {
         "intelligence_counts": dashboard(session)["total"],
+        "publication_counts": {
+            "total_project_records": len(projects),
+            "verified_projects": sum(p.visible for p in projects),
+            "analyzed_projects": sum(bool(p.visible and p.problem_gate_status == "PASS" and p.problem_statement and p.problem_subject and (p.content or {}).get("what_uz")) for p in projects),
+            "published_projects": len(visible),
+            "review_required": sum(p.publication_status == "REVIEW_REQUIRED" for p in projects),
+            "archived_projects": sum(p.publication_status == "PUBLISHED" and aware(p.published_at) < today_start(now_utc()) for p in projects),
+        },
         "entity_type_counts": dict(session.execute(select(Candidate.entity_type, func.count()).group_by(Candidate.entity_type)).all()),
         "problem_gate_counts": dict(session.execute(select(Project.problem_gate_status, func.count()).group_by(Project.problem_gate_status)).all()),
         "scoring_summary": {
@@ -127,9 +137,9 @@ def status_extra(session):
 
 
 def sector_intelligence(session):
-    projects = list(session.scalars(select(Project).where(Project.visible.is_(True))))
+    projects = list(session.scalars(select(Project).where(Project.publication_status == "PUBLISHED")))
     problems = list(session.scalars(select(Problem)))
-    signals = list(session.scalars(select(EcosystemSignal)))
+    signals = list(session.scalars(select(EcosystemSignal).where(EcosystemSignal.intelligence_status == "ACTIVE")))
     result = []
     for key, label in SECTORS.items():
         ps = [p for p in projects if key in (p.sectors or [])]

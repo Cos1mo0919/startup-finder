@@ -139,6 +139,11 @@ class Discovery:
         if method == "RSS":
             raw, _ = self.web.get(source.url)
             links = parse_feed(raw)
+            if source.id == "show-hn-rss":
+                # The feed's URL is the creator's site; retain the HN submission
+                # separately as the discovery source, never as primary evidence.
+                links = [item for item in links if item.get("title", "").startswith("Show HN:")]
+                return links
             pattern = source.options.get("link_pattern")
             return [item for item in links if re.search(pattern, item["url"], re.I)] if pattern else links
         if method == "direct_page":

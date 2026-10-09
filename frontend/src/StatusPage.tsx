@@ -7,13 +7,13 @@ import { ErrorBox, External, Loading } from "./components";
 import { countLabels, errorLabels, statusLabels } from "./labels";
 import { useApi } from "./useApi";
 import { date } from "./utils";
-export function StatusPage() {
+export function StatusPage({adminKey}:{adminKey:string}) {
   const [refresh, setRefresh] = useState(0);
   useEffect(() => {
     const id = setInterval(() => setRefresh((v) => v + 1), 30000);
     return () => clearInterval(id);
   }, []);
-  const { data: s, error, loading } = useApi<Status>("/api/status", refresh);
+  const { data: s, error, loading } = useApi<Status>("/api/admin/status", refresh, adminKey);
   if (error)
     return (
       <main className="page">

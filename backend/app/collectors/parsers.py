@@ -20,9 +20,13 @@ def parse_feed(raw):
             url = safe_url(entry.get("link", ""))
         except FetchError:
             continue
-        entries.append(
-            {"url": url, "title": entry.get("title", ""), "published_at": parse_date(entry.get("published"))}
-        )
+        item = {"url": url, "title": entry.get("title", ""), "published_at": parse_date(entry.get("published"))}
+        # Show HN feeds link directly to the maker's site. Keep the submission
+        # as discovery provenance without treating it as official evidence.
+        comments = entry.get("comments", "")
+        if isinstance(comments, str) and comments.startswith("https://news.ycombinator.com/item?id="):
+            item["discovery_url"] = comments
+        entries.append(item)
     return entries
 
 

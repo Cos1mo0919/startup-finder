@@ -40,6 +40,7 @@ def test_minor_feature_and_unknown_problem_never_strong():
     assert (gate, reason, finding) == ("REJECT", "minor_feature", None)
     assert opportunity({}, 1, gate)["grade"] == "REJECTED"
     article = sample_article()
+    article.text = "Yangi platforma taqdim etildi."
     gate, reason, _ = problem_gate(sample_analysis(article), [article])
     assert (gate, reason) == ("PENDING", "pending_problem_analysis")
     assert opportunity({}, 2, gate)["grade"] == "PENDING"
@@ -172,21 +173,21 @@ def test_migration_and_read_only_api_preserve_project(settings, factory):
         assert dashboard["today"]["sources_checked"] == 1
         assert dashboard["today"]["links_seen"] == 1
         assert dashboard["latest_projects"][0]["id"] == original[0]
-        assert dashboard["latest_projects"][0]["affected_users"] == "Talabalar"
+        assert dashboard["latest_projects"][0]["affected_users"] == "Talaba"
         assert dashboard["latest_ideas"] == []
-        assert client.get("/api/problems").json()["total"] == 0
+        assert client.get("/api/problems").json()["total"] == 1
         assert client.get("/api/ideas").json() == []
         assert client.get("/api/signals").json() == []
         assert client.get("/api/sectors/intelligence").status_code == 200
         assert client.get("/api/problems/nonexistent").status_code == 404
         project_api = client.get("/api/projects/" + original[0]).json()
-        assert project_api["problem_gate_status"] == "PENDING"
+        assert project_api["problem_gate_status"] == "PASS"
         assert project_api["opportunity_grade"] == "PENDING"
-        assert client.get("/api/status").json()["problem_gate_counts"]["PENDING"] == 1
+        assert client.get("/api/admin/status", headers={"X-Admin-Key": "test-admin-key"}).json()["problem_gate_counts"]["PASS"] == 1
     with factory() as session:
         project = session.scalar(select(Project))
         assert (project.id, project.first_seen, project.published_at) == original
-        assert not session.scalars(select(ProjectProblemLink)).all()
+        assert len(session.scalars(select(ProjectProblemLink)).all()) == 1
         assert session.get(Candidate, article.url).entity_type == "PROJECT"
 
 
@@ -221,7 +222,7 @@ def test_neutral_queue_order_is_not_a_problem():
     assert entity_type(article) == "IGNORE"
 
 
-def test_show_hn_submission_is_signal_not_verified_project(settings, factory):
+def test_show_hn_submission_without_product_evidence_is_not_verified_project(settings, factory):
     from backend.app.db import EcosystemSignal, RegistrySource
     from backend.app.pipeline import Pipeline
     from tests.conftest import FakeDiscovery, FakeAnalyzer
@@ -234,11 +235,10 @@ def test_show_hn_submission_is_signal_not_verified_project(settings, factory):
         session.add(RegistrySource(id="show-hn-test", name="HN", url="https://hnrss.org/show",
                                    country="International", enabled=True))
     result = Pipeline(settings, factory, FakeDiscovery([article]), FakeAnalyzer()).run()
-    assert result["counts"]["ecosystem_signals"] == 1
+    assert result["counts"]["new_projects"] == 0
     with factory() as session:
         signal = session.scalar(select(EcosystemSignal))
-        assert signal.signal_type == "TECHNOLOGY"
-        assert signal.country == "International"
+        assert signal is None or signal.intelligence_status == "IGNORED"
         assert not session.scalars(select(Project)).all()
 
 
@@ -260,6 +260,7 @@ def test_historical_problem_year_uses_evidence_publication(settings, factory):
     article = sample_article()
     article.published_at = datetime(2022, 4, 11, tzinfo=timezone.utc)
     article.title = "Ayrim bank ilovalarida HUMO kartalari bilan muammolar"
+    article.title += " — muntazam uzilishlar"
     article.text = "Ayni damda bir qator bank ilovalarida HUMO kartalari bilan ishlashda uzilishlar kuzatilmoqda."
     result = Pipeline(settings, factory, FakeDiscovery([article]), FakeAnalyzer()).run(archive=True)
     assert result["counts"]["problems"] == 1
@@ -319,7 +320,8 @@ def test_one_event_article_can_cite_two_distinct_projects(settings, factory):
         assert len(sources) == 2
         assert {s.url for s in sources} == {article.url}
         assert len(candidate.project_ids) == 2
-        assert result["counts"]["event_projects"] >= 1
+        assert result["counts"]["event_projects"] == 0
+        assert all(p.publication_status == "REVIEW_REQUIRED" for p in projects)
 
 
 def test_keyless_event_report_extracts_named_founder_without_reusing_other_project(settings, factory):
@@ -344,7 +346,8 @@ def test_keyless_event_report_extracts_named_founder_without_reusing_other_proje
         assert {p.name for p in projects} == {"BITO", "TIZO"}
         assert {p.creator for p in projects} == {"Umidjon Po‘latov", "Akmal Karimov"}
         assert len(candidate.project_ids) == 2
-        assert result["counts"]["event_projects"] == 2
+        assert result["counts"]["event_projects"] == 0
+        assert all(p.publication_status == "REVIEW_REQUIRED" for p in projects)
 
 
 def test_event_report_without_event_word_in_title_still_extracts_project(settings, factory):
@@ -367,7 +370,7 @@ def test_event_report_without_event_word_in_title_still_extracts_project(setting
         assert project.name == "BITO"
         assert project.creator == "Umidjon Po‘latov"
         assert project.event_id
-    assert result["counts"]["event_projects"] == 1
+    assert result["counts"]["event_projects"] == 0
 
 
 def test_event_report_uses_named_forum_for_followup_queries():
@@ -454,6 +457,7 @@ def test_existing_hidden_project_first_publication_is_counted_as_new(settings, f
         project = session.scalar(select(Project))
         original_id = project.id
         project.visible = False
+        project.publication_status = "REVIEW_REQUIRED"
         session.get(Candidate, article.url).status = "queued"
     result = Pipeline(settings, factory, FakeDiscovery([]), FakeAnalyzer()).run(archive=True, discover=False)
     assert result["counts"]["new_projects"] == 1, result
@@ -545,7 +549,7 @@ def test_pipeline_classifies_standalone_problem_without_product(settings, factor
 
     article = sample_article()
     article.title = "Klinikalarda qo‘ng‘iroq muammosi"
-    article.text = "Klinika mijozlari javobsiz qo‘ng‘iroqlar sabab vaqt yo‘qotadi."
+    article.text = "Klinika mijozlari muntazam javobsiz qo‘ng‘iroqlar sabab vaqt yo‘qotadi."
     result = Pipeline(settings, factory, FakeDiscovery([article]), FakeAnalyzer()).run()
     assert result["counts"]["problems"] == 1
     with factory() as session:

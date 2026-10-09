@@ -21,16 +21,18 @@ from tests.conftest import sample_article, FakeDiscovery
         "In Uzbekistan John Smith developed a project “AquaSense” and presented a prototype for farmers.",
     ],
 )
-def test_real_extractor_publishes_without_ai(settings, factory, kind, text):
+def test_real_extractor_preserves_incomplete_project_without_ai(settings, factory, kind, text):
     article = sample_article("AquaSense")
     article.text = text
     article.kind = kind
     result = Pipeline(settings, factory, FakeDiscovery([article])).run()
-    assert result["counts"]["new_projects"] == 1
+    assert result["counts"]["new_projects"] == 0
+    assert result["counts"]["pending"] == 1
     assert result["counts"]["processed_ai"] == 0
     with factory() as session:
         p = session.scalar(select(Project))
         assert p.visible and p.creator and p.confidence >= settings.evidence_min_score
+        assert p.publication_status == "REVIEW_REQUIRED"
         assert p.content["rating_method"] == "deterministic_fallback"
         assert not p.content["ai_analysis_uz"]
         identity, first_seen = p.id, p.first_seen
@@ -122,10 +124,11 @@ def test_company_launch_has_creator_evidence(settings, factory):
     a = sample_article("Uzbekistan Airways")
     a.text = "“Uzbekistan Airways” aviachiptalarni xarid qilish uchun mobil ilovani ishga tushirdi. Ushbu yangi ilova yo‘lovchilar uchun joy tanlash imkonini beradi."
     result = Pipeline(settings, factory, FakeDiscovery([a])).run()
-    assert result["counts"]["new_projects"] == 1
+    assert result["counts"]["new_projects"] == 0
     with factory() as s:
         p = s.scalar(select(Project))
         assert p.creator == "Uzbekistan Airways" and p.visible
+        assert p.publication_status == "REVIEW_REQUIRED"
 
 
 def test_empty_title_meta_uses_article_heading():
@@ -170,9 +173,10 @@ def test_unrelated_future_plan_does_not_veto_actual_launch(settings, factory):
     a = sample_article("Uzbekistan Airways")
     a.text = "“Uzbekistan Airways” aviachiptalarni xarid qilish uchun mobil ilovani ishga tushirdi. Ushbu yangi ilova yo‘lovchilar uchun joy tanlash imkonini beradi. Avvalroq boshqa aeroport qurilishi rejalashtirilayotgani haqida yozgandik."
     result = Pipeline(settings, factory, FakeDiscovery([a])).run()
-    assert result["counts"]["new_projects"] == 1
+    assert result["counts"]["new_projects"] == 0
     with factory() as s:
         assert s.scalar(select(Project)).visible
+        assert s.scalar(select(Project)).publication_status == "REVIEW_REQUIRED"
 
 
 def test_drain_does_not_rediscover_events(settings, factory):

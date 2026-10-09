@@ -22,6 +22,7 @@ def main():
             ai_api_key="",
             openai_api_key="",
             search_api_key="",
+            admin_api_key="test-admin-key",
         )
         engine, factory = make_db(settings.database_url)
         article = sample_article()

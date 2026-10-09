@@ -135,7 +135,7 @@ def test_missing_key_is_visible_configuration_state(settings, factory):
     )
     Discovery(settings, FakeWeb(), factory=factory).discover(now_utc())
     with TestClient(create_app(settings)) as client:
-        assert client.get("/api/sources").json()[0]["status"] == "NEEDS_CONFIG"
+        assert client.get("/api/admin/sources", headers={"X-Admin-Key": "test-admin-key"}).json()[0]["status"] == "NEEDS_CONFIG"
 
 
 def test_stop_filter_hides_unknown_creator_and_records_reasons(settings, factory):
@@ -145,7 +145,7 @@ def test_stop_filter_hides_unknown_creator_and_records_reasons(settings, factory
     Pipeline(settings, factory, FakeDiscovery([])).persist(analysis, [article], now_utc())
     with TestClient(create_app(settings)) as client:
         assert client.get("/api/projects?period=all").json()["total"] == 0
-        status = client.get("/api/status").json()
+        status = client.get("/api/admin/status", headers={"X-Admin-Key": "test-admin-key"}).json()
         assert status["evidence_summary"]["hidden_projects"] == 1
         assert "Muallif yoki jamoa tasdiqlanmagan" in status["rejected_candidates"][0]["reason_labels"]
         hidden = status["project_debug"][0]["id"]
@@ -156,10 +156,11 @@ def test_low_confidence_project_is_hidden(settings, factory):
     setup_source(settings, factory, reliability_score=0, kind="unknown")
     article = sample_article()
     result = Pipeline(settings, factory, FakeDiscovery([article]), FakeAnalyzer()).run()
-    assert result["counts"]["stop_filtered"] == 1
+    assert result["counts"]["pending"] == 1
     with factory() as session:
         project = session.scalar(select(Project))
         assert not project.visible and "low_evidence" in project.stop_reasons
+        assert project.publication_status == "REVIEW_REQUIRED"
 
 
 def test_evidence_roles_and_breakdown_are_separate_from_usefulness(settings, factory):

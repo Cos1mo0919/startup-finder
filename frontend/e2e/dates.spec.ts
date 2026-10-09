@@ -36,10 +36,10 @@ test("feed, detail and status render Uzbek month names in the browser", async ({
   await expect(page.locator(".card-date").first()).toHaveText(
     /\d{1,2} [a-z]+ 20\d{2}/,
   );
-  await page.getByRole("link", { name: "Batafsil", exact: true }).click();
-  await expect(page.getByText("Nashr sanasi", { exact: true })).toBeVisible();
+  await page.getByRole("link", { name: "AgroKo‘mak" }).click();
+  await expect(page.getByRole("heading", { name: "AgroKo‘mak" })).toBeVisible();
   await expect(page.locator("body")).not.toContainText(/20\d{2} M\d{2}/);
-  await page.route("**/api/status", async (route) => {
+  await page.route("**/api/admin/status", async (route) => {
     const response = await route.fetch();
     const body = await response.json();
     body.last_run = {
@@ -66,7 +66,9 @@ test("feed, detail and status render Uzbek month names in the browser", async ({
     body.runs = [body.last_run];
     await route.fulfill({ response, json: body });
   });
-  await page.goto("/status");
+  await page.goto("/admin");
+  await page.getByRole("textbox", { name: "Admin kaliti" }).fill("test-admin-key");
+  await page.getByRole("button", { name: "Kirish" }).click();
   await expect(
     page.getByRole("heading", { name: "Qidiruv holati" }),
   ).toBeVisible({ timeout: 15000 });

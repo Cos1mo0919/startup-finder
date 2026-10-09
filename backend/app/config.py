@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     ai_base_url: str = "https://api.openai.com/v1"
     ai_model: str = "gpt-4.1-mini"
     search_api_key: SecretStr = SecretStr("")
+    admin_api_key: SecretStr = SecretStr("")
     trusted_egress_proxy: bool = False
     scheduler_enabled: bool = True
     evidence_min_score: float = Field(default=5.0, ge=0, le=10)

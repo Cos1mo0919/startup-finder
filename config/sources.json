@@ -1365,17 +1365,12 @@
     "enabled": true,
     "collection_method": "RSS",
     "kind": "unknown",
-    "provides_projects": false,
+    "provides_projects": true,
     "provides_problem_signals": false,
     "provides_market_signals": true,
-    "purpose": "New product/technology submissions as low-confidence signals, not confirmed projects",
+    "purpose": "Creator project pages as global discovery leads; publication still requires verified problem and evidence",
     "parser_type": "RSS",
-    "options": {
-      "link_pattern": "^https://news\\.ycombinator\\.com/item\\?id=",
-      "article_hosts": [
-        "news.ycombinator.com"
-      ]
-    },
-    "notes": "Public hnrss.org feed and HN item pages checked with robots; submissions are signals only. Mirror is an independent provider."
+    "options": {},
+    "notes": "Public hnrss.org feed checked with robots; creator URLs are discovery leads, not automatically verified projects. Mirror is an independent provider."
   }
 ]

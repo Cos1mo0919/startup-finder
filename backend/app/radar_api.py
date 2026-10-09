@@ -78,7 +78,7 @@ def radar_status(session, threshold):
         session.scalars(select(RegistrySource).order_by(RegistrySource.priority.desc(), RegistrySource.name))
     )
     projects = list(session.scalars(select(Project)))
-    visible = [p for p in projects if p.visible]
+    visible = [p for p in projects if p.publication_status == "PUBLISHED"]
     events = list(session.scalars(select(Event).order_by(Event.discovered_at.desc()).limit(100)))
     rejected = list(
         session.scalars(select(RejectedCandidate).order_by(RejectedCandidate.rejected_at.desc()).limit(30))
@@ -119,7 +119,7 @@ def radar_status(session, threshold):
                 "last_checked_at": iso(e.last_checked_at),
                 "last_error": e.last_error,
                 "discovered_at": iso(e.discovered_at),
-                "projects_found": sum(p.visible and p.event_id == e.id for p in projects),
+                "projects_found": sum(p.publication_status == "PUBLISHED" and p.event_id == e.id for p in projects),
             }
             for e in events
         ],
@@ -134,7 +134,7 @@ def radar_status(session, threshold):
             "total": session.scalar(select(func.count()).select_from(Candidate)),
             "accepted": len(visible),
             "duplicates": sum(r.counts.get("duplicates", 0) for r in session.scalars(select(Run))),
-            "stop_filtered": session.scalar(select(func.count()).select_from(RejectedCandidate)),
+            "stop_filtered": session.scalar(select(func.count()).select_from(Candidate).where(Candidate.status == "rejected")),
             "ecosystem_signals": session.scalar(select(func.count()).select_from(EcosystemSignal)),
         },
         "evidence_summary": {
@@ -142,7 +142,7 @@ def radar_status(session, threshold):
             "low_confidence": sum(p.confidence < threshold for p in projects),
             "single_source": sum(len(p.sources) == 1 for p in visible),
             "multiple_sources": sum(len(p.sources) > 1 for p in visible),
-            "hidden_projects": sum(not p.visible for p in projects),
+            "hidden_projects": sum(p.publication_status != "PUBLISHED" for p in projects),
             "threshold": threshold,
         },
         "rejected_candidates": [
@@ -171,6 +171,8 @@ def radar_status(session, threshold):
                 "id": p.id,
                 "name": p.name,
                 "visible": p.visible,
+                "publication_status": p.publication_status,
+                "publication_reason": p.publication_reason,
                 "confidence": p.confidence,
                 "real_project_confidence": p.real_project_confidence,
                 "signals": p.detection_signals,
@@ -185,7 +187,7 @@ def sector_stats(session, days=30):
     now = now_utc()
     projects = list(
         session.scalars(
-            select(Project).where(Project.visible.is_(True), Project.first_seen >= now - timedelta(days=days))
+            select(Project).where(Project.publication_status == "PUBLISHED", Project.published_at >= now - timedelta(days=days))
         )
     )
     items = []
@@ -196,7 +198,7 @@ def sector_stats(session, days=30):
                 "sector": sector,
                 "label": label,
                 "count": len(members),
-                "today": sum(aware(p.first_seen) >= today_start(now) for p in members),
+                "today": sum(aware(p.published_at) >= today_start(now) for p in members),
             }
         )
     return {

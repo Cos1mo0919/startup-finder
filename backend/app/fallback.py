@@ -19,6 +19,10 @@ PERSON = rf"{TOKEN}(?:\s+{TOKEN}){{1,3}}"
 def project_name(article):
     candidates = []
     body = article.text.split("\nHavolalar:", 1)[0]
+    if article.source_id == "show-hn-rss" and article.discovery_title.startswith("Show HN:"):
+        launch_name = re.match(r"Show HN:\s*([A-Za-z][A-Za-z0-9 .-]{2,50}?)(?:\s+[–—:-]\s+|$)", article.discovery_title)
+        if launch_name and launch_name[1].strip().lower() in (article.title + " " + body[:1200]).lower():
+            candidates.append(launch_name[1].strip())
     # Unquoted brands must be directly described as a product, never just a company mention.
     for m in re.finditer(
         rf"\b({TOKEN}(?:[.-]{TOKEN})?)\s+(?:nomli\s+)?(?:startapi|startap|platformasi|platforma|ilovasi|ilova|tizimi|servisi|loyihasi|prototipi)\b",
@@ -177,10 +181,13 @@ def extract(article, names=None):
         if not creator:
             continue
         native = is_uzbek(quote)
+        global_launch = article.source_id == "show-hn-rss" and not re.search(r"o[‘']zbekiston|uzbekistan|ўзбекистон|узбекистан", quote, re.I)
         description = (
             quote[:1400]
             if native
-            else f"Ushbu loyiha O‘zbekiston bilan bog‘liq. Manbada {name} loyihasi va uning yaratuvchisi — {creator} haqida ma’lumot berilgan. Asl dalil quyida keltirilgan; to‘liq tarjima uchun AI tahlili kerak."
+            else (f"Ushbu yangi loyiha haqida manbada {name} loyihasi va uning yaratuvchisi — {creator} haqida ma’lumot berilgan. Asl dalil quyida keltirilgan; to‘liq tarjima uchun AI tahlili kerak."
+                  if global_launch else
+                  f"Ushbu loyiha O‘zbekiston bilan bog‘liq. Manbada {name} loyihasi va uning yaratuvchisi — {creator} haqida ma’lumot berilgan. Asl dalil quyida keltirilgan; to‘liq tarjima uchun AI tahlili kerak.")
         )
         facts = [
             Fact(
@@ -233,7 +240,9 @@ def extract(article, names=None):
         )
         return Analysis(
             is_project=True,
-            uzbekistan_related=True,
+            uzbekistan_related=not global_launch,
+            country="International" if global_launch else "Uzbekistan",
+            main_url=article.url if global_launch else None,
             name=name,
             creator=creator,
             organization=organization,

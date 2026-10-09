@@ -56,6 +56,12 @@ export type Project = {
   opportunity_score: number | null;
   opportunity_grade: string;
   opportunity_details?: Record<string, unknown>;
+  publication_status: string;
+  solution_uz: string;
+  primary_evidence_url: string | null;
+  official_url: string | null;
+  discovery_source_url?: string | null;
+  secondary_problems?: { problem_id: string; statement: string; source_url: string }[];
   related_problems?: { id: string; title_uz: string }[];
   main_url?: string;
   aliases?: string[];

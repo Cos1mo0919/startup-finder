@@ -1,7 +1,8 @@
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
+import hmac
 from typing import Literal
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import String, cast, func, or_, select, text
@@ -12,11 +13,13 @@ from .sectors import SECTORS, LEGACY
 from .config import Settings
 from .dates import TASHKENT, today_start
 from .db import (Candidate, EcosystemSignal, Problem, ProblemEvidence, Project,
-                 ProjectProblemLink, Run, SolutionIdea, aware, make_db, now_utc)
+                 ProjectProblemLink, RegistrySource, Run, SolutionIdea, aware, make_db, now_utc)
 from .scheduler import make_scheduler
 from .schemas import CATEGORIES
 from .intelligence import migrate_existing_problems
 from .intelligence_api import dashboard, idea_json, problem_json, sector_intelligence, signal_json, status_extra
+from .signal_quality import audit_signals
+from .publication import lifecycle_stage, synchronize_candidate_publication
 
 
 def iso(value):
@@ -70,6 +73,12 @@ def serialize_project(project, detail=False):
         opportunity_score=project.opportunity_score,
         opportunity_grade=project.opportunity_grade,
         opportunity_details={"groups": (project.opportunity_details or {}).get("groups", {})},
+        publication_status=project.publication_status,
+        lifecycle_stage=lifecycle_stage(project),
+        solution_uz=(content.get("how_uz") or content.get("what_uz") or ""),
+        primary_evidence_url=project.evidence_records[0].url if project.evidence_records else None,
+        official_url=project.main_url,
+        discovery_source_url=project.discovery_source_url,
     )
     if detail:
         result.update(
@@ -81,6 +90,7 @@ def serialize_project(project, detail=False):
             rating_components=project.rating_components,
             confidence_components=project.confidence_components,
             opportunity_details=project.opportunity_details,
+            secondary_problems=project.secondary_problems or [],
             sources=[
                 {
                     "url": s.url,
@@ -100,7 +110,9 @@ def create_app(settings=None):
     engine, factory = make_db(settings.database_url)
     seed_registry(factory, settings.sources_file)
     audit_existing(factory, settings.evidence_min_score)
+    audit_signals(factory)
     migrate_existing_problems(factory)
+    synchronize_candidate_publication(factory)
     scheduler = make_scheduler(settings, factory)
 
     @asynccontextmanager
@@ -112,8 +124,15 @@ def create_app(settings=None):
             scheduler.shutdown(wait=True)
         engine.dispose()
 
-    app = FastAPI(title="O‘zbekiston loyihalari", lifespan=lifespan)
+    app = FastAPI(title="izlanish loyihalari", lifespan=lifespan)
     app.state.factory, app.state.scheduler = factory, scheduler
+
+    def require_admin(x_admin_key: str = Header(default="")):
+        expected = settings.admin_api_key.get_secret_value()
+        if not expected:
+            raise HTTPException(503, "Admin kaliti sozlanmagan")
+        if not hmac.compare_digest(x_admin_key, expected):
+            raise HTTPException(401, "Admin kaliti noto‘g‘ri")
 
     @app.middleware("http")
     async def secure_headers(request, call_next):
@@ -130,7 +149,7 @@ def create_app(settings=None):
     def health():
         with factory() as session:
             session.execute(text("SELECT 1"))
-        return {"status": "ok", "stage": "Uzbekistan"}
+        return {"status": "ok", "stage": "Uzbekistan and Global"}
 
     @app.get("/api/meta")
     def meta():
@@ -148,7 +167,7 @@ def create_app(settings=None):
         country: str = "",
         city: str = "",
         audience: Literal["", "individual", "business", "both", "unknown"] = "",
-        period: Literal["all", "today", "7d", "30d"] = "today",
+        period: Literal["all", "today", "7d", "30d"] = "all",
         year: int | None = Query(default=None, ge=2022, le=2100),
         min_rating: float = Query(default=0, ge=0, le=10),
         grade: str = "",
@@ -158,7 +177,7 @@ def create_app(settings=None):
         page: int = Query(default=1, ge=1, le=10000),
         page_size: int = Query(default=12, ge=1, le=50),
     ):
-        query = select(Project).where(Project.visible.is_(True))
+        query = select(Project).where(Project.publication_status == "PUBLISHED")
         if q.strip():
             term = q.strip()
             query = query.where(
@@ -180,7 +199,9 @@ def create_app(settings=None):
                     cast(Project.sectors, String).contains('"' + sector + '"', autoescape=True),
                 )
             )
-        if country:
+        if country == "global":
+            query = query.where(Project.country != "Uzbekistan")
+        elif country:
             query = query.where(Project.country == country)
         if city:
             query = query.where(Project.city.icontains(city, autoescape=True))
@@ -200,16 +221,16 @@ def create_app(settings=None):
             query = query.where(Project.confidence >= min_evidence)
         now = now_utc()
         if period == "today":
-            query = query.where(Project.first_seen >= today_start(now))
+            query = query.where(Project.published_at >= today_start(now))
         elif period in ("7d", "30d"):
-            query = query.where(Project.first_seen >= now - timedelta(days=7 if period == "7d" else 30))
+            query = query.where(Project.published_at >= now - timedelta(days=7 if period == "7d" else 30))
         if year:
             query = query.where(
                 Project.published_at >= datetime(year, 1, 1, tzinfo=timezone.utc),
                 Project.published_at < datetime(year + 1, 1, 1, tzinfo=timezone.utc),
             )
         order = {
-            "date": Project.first_seen,
+            "date": Project.published_at,
             "rating": Project.rating,
             "usefulness": Project.rating,
             "confidence": Project.confidence,
@@ -230,7 +251,7 @@ def create_app(settings=None):
     def project_detail(project_id: str):
         with factory() as session:
             project = session.get(Project, project_id)
-            if project is None or not project.visible:
+            if project is None or project.publication_status != "PUBLISHED":
                 raise HTTPException(404, "Loyiha topilmadi")
             result = serialize_project(project, detail=True)
             links = session.scalars(select(ProjectProblemLink).where(ProjectProblemLink.project_id == project_id)).all()
@@ -238,7 +259,8 @@ def create_app(settings=None):
                                           for link in links if (problem := session.get(Problem, link.problem_id))]
             return result
 
-    @app.get("/api/status")
+    @app.get("/api/admin/status", dependencies=[Depends(require_admin)])
+    @app.get("/api/status", dependencies=[Depends(require_admin)], include_in_schema=False)
     def status():
         with factory() as session:
             runs = session.scalars(select(Run).order_by(Run.id.desc()).limit(10)).all()
@@ -255,11 +277,11 @@ def create_app(settings=None):
                 }
                 for r in runs
             ]
-            total = session.scalar(select(func.count()).select_from(Project).where(Project.visible.is_(True)))
+            total = session.scalar(select(func.count()).select_from(Project).where(Project.publication_status == "PUBLISHED"))
             today = session.scalar(
                 select(func.count())
                 .select_from(Project)
-                .where(Project.first_seen >= today_start(now_utc()), Project.visible.is_(True))
+                .where(Project.published_at >= today_start(now_utc()), Project.publication_status == "PUBLISHED")
             )
             pending = session.scalar(
                 select(func.count()).select_from(Candidate).where(Candidate.status == "pending")
@@ -282,6 +304,45 @@ def create_app(settings=None):
             **radar,
             **intelligence,
         }
+
+    @app.get("/api/admin/review", dependencies=[Depends(require_admin)])
+    def review_queue(page: int = Query(1, ge=1), page_size: int = Query(30, ge=1, le=100)):
+        with factory() as session:
+            query = select(Candidate).where(Candidate.status.in_(["pending", "review_required", "error"]))
+            total = session.scalar(select(func.count()).select_from(query.subquery()))
+            rows = session.scalars(query.order_by(Candidate.updated_at.desc()).offset((page - 1) * page_size).limit(page_size)).all()
+            return {"total": total, "items": [{
+                "url": c.url, "title": (c.article or {}).get("title", ""), "source_id": c.source_id,
+                "status": c.status, "reason": c.reason, "detector_result": c.detector_result,
+                "creator": next((p.creator for pid in c.project_ids or [] if (p := session.get(Project, pid))), ""),
+                "canonical_project": next((p.name for pid in c.project_ids or [] if (p := session.get(Project, pid))), ""),
+                "primary_problem": next((p.problem_statement for pid in c.project_ids or [] if (p := session.get(Project, pid))), ""),
+                "evidence": next(([{"url": e.url, "type": e.evidence_type, "quote": e.quote} for e in p.evidence_records[:5]] for pid in c.project_ids or [] if (p := session.get(Project, pid))), []),
+                "confidence": next((p.confidence for pid in c.project_ids or [] if (p := session.get(Project, pid))), None),
+                "review_decision": c.review_decision,
+            } for c in rows]}
+
+    @app.post("/api/admin/review/action", dependencies=[Depends(require_admin)])
+    def review_action(url: str, action: Literal["ACCEPT", "REJECT", "KEEP_FOR_REVIEW"], reason: str = ""):
+        allowed = {"not_project", "no_meaningful_problem", "minor_feature", "duplicate", "insufficient_evidence", "missing_creator", "signal_only", "irrelevant", "old_irrelevant_content", "other"}
+        if action == "REJECT" and reason not in allowed:
+            raise HTTPException(422, "Rad etish sababi kerak")
+        with factory.begin() as session:
+            candidate = session.get(Candidate, url)
+            if not candidate or candidate.status not in {"pending", "review_required", "error"}:
+                raise HTTPException(404, "Ko‘rib chiqiladigan nomzod topilmadi")
+            candidate.review_decision = action
+            candidate.updated_at = now_utc()
+            if action == "REJECT":
+                candidate.status, candidate.reason = "rejected", reason
+                from .evidence import record_rejection
+                record_rejection(session, url, (candidate.article or {}).get("title", ""), [reason])
+            elif action == "ACCEPT":
+                # Acceptance means eligible for the normal pipeline, not publication.
+                candidate.status, candidate.reason = "queued", "admin_recheck"
+            else:
+                candidate.status, candidate.reason = "review_required", reason or candidate.reason
+        return {"url": url, "action": action, "status": candidate.status, "reason": candidate.reason}
 
     @app.get("/api/intelligence/dashboard")
     def intelligence_dashboard():
@@ -363,10 +424,45 @@ def create_app(settings=None):
         with factory() as session:
             return sector_stats(session)
 
-    @app.get("/api/sources")
+    @app.get("/api/public/sources")
+    def public_sources():
+        with factory() as session:
+            sources = session.scalars(select(RegistrySource).where(RegistrySource.enabled.is_(True)).order_by(RegistrySource.name)).all()
+            return [{"id": s.id, "name": s.name, "url": s.url,
+                     "group": "Global startup manbalari" if s.country and s.country != "Uzbekistan" else
+                              "Universitetlar" if s.source_type == "university" else
+                              "Tadbir va akseleratorlar" if s.source_type in {"hackathon", "event", "accelerator"} else
+                              "Startap platformalari" if s.source_type == "startup_platform" else "Nashrlar va tashkilotlar"}
+                    for s in sources if s.collection_method != "search"]
+
+    @app.get("/api/admin/sources", dependencies=[Depends(require_admin)])
+    @app.get("/api/sources", dependencies=[Depends(require_admin)], include_in_schema=False)
     def source_registry():
         with factory() as session:
             return radar_status(session, settings.evidence_min_score)["sources"]
+
+    @app.get("/api/admin/source-yield", dependencies=[Depends(require_admin)])
+    def source_yield():
+        with factory() as session:
+            candidates = list(session.scalars(select(Candidate)))
+            projects = {p.id: p for p in session.scalars(select(Project))}
+            result = []
+            for source in session.scalars(select(RegistrySource).order_by(RegistrySource.priority.desc(), RegistrySource.id)):
+                rows = [c for c in candidates if c.source_id == source.id]
+                linked = {pid for c in rows for pid in c.project_ids or [] if pid in projects}
+                linked.update(p.id for p in projects.values() if any(record.source_id == source.id for record in p.sources))
+                reasons = {}
+                for c in rows:
+                    if c.status == "rejected":
+                        reasons[c.reason] = reasons.get(c.reason, 0) + 1
+                result.append({"source_id": source.id, "name": source.name, "enabled": source.enabled,
+                               "items_fetched": source.candidates_found, "candidate_records": len(rows),
+                               "project_candidates": sum(c.detector_result == "PROJECT_CANDIDATE" for c in rows),
+                               "verified_projects": sum(projects[pid].visible for pid in linked),
+                               "published_projects": sum(projects[pid].publication_status == "PUBLISHED" for pid in linked),
+                               "rejected_items": sum(c.status == "rejected" for c in rows),
+                               "dominant_rejection_reasons": sorted(reasons.items(), key=lambda pair: -pair[1])[:3]})
+            return result
 
     if (settings.frontend_dist / "assets").exists():
         app.mount("/assets", StaticFiles(directory=settings.frontend_dist / "assets"), name="assets")

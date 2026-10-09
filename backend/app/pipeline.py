@@ -20,7 +20,7 @@ from .db import (
     now_utc,
 )
 from .dedup import find_duplicate, fingerprint
-from .detection import material_type, normalize
+from .detection import material_type, normalize, project_detector
 from .network import FetchError, WebClient, canonical_url
 from .ranking import score
 from .evidence import attach_evidence, audit_existing, evaluate_project, record_rejection
@@ -28,7 +28,9 @@ from .events import save_event
 from .registry import seed_registry
 from .sectors import classify_sectors
 from .schemas import Analysis, Article
-from .intelligence import MINOR, cited_problem_scores, entity_type, problem_from_article, problem_gate, upsert_problem, opportunity
+from .intelligence import MINOR, cited_problem_scores, entity_type, meaningful_problem, problem_from_article, problems_from_article, problem_gate, upsert_problem, opportunity
+from .publication import refresh_publication
+from .signal_quality import signal_status
 
 logger = logging.getLogger(__name__)
 
@@ -96,7 +98,7 @@ class Pipeline:
         with self.factory.begin() as session:
             project = find_duplicate(session, analysis, [a.url for a in articles], allow_shared_source)
             created = project is None
-            previously_visible = bool(project and project.visible)
+            previously_visible = bool(project and project.publication_status == "PUBLISHED")
             if project is None:
                 project = Project(
                     name=analysis.name,
@@ -107,6 +109,7 @@ class Pipeline:
                     event=analysis.event,
                     country=analysis.country,
                     main_url=canonical_url(analysis.main_url) if analysis.main_url else None,
+                    discovery_source_url=articles[0].discovery_url,
                     fingerprint=fingerprint(analysis),
                     aliases=analysis.aliases,
                     first_seen=now,
@@ -154,6 +157,8 @@ class Pipeline:
                         setattr(project, field, getattr(selected, field))
                 if not project.main_url and selected.main_url:
                     project.main_url = canonical_url(selected.main_url)
+                if not project.discovery_source_url and articles[0].discovery_url:
+                    project.discovery_source_url = articles[0].discovery_url
             if articles[0].event_id and (
                 not project.event_id
                 or (
@@ -172,6 +177,7 @@ class Pipeline:
                     project.sources.append(
                         Source(
                             url=url,
+                            source_id=article.source_id if article.source_id and session.get(RegistrySource, article.source_id) else None,
                             publisher=article.publisher,
                             kind=article.kind,
                             published_at=article.published_at,
@@ -193,18 +199,36 @@ class Pipeline:
             gate, gate_reason, finding = problem_gate(stored, articles)
             project.problem_gate_status, project.problem_gate_reason = gate, gate_reason
             if finding:
+                findings = [item for article in articles for item in problems_from_article(article, stored)]
+                # Prefer a directly named problem with concrete cost or consequence.
+                findings.sort(key=lambda item: (
+                    bool(normalize(stored.name) in normalize(item["quote"])),
+                    bool(cited_problem_scores(item).get("current_cost")),
+                    bool(cited_problem_scores(item).get("pain_strength")),
+                ), reverse=True)
+                finding = findings[0] if findings else finding
                 project.problem_statement = finding["statement"]
                 project.problem_subject = finding["subject"]
                 project.problem_scope = finding["scope"]
                 project.problem_evidence_summary = finding["quote"]
                 upsert_problem(session, finding, project.primary_sector, project.country, project)
+                secondaries = []
+                for item in findings[1:4]:
+                    if normalize(item["statement"]) == normalize(finding["statement"]):
+                        continue
+                    linked = upsert_problem(session, item, project.primary_sector, project.country, project)
+                    secondaries.append({"problem_id": linked.id, "statement": item["statement"], "source_url": item["source_url"]})
+                project.secondary_problems = secondaries
             assessment = opportunity(cited_problem_scores(finding) if finding else {}, 2, gate, [r for r in reasons if r in ("creator_unknown", "existence_unconfirmed", "missing_source")])
             project.opportunity_details = assessment
             project.opportunity_score = assessment["score"]
             project.opportunity_grade = assessment["grade"]
-            self.last_persist_visible = project.visible
+            refresh_publication(project)
+            self.last_project_status = project.publication_status
+            self.last_project_reason = project.publication_reason
+            self.last_persist_visible = project.publication_status == "PUBLISHED"
             self.last_newly_published = bool(
-                project.visible and (not previously_visible or project.id in self.pre_run_hidden)
+                self.last_persist_visible and (not previously_visible or project.id in self.pre_run_hidden)
             )
             if self.last_newly_published:
                 self.pre_run_hidden.discard(project.id)
@@ -280,7 +304,7 @@ class Pipeline:
         status = "failed"
         try:
             with self.factory() as session:
-                self.pre_run_hidden = set(session.scalars(select(Project.id).where(Project.visible.is_(False))))
+                self.pre_run_hidden = set(session.scalars(select(Project.id).where(Project.publication_status != "PUBLISHED")))
             audit_existing(self.factory, self.settings.evidence_min_score)
             if hasattr(self.discovery, "window"):
                 self.discovery.window = window
@@ -307,6 +331,7 @@ class Pipeline:
                                 "_queued": True,
                                 "_fetch_url": item["url"],
                                 "title": item.get("title", ""),
+                                "_discovery_url": item.get("discovery_url"),
                                 "_feed_date": item["published_at"].isoformat()
                                 if item.get("published_at")
                                 else None,
@@ -369,6 +394,9 @@ class Pipeline:
                 )
                 if only_urls:
                     candidates = [c for c in candidates if c.url in only_urls]
+                allowed_source_ids = getattr(self.discovery, "allowed_source_ids", None)
+                if allowed_source_ids is not None:
+                    candidates = [c for c in candidates if c.source_id in allowed_source_ids]
             if window:
                 candidates = [
                     c
@@ -397,6 +425,8 @@ class Pipeline:
                         )
                     article.source_id = candidate.source_id or article.source_id
                     article.event_id = candidate.event_id or article.event_id
+                    article.discovery_url = (cached or {}).get("_discovery_url") or article.discovery_url
+                    article.discovery_title = (cached or {}).get("title", "") or article.discovery_title
                     with self.factory.begin() as session:
                         row = session.get(Candidate, url)
                         row.article = article.model_dump(mode="json")
@@ -425,8 +455,17 @@ class Pipeline:
                     stage = "classification"
                     classification = material_type(article)
                     public_type = entity_type(article)
+                    detector, detector_reason = project_detector(article)
+                    if detector == "SIGNAL_ONLY":
+                        public_type = "SIGNAL"
+                    elif detector == "NON_PROJECT":
+                        public_type = "IGNORE"
+                    elif detector == "PROJECT_CANDIDATE":
+                        public_type = "PROJECT"
                     with self.factory.begin() as session:
-                        session.get(Candidate, url).entity_type = public_type
+                        row = session.get(Candidate, url)
+                        row.entity_type = public_type
+                        row.detector_result = detector
                     event_id, event_created = (
                         save_event(self.factory, article, start)
                         if classification in ("PROJECT", "EVENT")
@@ -454,6 +493,7 @@ class Pipeline:
                                         country=source.country if source and source.country else "Uzbekistan",
                                         region=source.region if source else "Uzbekistan",
                                         confidence=0.3 if is_hn else 0.5,
+                                        intelligence_status=signal_status(article.title, article.text),
                                         discovered_at=start,
                                     )
                                 )
@@ -461,7 +501,7 @@ class Pipeline:
                         counts["ecosystem_signals"] += 1
                         bucket["ecosystem"] += 1
                         continue
-                    if public_type == "PROBLEM":
+                    if public_type == "PROBLEM" and meaningful_problem(article):
                         finding = problem_from_article(article)
                         if finding:
                             with self.factory.begin() as session:
@@ -475,7 +515,7 @@ class Pipeline:
                         bucket["events"] += 1
                         continue
                     if public_type != "PROJECT":
-                        reason = "minor_feature" if MINOR.search(article.title + " " + article.text[:2000]) else early_reason(article) or "not_project"
+                        reason = "minor_feature" if MINOR.search(article.title + " " + article.text[:2000]) else detector_reason or early_reason(article) or "not_project"
                         self.mark(url, "rejected", reason)
                         reasons[reason] += 1
                         counts["rejected"] += 1
@@ -537,6 +577,10 @@ class Pipeline:
                                 if source:
                                     source.new_projects += 1
                         self.mark(url, "published", "")
+                    elif self.last_project_status == "REVIEW_REQUIRED":
+                        counts["pending"] += 1
+                        bucket["pending"] += 1
+                        self.mark(url, "review_required", self.last_project_reason)
                     else:
                         counts["rejected"] += 1
                         counts["stop_filtered"] += 1

@@ -25,6 +25,10 @@ ADDITIONS = {
         "opportunity_score": "FLOAT",
         "opportunity_grade": "VARCHAR(20) NOT NULL DEFAULT 'PENDING'",
         "opportunity_details": "JSON NOT NULL DEFAULT '{}'",
+        "publication_status": "VARCHAR(30) NOT NULL DEFAULT 'DISCOVERED'",
+        "publication_reason": "VARCHAR(100) NOT NULL DEFAULT ''",
+        "secondary_problems": "JSON NOT NULL DEFAULT '[]'",
+        "discovery_source_url": "TEXT",
     },
     "project_sources": {"source_id": "VARCHAR(80) REFERENCES sources(id)"},
     "runs": {"details": "JSON NOT NULL DEFAULT '{}'"},
@@ -38,6 +42,8 @@ ADDITIONS = {
         "event_id": "VARCHAR(36) REFERENCES events(id)",
         "entity_type": "VARCHAR(30) NOT NULL DEFAULT 'IGNORE'",
         "project_ids": "JSON NOT NULL DEFAULT '[]'",
+        "detector_result": "VARCHAR(30) NOT NULL DEFAULT 'NEEDS_EXTRACTION'",
+        "review_decision": "VARCHAR(30) NOT NULL DEFAULT ''",
     },
     "sources": {
         "country": "VARCHAR(100) NOT NULL DEFAULT ''",
@@ -59,6 +65,7 @@ ADDITIONS = {
         "region": "VARCHAR(120) NOT NULL DEFAULT ''",
         "sector": "VARCHAR(80) NOT NULL DEFAULT ''",
         "confidence": "FLOAT NOT NULL DEFAULT 0",
+        "intelligence_status": "VARCHAR(30) NOT NULL DEFAULT 'ACTIVE'",
     },
     "problems": {"first_evidence_published_at": "DATETIME"},
 }
@@ -140,4 +147,7 @@ def migrate(engine, metadata):
                 conn.execute(text("ALTER TABLE project_sources ADD CONSTRAINT uq_project_source_url UNIQUE (project_id, url)"))
         if conn.scalar(text("SELECT version FROM schema_migrations WHERE version=5")) is None:
             conn.execute(text("INSERT INTO schema_migrations(version,applied_at) VALUES(5,:at)"),
+                         {"at": datetime.now(timezone.utc).isoformat()})
+        if conn.scalar(text("SELECT version FROM schema_migrations WHERE version=6")) is None:
+            conn.execute(text("INSERT INTO schema_migrations(version,applied_at) VALUES(6,:at)"),
                          {"at": datetime.now(timezone.utc).isoformat()})

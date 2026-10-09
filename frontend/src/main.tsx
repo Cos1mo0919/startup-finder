@@ -5,7 +5,7 @@ import { Footer, Header } from "./components";
 import { Detail } from "./Detail";
 import { Home } from "./Home";
 import { ArchivePage, DashboardPage, ProblemsPage, ProblemDetailPage, IdeasPage, IdeaDetailPage, SignalsPage, SectorsPage, SourcesPage } from "./Intelligence";
-import { StatusPage } from "./StatusPage";
+import { AdminPage } from "./Admin";
 import "./style.css";
 import "./intelligence-theme.css";
 function NotFound() {
@@ -32,7 +32,11 @@ function App() {
         <Route path="/signallar" element={<SignalsPage />} />
         <Route path="/sektorlar" element={<SectorsPage />} />
         <Route path="/manbalar" element={<SourcesPage />} />
-        <Route path="/status" element={<StatusPage />} />
+        <Route path="/admin" element={<AdminPage />} />
+        <Route path="/admin/status" element={<AdminPage />} />
+        <Route path="/admin/review" element={<AdminPage section="review" />} />
+        <Route path="/admin/sources" element={<AdminPage section="sources" />} />
+        <Route path="/status" element={<AdminPage />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
       <Footer />

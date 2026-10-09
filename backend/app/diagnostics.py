@@ -34,7 +34,7 @@ def inspect_candidate(session, url):
         "id": candidate_id(url),
         "url": url,
         "title": candidate.article.get("title", "") if candidate else "",
-        "pending_reason": candidate.reason if candidate and candidate.status == "pending" else None,
+        "pending_reason": candidate.reason if candidate and candidate.status in ("pending", "review_required") else None,
         "status": candidate.status if candidate else "not_discovered",
         "reason": candidate.reason
         if candidate
@@ -91,6 +91,10 @@ REASON_LABELS = {
     "needs_ai_or_more_evidence": "AI yoki qo‘shimcha dalil kutilmoqda",
     "minor_feature": "Mustaqil muammoni hal qilmaydigan kichik funksiya",
     "pending_problem_analysis": "Muammo dalili qo‘shimcha tekshirilmoqda",
+    "missing_target_user": "Muammo kimga taalluqli ekani noma’lum",
+    "missing_solution": "Yechim mexanizmi aniq emas",
+    "no_meaningful_problem": "Mazmunli mustaqil muammo topilmadi",
+    "source_backed_problem_and_solution": "Manbali muammo va yechim tasdiqlandi",
 }
 ORIGIN_LABELS = {
     "web_search": "Internet qidiruvi",
@@ -133,7 +137,7 @@ def candidate_diagnostics(session):
     from .db import Candidate, Project, RejectedCandidate, Run
 
     candidates = list(session.scalars(select(Candidate)))
-    published = list(session.scalars(select(Project).where(Project.visible.is_(True))))
+    published = list(session.scalars(select(Project).where(Project.publication_status == "PUBLISHED")))
     reasons = Counter()
     candidate_states = {c.url: c.status for c in candidates}
     for row in session.scalars(select(RejectedCandidate)):
@@ -171,6 +175,7 @@ def candidate_diagnostics(session):
                 for c in candidates
             ),
             "queued": sum(c.status == "queued" for c in candidates),
+            "review_required": sum(c.status == "review_required" for c in candidates),
             "processed_ai": sum(c.analysis_mode == "ai" for c in candidates),
             "processed_fallback": sum(c.analysis_mode == "extractive" for c in candidates),
             "ai_errors": sum(
@@ -184,7 +189,7 @@ def candidate_diagnostics(session):
             for k, v in sorted(reasons.items())
             if v
         ],
-        "pending_reason_stats": dict(Counter(c.reason for c in candidates if c.status == "pending")),
+        "pending_reason_stats": dict(Counter(c.reason for c in candidates if c.status in ("pending", "review_required"))),
         "language_stats": dict(Counter(c.article.get("language") or "unknown" for c in candidates)),
         "origin_stats": [
             {"origin": k, "label": ORIGIN_LABELS.get(k, k), **dict(v)} for k, v in sorted(origins.items())
@@ -192,7 +197,7 @@ def candidate_diagnostics(session):
         "historical_counts": dict(
             Counter(
                 str(p.published_at.year)
-                for p in session.scalars(select(Project).where(Project.visible.is_(True)))
+                for p in session.scalars(select(Project).where(Project.publication_status == "PUBLISHED"))
             )
         ),
     }

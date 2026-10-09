@@ -1,34 +1,23 @@
 import { test, expect } from "@playwright/test";
 
-test("dashboard, archive and intelligence views remain usable", async ({ page }) => {
+test("public navigation stays focused on projects", async ({ page }) => {
   const errors: string[] = [];
-  page.on("pageerror", (e) => errors.push(e.message));
+  page.on("pageerror", error => errors.push(error.message));
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Izlanish", exact: true })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Eng kuchli imkoniyatlar" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Yangi loyihalar" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Muammolar", exact: true })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Yechim g‘oyalari" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Muhim signallar" })).toBeVisible();
-  expect(await page.locator("body").evaluate((element) => getComputedStyle(element).backgroundImage)).not.toBe("none");
-  await page.goto("/muammolar");
-  await expect(page.getByRole("heading", { name: "Muammolar", exact: true })).toBeVisible();
-  await page.goto("/goyalar");
-  await expect(page.getByText("mavjud startap emas")).toBeVisible();
-  await page.goto("/signallar");
-  await expect(page.getByRole("heading", { name: "Signallar" })).toBeVisible();
-  await page.goto("/sektorlar");
-  await expect(page.getByRole("heading", { name: "Sektorlar" })).toBeVisible();
+  const navigation = page.getByRole("navigation", { name: "Asosiy menyu" });
+  await expect(navigation.getByRole("link")).toHaveCount(4);
+  for (const label of ["Bosh sahifa", "Loyihalar", "Arxiv", "Manbalar"]) {
+    await expect(navigation.getByRole("link", { name: label })).toBeVisible();
+  }
+  await expect(page.getByRole("heading", { name: "izlanish." })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "So‘nggi loyihalar" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Eng kuchli imkoniyatlar" })).toHaveCount(0);
   await page.goto("/manbalar");
   await expect(page.getByRole("heading", { name: "Manbalar" })).toBeVisible();
-  await page.goto("/loyihalar?period=all");
-  await expect(page.getByRole("heading", { name: "Barcha loyihalar" })).toBeVisible();
-  await page.goto("/arxiv?type=PROJECT");
+  await expect(page.locator("body")).not.toContainText("HTTP 403");
+  await page.goto("/arxiv?year=2022");
   await expect(page.getByRole("heading", { name: "Arxiv" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Oxirgi 7 kun" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "AgroKo‘mak" })).toBeVisible();
-  await page.getByRole("button", { name: "Muammolar" }).click();
-  await expect(page.getByText("Bu filtrlar uchun tasdiqlangan yozuv yo‘q.")).toBeVisible();
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await expect(page.getByRole("combobox", { name: "Yil" })).toHaveValue("2022");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   expect(errors).toEqual([]);
 });

@@ -1,21 +1,21 @@
 # Izlanish — Startup Finder
 
-Веб-сайт для поиска реальных проектов, стартапов и полезных разработок, связанных с Узбекистаном. **Текущий этап: Stage 1 — Uzbekistan.** Global и отдельный раздел GitHub / Yangi dasturlar не реализованы. Переход к ним возможен только после явного принятия текущего этапа пользователем.
+Веб-сайт для поиска реальных проектов и решаемых ими проблем. Охват Узбекистана сохраняется; по новому разрешению пользователя начато отдельное ежедневное обнаружение международных проектов. Stage 1 ещё не принят, а публикация требует подтверждённых проекта, проблемы, аудитории и решения.
 
-Интерфейс на узбекском: вертикальная лента, «Bugun O‘zbekistonda», поиск, фильтры, страницы проектов, факты с источниками, отдельный AI-анализ и страница состояния `/status`. Приложение не создаёт вымышленных карточек ради заполнения ленты.
+Публичный интерфейс на узбекском: главная страница, простой каталог, архив, группы источников и подробная страница проекта с фактами. Техническое состояние доступно владельцу в `/admin`. Приложение не создаёт вымышленных карточек ради заполнения ленты.
 
 ## Что реализовано
 
 - React + TypeScript + Vite; FastAPI + Pydantic; SQLAlchemy + SQLite.
 - Реестр источников с частотами и состоянием, RSS Spot на узбекском и русском, страницы UzHunt, IT Park и ICT Week; необязательный Brave Search API для более широкого поиска, включая сайты университетов, мероприятий, компаний и другие направления.
 - Проверка даты: обычный запуск — последние 30 дней, архивный — начиная с 01.01.2022. Дата публикации не подменяется датой обновления или обнаружения. Неизвестные и будущие даты отклоняются.
-- Приоритет: последний час → сегодня → вчера → 7 дней → 30 дней. «Сегодня» в ленте определяется по `first_seen` в часовом поясе Asia/Tashkent.
+- Приоритет: последний час → сегодня → вчера → 7 дней → 30 дней. Публичные «Сегодня» и «Новые» определяются по дате публикации, не по `first_seen`; время отображается в Asia/Tashkent.
 - Каждый час в `HH:00` проверяются только источники, которым подошёл срок; блокировка параллельного запуска через lease в БД. Ручной запуск через CLI.
 - AI-анализ и перевод через совместимый с OpenAI Chat Completions API адаптер; валидация JSON, цитат, ссылок и имён.
 - Раздельные факты и AI-выводы; формальные рейтинги полезности и доверия с сохранением компонентов.
 - Дедупликация URL, названий, автора/организации, псевдонимов и сходства описаний. Добавление источника не меняет `first_seen`.
 - Настоящие изображения из метаданных исходной страницы с указанием источника либо placeholder. Изображения не генерируются.
-- Страница состояния: последний/следующий запуск, источники, кандидаты, отклонения, дубли, новые проекты, ошибки и продолжительность.
+- Владелец видит состояние, источники, очередь, причины отклонения и эффективность источников в `/admin` после ввода `ADMIN_API_KEY`.
 
 ## Режим без платных API
 
@@ -28,14 +28,14 @@ AI не обязателен для публикации. Fallback извлек�
 `rating_method=deterministic_fallback` хранится в content и возвращается API;
 для AI-извлечения используется `ai`. Число в обоих случаях считает код по прежней
 шестикомпонентной шкале. Без AI учитываются только извлечённые из цитат признаки;
-неизвестные критерии дают ноль. Это не экспертная оценка. Карточка явно показывает
-`AI tahlili hali bajarilmagan`, но остаётся доступна при достаточных доказательствах.
+неизвестные критерии дают ноль. Это не экспертная оценка. Публичная карточка появляется
+только после подтверждения решаемой проблемы, аудитории и механизма решения.
 Проблема и аудитория извлекаются из узбекских фраз; неизвестные поля не выдумываются.
 Для RU/EN допустимы только узкие структурированные узбекские шаблоны с оригинальными
 именами и цитатами, без заявления о полноценном переводе.
 
 Pending получает причину `ambiguous_project`, `missing_creator`,
-`insufficient_evidence` или `needs_translation`. `/status` показывает число
+`insufficient_evidence` или `needs_translation`. `/admin/status` показывает число
 опубликованных без AI, методы рейтинга, языки, причины ожидания и происхождение.
 Новая версия fallback повторно проверяет старые кандидаты и может исправить название
 карточки, сохранив её ID, first_seen, дату и исходные цитаты. Новые источники
@@ -91,7 +91,7 @@ cp .env.example .env   # только если .env ещё не существу
 ./scripts/start.sh
 ```
 
-Один процесс обслуживает frontend и API на порту **8000**. Проверки: `GET /api/health`, `GET /api/projects`, `GET /api/status`; документация API — `/docs`. Веб-страницы: `/`, `/loyiha/{id}`, `/status`. Сервис должен быть доступен через порт вашего окружения или настроенный reverse proxy; облачный onboarding не создаёт публичный URL автоматически.
+Один процесс обслуживает frontend и API на порту **8000**. Публичные проверки: `GET /api/health`, `GET /api/projects`; техническое состояние: `GET /api/admin/status` с заголовком `X-Admin-Key`. Веб-страницы: `/`, `/loyihalar`, `/arxiv`, `/manbalar`, `/loyiha/{id}`; `/admin` доступен владельцу. Сервис должен быть доступен через порт вашего окружения или настроенный reverse proxy; облачный onboarding не создаёт публичный URL автоматически.
 
 Для frontend-разработки используйте два терминала:
 
@@ -116,6 +116,7 @@ Vite работает на порту 5173 и проксирует `/api` в bac
 | `AI_BASE_URL` | По умолчанию `https://api.openai.com/v1`; совместимый endpoint без перенаправлений. |
 | `AI_MODEL` | По умолчанию `gpt-4.1-mini`; модель с JSON object mode. |
 | `SEARCH_API_KEY` | Необязательный ключ Brave Search API. |
+| `ADMIN_API_KEY` | Обязателен для `/admin` и `/api/admin/*`; задаётся только в защищённой конфигурации среды. |
 | `DATABASE_URL` | По умолчанию абсолютный путь к `data/finder.sqlite3`. PostgreSQL: `postgresql+psycopg://...`. |
 | `SOURCES_FILE` | Путь к `config/sources.json`. |
 | `EVIDENCE_MIN_SCORE` | Минимальный Tasdiqlanganlik для ленты: 5 из 10. Автор и существование обязательны независимо от балла. |
@@ -501,3 +502,47 @@ dalili yetarli emasligi sabab imkoniyat darajasi `PENDING`. Joriy muhitdagi
 sanalar, manbalar, rad etish/queue holati va testlar
 [SECOND_PASS_VALIDATION.md](docs/SECOND_PASS_VALIDATION.md) da. Bu natija
 boshqa Codespace bazasiga avtomatik ko‘chmaydi.
+
+## Joriy ochiq mahsulot va Global discovery — 09.10.2026
+
+Ochiq menyu: `Bosh sahifa`, `Loyihalar`, `Arxiv`, `Manbalar`. Bosh sahifa
+faqat nashr sanasiga ko‘ra oxirgi 30 kundagi tayyor loyihalarni ko‘rsatadi.
+`Loyihalar` oddiy katalog, nom bo‘yicha qidiruv va `Barchasi / O‘zbekiston /
+Global` tanloviga ega. `Arxiv`da Bugun, 7 kun, 30 kun, yil va nom qidiruvi
+bor. `Manbalar` manbalar guruhlarini tushuntiradi; texnik xatolarni ko‘rsatmaydi.
+Imkoniyatlar reytingi, muammolar, signallar va g‘oyalar ochiq bosh menyudan
+olingan, ammo ularning SQL modellari va tahlil ma’lumotlari saqlangan.
+
+Ommaviy `/api/projects` faqat `publication_status=PUBLISHED` qaytaradi.
+Loyiha nomi/muallifi va mavjudligi tasdiqlansa-yu, aniq muammo, foydalanuvchi
+yoki yechim yetishmasa, yozuv `REVIEW_REQUIRED` bo‘lib saqlanadi. Loyiha
+`DISCOVERED → VERIFIED_PROJECT → ANALYZED → PUBLISHED` sifat bosqichlaridan
+o‘tadi; rad va dubllar alohida qayd etiladi. Adminning `ACCEPT` amali faqat
+oddiy qayta tekshirish navbatiga qo‘yadi; dalil chegarasini chetlab o‘tmaydi.
+`first_seen` va eski dalillar o‘chirilmaydi. Eski maqola bugun topilsa ham
+`Yangi` hisoblanmaydi.
+
+`/admin`, `/admin/review` va `/admin/sources` egasiga navbat, holat va manbalar
+samarasini ko‘rsatadi. `ADMIN_API_KEY` ni `.env` yoki hostingning himoyalangan
+environment sozlamasida uzoq tasodifiy qiymatga o‘rnating. U Gitga kiritilmaydi.
+Admin API so‘rovlarida `X-Admin-Key` yuboriladi. Kalit bo‘lmasa admin API 503,
+noto‘g‘ri bo‘lsa 401 qaytaradi. Ochiq sahifa kalitga muhtoj emas.
+
+Global loyihalar uchun bepul Show HN RSS bevosita loyiha saytlari havolalarini
+topadi; HN submission havolasi alohida discovery provenance sifatida saqlanadi.
+Sayt yoki loyiha nomining mavjudligi o‘zi yetarli emas: sanasi, yaratuvchisi,
+muammosi, foydalanuvchisi va manbaga tayangan tavsifi kerak. Noma’lum inglizcha
+tavsifni AI kalitisiz to‘qib tarjima qilish o‘rniga nomzod navbatda qoladi.
+Manba va navbat bo‘yicha alohida tekshirish:
+
+```bash
+.venv/bin/python -m backend.app.cli --only-source show-hn-rss --force-sources --report /tmp/show-hn.json
+.venv/bin/python -m backend.app.cli --only-source show-hn-rss --drain --report /tmp/show-hn-drain.json
+```
+
+`--only-source` manbaning yangi havolalari va shu manbaga tegishli saqlangan
+navbatni cheklaydi. Lokal Uzbekistan manbalari va hourly scheduler ishlashda
+davom etadi. `AI_API_KEY` va `SEARCH_API_KEY` ixtiyoriy; birortasi ham oddiy
+manba tekshiruvi uchun talab qilinmaydi. Mavjud `--backfill` tarixiy oynalari
+o‘zgarmadi. Natijalarni to‘liq statistikasi va cheklovlari
+[PUBLIC_GLOBAL_VALIDATION.md](docs/PUBLIC_GLOBAL_VALIDATION.md) da.

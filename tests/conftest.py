@@ -17,6 +17,7 @@ def settings(tmp_path):
         ai_api_key="",
         openai_api_key="",
         search_api_key="",
+        admin_api_key="test-admin-key",
     )
 
 
@@ -28,7 +29,9 @@ def factory(settings):
 
 
 def sample_article(name="AgroKo‘mak", url="https://news.example/article", publisher="Sinov nashri"):
-    quote = f"O‘zbekiston uchun “{name}” loyihasi Test University tomonidan ishlab chiqildi va talabalar uchun taqdim etildi."
+    quote = (f"O‘zbekiston uchun “{name}” loyihasi Test University tomonidan ishlab chiqildi. "
+             f"Talabalar uchun arizalarni qo‘lda yuritish bilan vaqt sarflanadi. "
+             f"{name} tizimi bu ishni avtomatlashtiradi va talabalar uchun taqdim etildi.")
     return Article(
         url=url,
         publisher=publisher,

@@ -1,5 +1,4 @@
 import {
-  Activity,
   ArrowRight,
   ArrowUpRight,
   Layers3,
@@ -49,16 +48,8 @@ export function Header() {
             <span className="flag">●</span> Bosh sahifa
           </NavLink>
           <NavLink to="/loyihalar">Loyihalar</NavLink>
-          <NavLink to="/muammolar">Muammolar</NavLink>
-          <NavLink to="/goyalar">Yechim g‘oyalari</NavLink>
-          <NavLink to="/signallar">Signallar</NavLink>
-          <NavLink to="/sektorlar">Sektorlar</NavLink>
           <NavLink to="/arxiv">Arxiv</NavLink>
           <NavLink to="/manbalar">Manbalar</NavLink>
-          <NavLink to="/status" aria-label="Tizim holati">
-            <Activity size={16} />
-            <span>Tizim holati</span>
-          </NavLink>
         </nav>
         <span className="header-note">Yaxshi g‘oyalar e’tiborga loyiq.</span>
       </div>
@@ -71,7 +62,7 @@ export function Footer() {
       <Link className="footer-brand" to="/">
         izlanish.
       </Link>
-      <p>O‘zbekistondagi yangiliklarni birga kashf etamiz.</p>
+      <p>Haqiqiy muammolarni hal qilayotgan loyihalar.</p>
       <span>Faktlar — manbalardan. Tahlil — alohida.</span>
     </footer>
   );
@@ -116,14 +107,6 @@ export function Card({
   project: Project;
   categories: Record<string, string>;
 }) {
-  const groups = (p.opportunity_details as {groups?: Record<string, number>} | undefined)?.groups;
-  const publicScores: [string, string][] = [
-    ["Muammo", groups?.problem === undefined ? "—" : groups.problem.toFixed(1) + "/10"],
-    ["Bozor", groups?.market === undefined ? "—" : groups.market.toFixed(1) + "/10"],
-    ["Dalil", p.confidence.toFixed(1) + "/10"],
-    ["Yechim", "—"],
-    ["Imkoniyat", p.opportunity_score === null ? "Kutilmoqda" : p.opportunity_score + "/100 · " + p.opportunity_grade],
-  ];
   return (
     <article className="project-card">
       <div className="card-top">
@@ -139,20 +122,10 @@ export function Card({
             {p.name}
             <ArrowUpRight size={20} />
           </Link>
-          <p className="card-problem"><strong>Qanday muammoni hal qiladi?</strong> {p.problem_statement || "Muammo dalili tekshirilmoqda."}</p>
-          <p className="card-audience"><span>Kim uchun</span><strong>{p.audience_groups.join(", ") || audienceLabels[p.audience]}</strong></p>
-          <div className="card-opportunity"><span>Imkoniyat</span><strong>{p.opportunity_score === null ? "Dalil kutilmoqda" : p.opportunity_score + "/100 · " + p.opportunity_grade}</strong></div>
-          <p className="summary">{p.summary_uz}</p>
-          <dl className="card-facts">
-            <div>
-              <dt>Kim yaratgan</dt>
-              <dd>{p.creator || p.organization || "Manbada ko‘rsatilmagan"}</dd>
-            </div>
-            <div>
-              <dt>Qayerda taqdim etilgan</dt>
-              <dd>{p.event || "Manbada ko‘rsatilmagan"}</dd>
-            </div>
-          </dl>
+          <p className="card-problem"><strong>Qanday muammoni hal qiladi?</strong> {p.problem_statement}</p>
+          <p className="card-audience"><span>Kim uchun?</span><strong>{p.problem_subject || p.audience_groups.join(", ") || audienceLabels[p.audience]}</strong></p>
+          <p className="summary"><strong>Yechim</strong> {p.solution_uz}</p>
+          <p className="card-evidence">Dalil: {p.source_count} ta manba · Tasdiqlanganlik {p.confidence.toFixed(1)}/10</p>
         </div>
         <ProjectImage project={p} />
       </div>
@@ -162,9 +135,6 @@ export function Card({
             {categories[sector] || sector}
           </span>
         ))}
-      </div>
-      <div className="public-score-row" aria-label="Loyiha baholari">
-        {publicScores.map(([label,value])=><div key={label}><span>{label}</span><strong>{value}</strong></div>)}
       </div>
       <div className="card-bottom">
         <Link to={`/loyiha/${p.id}`}>

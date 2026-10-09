@@ -62,9 +62,10 @@ def problem_scope(text, country="Uzbekistan"):
     return "EVERYDAY"
 
 
-def problem_from_article(article, analysis=None):
-    """Return only a verbatim, attributable problem quote; no generated pain claim."""
+def problems_from_article(article, analysis=None):
+    """Return distinct, attributable problem quotes; never synthesize claims."""
     body = article.text[:12000]
+    findings = []
     for sentence in sentences(body):
         if len(sentence) < 25 or len(sentence) > 800:
             continue
@@ -86,7 +87,7 @@ def problem_from_article(article, analysis=None):
                 match = re.search(r"jurnalistlar.{0,180}matnga.{0,140}vaqt sarf[^.!?]*", sentence, re.I)
                 if match:
                     statement = match.group(0)[0].upper() + match.group(0)[1:] + "."
-            return {
+            finding = {
                 "statement": statement,
                 "subject": SUBJECT.search(sentence).group(0) if native else template[1],
                 "scope": template[2] if template and len(template) > 2 else problem_scope(sentence),
@@ -95,7 +96,13 @@ def problem_from_article(article, analysis=None):
                 "source_id": article.source_id,
                 "published_at": article.published_at,
             }
-    return None
+            if normalize(statement) not in {normalize(p["statement"]) for p in findings}:
+                findings.append(finding)
+    return findings
+
+
+def problem_from_article(article, analysis=None):
+    return next(iter(problems_from_article(article, analysis)), None)
 
 
 def entity_type(article):
@@ -116,6 +123,17 @@ def entity_type(article):
     if REGULATION.search(article.title + " " + article.text[:1200]) and LOCAL.search(article.title + " " + article.text[:1200]):
         return "SIGNAL"
     return "IGNORE"
+
+
+def meaningful_problem(article, analysis=None):
+    """A single adverse incident is not enough for product intelligence."""
+    text = article.title + " " + article.text[:3000]
+    if re.search(r"(?:bir|bitta|one|single).{0,35}(?:shifoxona|hospital).{0,80}(?:dori|medicine|drug)", text, re.I):
+        return False
+    if analysis is not None:
+        return bool(problems_from_article(article, analysis))
+    structural = re.search(r"(?:muntazam|tez-tez|har kuni|ko[‘']plab|tizimli|takror|doimiy|regular|repeated|systemic|many|multiple|across|keng tarqal)", text, re.I)
+    return bool(structural and problem_from_article(article))
 
 
 def problem_gate(analysis, articles):
@@ -252,10 +270,12 @@ def migrate_existing_problems(factory):
     """Idempotently infer only from cached source text that survives article parsing."""
     from .db import Candidate, Project
     from .schemas import Analysis, Article
+    from .publication import refresh_publication
 
     with factory.begin() as session:
         for project in session.scalars(select(Project)):
             if project.problem_gate_status == "PASS" and (project.opportunity_details or {}).get("criteria"):
+                refresh_publication(project)
                 continue
             try:
                 analysis = Analysis.model_validate(project.content)
@@ -280,3 +300,4 @@ def migrate_existing_problems(factory):
             project.opportunity_details = opportunity(cited_problem_scores(finding) if finding else {}, 2, gate)
             project.opportunity_score = project.opportunity_details["score"]
             project.opportunity_grade = project.opportunity_details["grade"]
+            refresh_publication(project)

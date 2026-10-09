@@ -43,6 +43,8 @@ class Article(BaseModel):
     kind: SourceKind = "unknown"
     image_url: str | None = None
     language: str = ""
+    discovery_url: str | None = None
+    discovery_title: str = ""
 
 
 class Fact(BaseModel):
@@ -88,7 +90,7 @@ class Analysis(BaseModel):
     university: str = Field(default="", max_length=300)
     city: str = Field(default="", max_length=100)
     event: str = Field(default="", max_length=300)
-    country: Literal["Uzbekistan"] = "Uzbekistan"
+    country: str = "Uzbekistan"
     aliases: list[str] = Field(default_factory=list, max_length=10)
     main_url: str | None = None
     links: dict[str, str] = Field(default_factory=dict)

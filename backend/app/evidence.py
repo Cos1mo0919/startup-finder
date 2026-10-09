@@ -264,6 +264,7 @@ def record_rejection(session, url, title, reasons, score=0, signals=None):
 def audit_existing(factory, threshold):
     """Idempotent backfill and gate for legacy cards; never changes first_seen."""
     from .sectors import classify_sectors
+    from .publication import refresh_publication
 
     with factory.begin() as session:
         for project in session.scalars(select(Project)):
@@ -282,6 +283,7 @@ def audit_existing(factory, threshold):
             attach_evidence(session, project, analysis, articles, now_utc())
             project.primary_sector, project.sectors = classify_sectors(analysis)
             reasons = evaluate_project(session, project, threshold)
+            refresh_publication(project)
             if not reasons:
                 for source in project.sources:
                     rejected = session.get(RejectedCandidate, source.url)

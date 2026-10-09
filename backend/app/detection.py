@@ -12,7 +12,7 @@ UZBEKISTAN = re.compile(
     re.I,
 )
 PROJECT = re.compile(
-    r"tizim|систем|system|service|servis|qurilma|device|start[ -]?up|startap|стартап|loyiha|проект|prototype|prototip|прототип|ishlab chiq|разработ|launch|ishga tush|taqdim et|namoyish|hackathon|хакатон|hakaton",
+    r"tizim|систем|system|service|servis|qurilma|device|product|platform|\bapp\b|\btool\b|start[ -]?up|startap|стартап|loyiha|проект|prototype|prototip|прототип|ishlab chiq|разработ|launch|ishga tush|taqdim et|namoyish|hackathon|хакатон|hakaton",
     re.I,
 )
 EXISTENCE = re.compile(
@@ -33,9 +33,9 @@ def is_candidate(article):
     text = article.title + " " + article.text
     from .fallback import ACTION
 
-    return bool(
-        UZBEKISTAN.search(text) and PROJECT.search(text) and (EXISTENCE.search(text) or ACTION.search(text))
-    )
+    global_launch = article.source_id == "show-hn-rss" or (article.title.startswith("Show HN:") and article.url.startswith("https://news.ycombinator.com/item?"))
+    project_word = PROJECT.search(text) or (global_launch and article.discovery_title.startswith("Show HN:") and not article.url.startswith("https://news.ycombinator.com/item?"))
+    return bool((UZBEKISTAN.search(text) or global_launch) and project_word and (EXISTENCE.search(text) or ACTION.search(text) or global_launch))
 
 
 def is_uzbek(text, declared=""):
@@ -123,3 +123,48 @@ def material_type(article):
     if detect_event(article) and not concrete:
         return "EVENT"
     return "PROJECT" if is_candidate(article) else "OTHER"
+
+
+IRRELEVANT_NOTICE = re.compile(
+    r"(?:stipendiy|scholarship|стипенди|magistratur|master['’]?s degree|"
+    r"o[‘’']qituvch.{0,60}soliq|teacher.{0,60}tax|grant.{0,50}(?:ariza|application|qabul)|"
+    r"oliy ta[’']lim.{0,60}(?:qabul|imtihon)|universitetga qabul|university admission)", re.I,
+)
+MARKET_SIGNAL = re.compile(
+    r"(?:startap|startup|venchur|venture|texnolog|technology|digital|raqamli|IT Park).{0,100}"
+    r"(?:investitsiya|investment|funding|fund|fond|regulation|qonun|bozor|market)|"
+    r"(?:investitsiya|investment|funding|fond).{0,100}(?:startap|startup|venchur|venture)", re.I,
+)
+
+
+def project_detector(article):
+    """Cheap first stage; only an identified product proceeds to analysis."""
+    from .fallback import project_name, ACTION
+    from .events import detect_event
+
+    title = article.title + " " + article.text[:1200]
+    names = project_name(article)
+    concrete = bool(names and (ACTION.search(article.text[:4000]) or article.discovery_title.startswith("Show HN:") or article.title.startswith("Show HN:")))
+    if early_reason(article) in {"spam", "idea_list", "not_project"}:
+        return "NON_PROJECT", early_reason(article)
+    if IRRELEVANT_NOTICE.search(article.title):
+        return "NON_PROJECT", "irrelevant"
+    if ECOSYSTEM.search(article.title) and not any(name.casefold() in article.title.casefold() for name in names):
+        return ("SIGNAL_ONLY", "market_signal") if MARKET_SIGNAL.search(title) else ("NON_PROJECT", "irrelevant_signal")
+    if concrete and is_candidate(article):
+        return "PROJECT_CANDIDATE", ""
+    if detect_event(article):
+        return "NEEDS_EXTRACTION", "event_without_named_project"
+    if MARKET_SIGNAL.search(title) and re.search(r"investitsiya|investment|funding|fund|fond|regulation|qonun|bozor|market", title, re.I):
+        return "SIGNAL_ONLY", "market_signal"
+    if ECOSYSTEM.search(title) or financial_program(title):
+        return "NON_PROJECT", "irrelevant_signal"
+    if problem_from := _potential_problem(article):
+        return "NEEDS_EXTRACTION", problem_from
+    return "NON_PROJECT", early_reason(article) or "not_project"
+
+
+def _potential_problem(article):
+    from .intelligence import problem_from_article
+
+    return "potential_problem" if problem_from_article(article) else ""

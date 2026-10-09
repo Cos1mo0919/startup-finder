@@ -14,7 +14,7 @@ from sqlalchemy import select
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Run Uzbekistan discovery once")
+    parser = argparse.ArgumentParser(description="Run izlanish discovery once")
     parser.add_argument(
         "--archive",
         action="store_true",
@@ -31,7 +31,7 @@ def main():
     parser.add_argument(
         "--candidate-status",
         default="pending",
-        choices=["all", "queued", "pending", "rejected", "published", "problem", "error", "event", "ecosystem"],
+        choices=["all", "queued", "pending", "review_required", "rejected", "published", "problem", "error", "event", "ecosystem"],
     )
     parser.add_argument(
         "--debug-report",
@@ -60,6 +60,7 @@ def main():
     parser.add_argument("--local-problems", action="store_true", help="Run due Uzbekistan local problem scan")
     parser.add_argument("--global-trends", action="store_true", help="Run due monthly cross-country problem scan")
     parser.add_argument("--source-id")
+    parser.add_argument("--only-source", help="Check only one enabled source during discovery")
     toggle = parser.add_mutually_exclusive_group()
     toggle.add_argument("--enable-source", action="store_true")
     toggle.add_argument("--disable-source", action="store_true")
@@ -219,6 +220,12 @@ def main():
             )
         pipeline = Pipeline(settings, factory)
         pipeline.discovery.force = args.force_sources
+        if args.only_source:
+            with factory() as session:
+                source = session.get(RegistrySource, args.only_source)
+                if source is None or not source.enabled:
+                    parser.error("--only-source requires an enabled registered source ID")
+            pipeline.discovery.allowed_source_ids = {args.only_source}
         try:
             if args.backfill:
                 from .queries import archive_windows
