@@ -282,10 +282,34 @@ class Discovery:
                 stored.last_error = error
         return links, errors
 
-    def corroborate(self, name, original_url):
-        return [u for u in self.search.search(f'"{name}" Uzbekistan O‘zbekiston', "pm") if u != original_url][
-            :3
-        ]
+    def corroborate(self, name, original_url, country="Uzbekistan"):
+        query = f'"{name}" Uzbekistan O‘zbekiston' if country == "Uzbekistan" else f'"{name}" startup product'
+        return [u for u in self.search.search(query, "pm") if u != original_url][:3]
+
+    def resolve_official(self, name, article):
+        """Check a named project link in an article against the linked page."""
+        links = article.text.split("\nHavolalar:", 1)
+        if len(links) != 2:
+            return None
+        original_host = urlsplit(article.url).hostname
+        for entry in links[1].split(" | ")[:30]:
+            label, separator, candidate = entry.rpartition(": ")
+            if not separator or not re.search(re.escape(name), label, re.I):
+                continue
+            try:
+                candidate = safe_url(candidate.strip())
+                if urlsplit(candidate).hostname == original_host:
+                    continue
+                raw, _ = self.web.get(candidate)
+                soup = BeautifulSoup(raw, "html.parser")
+                title = soup.title.get_text(" ", strip=True) if soup.title else ""
+                excerpt = " ".join(soup.stripped_strings)[:1500]
+                if re.search(re.escape(name), title + " " + excerpt, re.I):
+                    quote = title if re.search(re.escape(name), title, re.I) else excerpt[:500]
+                    return candidate, quote
+            except (FetchError, ValueError):
+                continue
+        return None
 
 
 def source_origin(source):

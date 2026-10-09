@@ -71,7 +71,7 @@ class FakeDiscovery:
     def article(self, url, feed_date=None):
         return next(a for a in self.articles if a.url == url)
 
-    def corroborate(self, name, url):
+    def corroborate(self, name, url, country="Uzbekistan"):
         return []
 
 

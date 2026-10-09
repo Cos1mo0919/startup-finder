@@ -347,9 +347,20 @@ def create_app(settings=None):
     @app.get("/api/intelligence/dashboard")
     def intelligence_dashboard():
         with factory() as session:
-            return dashboard(session)
+            data = dashboard(session)
+            return {
+                "today": {key: data["today"][key] for key in ("sources_checked", "projects")},
+                "total": {"projects": data["total"]["projects"]},
+                "latest_projects": [
+                    {key: item[key] for key in (
+                        "id", "name", "problem", "solution", "affected_users",
+                        "evidence_score", "country", "sector", "published_at", "source_count",
+                    )}
+                    for item in data["latest_projects"]
+                ],
+            }
 
-    @app.get("/api/problems")
+    @app.get("/api/problems", dependencies=[Depends(require_admin)])
     def problems(scope: str = "", sector: str = "", country: str = "", period: Literal["all", "today", "7d", "30d"] = "all", year: int | None = Query(None, ge=2022, le=2100), min_evidence_level: int = Query(1, ge=1, le=5), page: int = Query(1, ge=1), page_size: int = Query(12, ge=1, le=50)):
         query = recent_period(select(Problem), Problem.first_seen_at, period)
         if scope:
@@ -367,7 +378,7 @@ def create_app(settings=None):
             rows = session.scalars(query.order_by(Problem.last_seen_at.desc()).offset((page - 1) * page_size).limit(page_size)).all()
             return {"items": [problem_json(p, session.scalar(select(func.count(func.distinct(ProblemEvidence.source_url))).where(ProblemEvidence.problem_id == p.id))) for p in rows], "total": total, "page": page}
 
-    @app.get("/api/problems/{problem_id}")
+    @app.get("/api/problems/{problem_id}", dependencies=[Depends(require_admin)])
     def problem_detail(problem_id: str):
         with factory() as session:
             p = session.get(Problem, problem_id)
@@ -384,7 +395,7 @@ def create_app(settings=None):
                 "ideas": [idea_json(i) for i in ideas],
             }
 
-    @app.get("/api/ideas")
+    @app.get("/api/ideas", dependencies=[Depends(require_admin)])
     def ideas(period: Literal["all", "today", "7d", "30d"] = "all", year: int | None = Query(None, ge=2022, le=2100)):
         query = recent_period(select(SolutionIdea), SolutionIdea.created_at, period)
         if year:
@@ -392,7 +403,7 @@ def create_app(settings=None):
         with factory() as session:
             return [idea_json(i) for i in session.scalars(query.order_by(SolutionIdea.created_at.desc()).limit(100))]
 
-    @app.get("/api/ideas/{idea_id}")
+    @app.get("/api/ideas/{idea_id}", dependencies=[Depends(require_admin)])
     def idea_detail(idea_id: str):
         with factory() as session:
             idea = session.get(SolutionIdea, idea_id)
@@ -400,7 +411,7 @@ def create_app(settings=None):
                 raise HTTPException(404, "Yechim g‘oyasi topilmadi")
             return idea_json(idea)
 
-    @app.get("/api/signals")
+    @app.get("/api/signals", dependencies=[Depends(require_admin)])
     def signals(country: str = "", sector: str = "", signal_type: str = "", period: Literal["all", "today", "7d", "30d"] = "all", year: int | None = Query(None, ge=2022, le=2100)):
         query = recent_period(select(EcosystemSignal), EcosystemSignal.discovered_at, period)
         if country:
@@ -414,12 +425,12 @@ def create_app(settings=None):
         with factory() as session:
             return [signal_json(s) for s in session.scalars(query.order_by(EcosystemSignal.discovered_at.desc()).limit(100))]
 
-    @app.get("/api/sectors/intelligence")
+    @app.get("/api/sectors/intelligence", dependencies=[Depends(require_admin)])
     def sectors_intelligence():
         with factory() as session:
             return sector_intelligence(session)
 
-    @app.get("/api/sectors/stats")
+    @app.get("/api/sectors/stats", dependencies=[Depends(require_admin)])
     def sectors_stats():
         with factory() as session:
             return sector_stats(session)

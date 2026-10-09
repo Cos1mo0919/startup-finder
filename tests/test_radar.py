@@ -277,7 +277,7 @@ def test_multi_sector_filters_stats_exclude_hidden(settings, factory):
     Pipeline(settings, factory, FakeDiscovery([])).persist(analysis, [a], now_utc())
     with TestClient(create_app(settings)) as client:
         assert client.get("/api/projects?period=all&category=ai").json()["total"] == 1
-        stats = client.get("/api/sectors/stats").json()
+        stats = client.get("/api/sectors/stats", headers={"X-Admin-Key": "test-admin-key"}).json()
         assert stats["total_projects"] == 1
         assert next(s for s in stats["items"] if s["sector"] == "ai")["count"] == 1
         assert next(s for s in stats["items"] if s["sector"] == "agritech")["count"] == 1

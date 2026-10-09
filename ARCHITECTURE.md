@@ -239,6 +239,11 @@ SQL with `intelligence_status=IGNORED` for audit, excluded from active signal
 metrics.
 
 The public frontend uses only four top-level pages and a hidden owner area.
+Former direct problem, idea, signal and sector routes redirect to `/admin`;
+owner routes under `/admin/*` use the same API key as their now-protected
+intelligence endpoints. The public dashboard API returns only published project
+previews and three simple counters; internal entity lists stay in admin data.
+Stored intelligence entities are unchanged.
 `ADMIN_API_KEY` protects owner APIs with constant-time header comparison;
 keys stay in environment settings. `/api/public/sources` returns a small
 source directory without health or queue details. The admin API reports
@@ -256,3 +261,12 @@ publication. The CLI `--only-source` constrains both collection and queued
 processing for source-yield analysis without changing operator enable flags.
 Uzbekistan hourly polling, weekly local problem scan and monthly global
 trend scan remain separate scheduler jobs.
+
+For an ordinary news article with a link whose anchor names the extracted
+project, the collector checks at most 30 article links and fetches the
+matching external page. The project's official URL is set only if that page
+contains the same name; the matching page title or excerpt is stored as a
+separate `official_website` evidence record. Fetch failures do not drop the original candidate.
+Optional Brave corroboration uses a country-aware query; an international
+candidate is no longer searched as if it originated in Uzbekistan. Neither
+step bypasses the publication gates or requires a paid key.

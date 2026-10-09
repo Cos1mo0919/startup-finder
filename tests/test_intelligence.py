@@ -171,15 +171,15 @@ def test_migration_and_read_only_api_preserve_project(settings, factory):
         dashboard = client.get("/api/intelligence/dashboard").json()
         assert dashboard["total"]["projects"] == 1
         assert dashboard["today"]["sources_checked"] == 1
-        assert dashboard["today"]["links_seen"] == 1
+        assert "links_seen" not in dashboard["today"]
         assert dashboard["latest_projects"][0]["id"] == original[0]
         assert dashboard["latest_projects"][0]["affected_users"] == "Talaba"
-        assert dashboard["latest_ideas"] == []
-        assert client.get("/api/problems").json()["total"] == 1
-        assert client.get("/api/ideas").json() == []
-        assert client.get("/api/signals").json() == []
-        assert client.get("/api/sectors/intelligence").status_code == 200
-        assert client.get("/api/problems/nonexistent").status_code == 404
+        assert "latest_ideas" not in dashboard and "latest_signals" not in dashboard and "latest_problems" not in dashboard
+        assert client.get("/api/problems", headers={"X-Admin-Key": "test-admin-key"}).json()["total"] == 1
+        assert client.get("/api/ideas", headers={"X-Admin-Key": "test-admin-key"}).json() == []
+        assert client.get("/api/signals", headers={"X-Admin-Key": "test-admin-key"}).json() == []
+        assert client.get("/api/sectors/intelligence", headers={"X-Admin-Key": "test-admin-key"}).status_code == 200
+        assert client.get("/api/problems/nonexistent", headers={"X-Admin-Key": "test-admin-key"}).status_code == 404
         project_api = client.get("/api/projects/" + original[0]).json()
         assert project_api["problem_gate_status"] == "PASS"
         assert project_api["opportunity_grade"] == "PENDING"
@@ -265,14 +265,14 @@ def test_historical_problem_year_uses_evidence_publication(settings, factory):
     result = Pipeline(settings, factory, FakeDiscovery([article]), FakeAnalyzer()).run(archive=True)
     assert result["counts"]["problems"] == 1
     with TestClient(create_app(settings)) as client:
-        assert client.get("/api/problems?year=2022").json()["total"] == 1
-        assert client.get("/api/problems?year=2026").json()["total"] == 0
-        assert client.get("/api/problems?period=today").json()["total"] == 1
+        assert client.get("/api/problems?year=2022", headers={"X-Admin-Key": "test-admin-key"}).json()["total"] == 1
+        assert client.get("/api/problems?year=2026", headers={"X-Admin-Key": "test-admin-key"}).json()["total"] == 0
+        assert client.get("/api/problems?period=today", headers={"X-Admin-Key": "test-admin-key"}).json()["total"] == 1
     with factory.begin() as session:
         session.scalar(select(Problem)).first_seen_at = datetime(2022, 4, 11, tzinfo=timezone.utc)
     with TestClient(create_app(settings)) as client:
-        assert client.get("/api/problems?period=today").json()["total"] == 0
-        assert client.get("/api/problems?year=2022").json()["total"] == 1
+        assert client.get("/api/problems?period=today", headers={"X-Admin-Key": "test-admin-key"}).json()["total"] == 0
+        assert client.get("/api/problems?year=2022", headers={"X-Admin-Key": "test-admin-key"}).json()["total"] == 1
 
 
 def test_source_metadata_seed_does_not_restore_operator_flags(settings, factory):
@@ -537,7 +537,7 @@ def test_pipeline_publishes_source_backed_problem_and_keeps_facts_separate(setti
         assert project.problem_statement in article.text
         assert session.scalar(select(ProjectProblemLink))
     with TestClient(create_app(settings)) as client:
-        assert client.get("/api/problems").json()["total"] == 1
+        assert client.get("/api/problems", headers={"X-Admin-Key": "test-admin-key"}).json()["total"] == 1
         detail = client.get("/api/projects/" + project.id).json()
         assert detail["related_problems"]
         assert detail["content"]["facts"][0]["quote"] == analysis.facts[0].quote

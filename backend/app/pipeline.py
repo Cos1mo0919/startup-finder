@@ -90,7 +90,7 @@ class Pipeline:
             if result.rowcount != 1:
                 raise RuntimeError("pipeline_lease_lost")
 
-    def persist(self, analysis, articles, now, allow_shared_source=False):
+    def persist(self, analysis, articles, now, allow_shared_source=False, official_evidence=None):
         validate_analysis(analysis, articles)
         # Retain only sources actually cited by validated facts.
         cited = {canonical_url(f.source_url) for f in analysis.facts}
@@ -195,6 +195,23 @@ class Pipeline:
             project.rating, project.rating_components = score(stored, project.sources)
             project.primary_sector, project.sectors = classify_sectors(stored)
             attach_evidence(session, project, analysis, articles, now)
+            if official_evidence:
+                from .db import ProjectEvidence
+
+                official_url, official_quote = official_evidence
+                existing_official = session.scalar(select(ProjectEvidence).where(
+                    ProjectEvidence.project_id == project.id,
+                    ProjectEvidence.url == official_url,
+                    ProjectEvidence.evidence_type == "official_website",
+                    ProjectEvidence.quote == official_quote,
+                ))
+                if existing_official is None:
+                    project.evidence_records.append(ProjectEvidence(
+                        project_id=project.id, url=official_url,
+                        evidence_type="official_website", quote=official_quote,
+                        confidence=0.6,
+                        notes="Article project link and linked page name match",
+                    ))
             reasons = evaluate_project(session, project, self.settings.evidence_min_score)
             gate, gate_reason, finding = problem_gate(stored, articles)
             project.problem_gate_status, project.problem_gate_reason = gate, gate_reason
@@ -534,7 +551,7 @@ class Pipeline:
                     articles = [article]
                     # Corroboration failures are scoped to this stage, never discard the first source.
                     try:
-                        for extra_url in self.discovery.corroborate(analysis.name, article.url):
+                        for extra_url in self.discovery.corroborate(analysis.name, article.url, analysis.country):
                             try:
                                 extra = self.discovery.article(extra_url)
                                 if valid_date(extra.published_at, start, archive=True) and normalize(
@@ -551,9 +568,20 @@ class Pipeline:
                                 analysis = combined
                     except (FetchError, AnalysisError) as exc:
                         errors.append({"source": url, "stage": "corroboration", "code": str(exc)})
+                    official_evidence = None
+                    if not analysis.main_url and hasattr(self.discovery, "resolve_official"):
+                        try:
+                            official_evidence = self.discovery.resolve_official(analysis.name, article)
+                            if official_evidence:
+                                official_url, _ = official_evidence
+                                analysis.main_url = official_url
+                                analysis.links["official"] = official_url
+                        except FetchError as exc:
+                            errors.append({"source": url, "stage": "official_resolution", "code": str(exc)})
                     stage = "validation"
                     self.persist(
-                        analysis, articles, start, allow_shared_source=bool(article.event_id)
+                        analysis, articles, start, allow_shared_source=bool(article.event_id),
+                        official_evidence=official_evidence,
                     )
                     primary_project_id = self.last_project_id
                     mode = "processed_ai" if analysis.analysis_mode == "ai" else "processed_fallback"

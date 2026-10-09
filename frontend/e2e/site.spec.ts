@@ -29,6 +29,8 @@ test("project catalog and detail show the problem before analysis", async ({ pag
 });
 
 test("admin access requires a key and keeps technical pages separate", async ({ page }) => {
+  await page.goto("/muammolar");
+  await expect(page).toHaveURL(/\/admin$/);
   await page.goto("/admin");
   await expect(page.getByRole("heading", { name: "Egasi uchun boshqaruv" })).toBeVisible();
   await expect(page.getByRole("navigation", { name: "Asosiy menyu" }).getByRole("link", { name: "Holat" })).toHaveCount(0);
@@ -39,4 +41,8 @@ test("admin access requires a key and keeps technical pages separate", async ({ 
   await expect(page.getByRole("heading", { name: "Ko‘rib chiqish navbati" })).toBeVisible();
   await page.getByRole("link", { name: "Manbalar samarasi" }).click();
   await expect(page.getByRole("heading", { name: "Manbalar samarasi" })).toBeVisible();
+  await page.getByRole("navigation", { name: "Admin menyusi" }).getByRole("link", { name: "Muammolar" }).click();
+  await expect(page.getByRole("heading", { name: "Muammolar" })).toBeVisible();
+  await page.getByRole("navigation", { name: "Admin menyusi" }).getByRole("link", { name: "Signallar" }).click();
+  await expect(page.getByRole("heading", { name: "Signallar" })).toBeVisible();
 });

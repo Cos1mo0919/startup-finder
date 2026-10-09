@@ -512,6 +512,8 @@ Global` tanloviga ega. `Arxiv`da Bugun, 7 kun, 30 kun, yil va nom qidiruvi
 bor. `Manbalar` manbalar guruhlarini tushuntiradi; texnik xatolarni ko‘rsatmaydi.
 Imkoniyatlar reytingi, muammolar, signallar va g‘oyalar ochiq bosh menyudan
 olingan, ammo ularning SQL modellari va tahlil ma’lumotlari saqlangan.
+Eski to‘g‘ridan-to‘g‘ri sahifa havolalari `/admin`ga yo‘naltiriladi;
+muammolar, g‘oyalar, signallar va sektorlar egasining ichki menyusida turadi.
 
 Ommaviy `/api/projects` faqat `publication_status=PUBLISHED` qaytaradi.
 Loyiha nomi/muallifi va mavjudligi tasdiqlansa-yu, aniq muammo, foydalanuvchi
@@ -527,12 +529,17 @@ samarasini ko‘rsatadi. `ADMIN_API_KEY` ni `.env` yoki hostingning himoyalangan
 environment sozlamasida uzoq tasodifiy qiymatga o‘rnating. U Gitga kiritilmaydi.
 Admin API so‘rovlarida `X-Admin-Key` yuboriladi. Kalit bo‘lmasa admin API 503,
 noto‘g‘ri bo‘lsa 401 qaytaradi. Ochiq sahifa kalitga muhtoj emas.
+Muammo, g‘oya, signal va sektor API so‘rovlari ham shu kalit bilan himoyalangan.
 
 Global loyihalar uchun bepul Show HN RSS bevosita loyiha saytlari havolalarini
 topadi; HN submission havolasi alohida discovery provenance sifatida saqlanadi.
 Sayt yoki loyiha nomining mavjudligi o‘zi yetarli emas: sanasi, yaratuvchisi,
 muammosi, foydalanuvchisi va manbaga tayangan tavsifi kerak. Noma’lum inglizcha
 tavsifni AI kalitisiz to‘qib tarjima qilish o‘rniga nomzod navbatda qoladi.
+Yangilik maqolasidagi loyiha nomi yozilgan rasmiy havola ham ochilib,
+sahifadagi nom mos kelsagina `official_url` va alohida dalil sifatida saqlanadi. Bu bosqich
+muvaffaqiyatsiz tugasa asl maqola va navbat saqlanadi. Brave qidiruvi
+sozlangan bo‘lsa, xalqaro nomzodlar O‘zbekiston bilan majburan bog‘lanmaydi.
 Manba va navbat bo‘yicha alohida tekshirish:
 
 ```bash

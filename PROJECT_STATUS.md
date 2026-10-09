@@ -289,7 +289,9 @@ The user's later instruction explicitly authorized Global project discovery
 while keeping Uzbekistan coverage. Stage 1 remains unaccepted. The public
 site now has four navigation items: Bosh sahifa, Loyihalar, Arxiv, Manbalar.
 Technical intelligence entities remain stored and available for owner/admin
-work. Public cards show the cited problem, target user, solution and evidence;
+work. Former public intelligence links now redirect to `/admin`; protected
+owner routes retain the problem, idea, signal and sector views. Their APIs
+require `ADMIN_API_KEY`. Public cards show the cited problem, target user, solution and evidence;
 unfinished score groups and the former top opportunities panel are hidden.
 The detail page places confirmed facts before optional detailed scoring.
 
@@ -299,7 +301,8 @@ old rows still pass the earlier project-existence evidence check, but only
 DMED and KotibAI also have complete source-backed problem analysis. The other
 five are retained for review; 2 of 15 stored project rows fail fatal gates.
 All 15 prior IDs and first-seen/publication timestamps matched the pre-change
-SQLite backup, with 15 source links and 56 evidence records unchanged.
+SQLite backup. The 15 source links stayed intact; evidence increased from 56
+to 57 after the verified KotibAI product page title was added.
 Old candidate `published` labels are synchronized with the project gate so
 public/admin counts agree. As of validation, 2 public projects, 11 project
 rows requiring review, 2 rejected; 206 candidates queued, 271 pending, 5
@@ -315,9 +318,16 @@ Global projects. A targeted Spot Startups run found 29 links and processed
 were bounded source samples, not full coverage. Quality gates stayed active.
 Source-yield, rejection distribution, historical preservation and exact
 source URLs are recorded in [PUBLIC_GLOBAL_VALIDATION.md](docs/PUBLIC_GLOBAL_VALIDATION.md).
+After the narrow official-link resolver was added, a stored KotibAI article
+was rechecked without source discovery: `https://kotib.ai/` was verified
+against its page and saved as the official URL with a separate verbatim-title
+evidence record. Runs 65–66 reported one existing-project match each, zero
+new cards and zero errors; ID and historical dates stayed the same.
+International paid-search corroboration now uses an international
+query instead of an Uzbekistan-only query.
 
 `ADMIN_API_KEY` must be configured privately for the owner area. No API keys
-were committed. No deployment was made. Checks: 200 backend tests, 10
+were committed. No deployment was made. Checks: 204 backend tests, 10
 desktop/mobile browser tests, Ruff and production TypeScript/Vite build passed.
 The existing Starlette/httpx dependency warning remains. User acceptance is
 still pending.

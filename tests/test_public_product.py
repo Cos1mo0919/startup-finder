@@ -60,6 +60,16 @@ def test_admin_accept_requeues_without_bypassing_publication(settings, factory):
         assert session.get(Candidate, article.url).status == "queued"
 
 
+def test_internal_intelligence_requires_admin_key(settings):
+    with TestClient(create_app(settings)) as client:
+        public = client.get("/api/intelligence/dashboard").json()
+        assert set(public) == {"today", "total", "latest_projects"}
+        assert "problems" not in public["total"]
+        for path in ("/api/problems", "/api/ideas", "/api/signals", "/api/sectors/intelligence", "/api/sectors/stats"):
+            assert client.get(path).status_code == 401
+            assert client.get(path, headers={"X-Admin-Key": "test-admin-key"}).status_code == 200
+
+
 def test_admin_reject_requires_and_stores_reason(settings, factory):
     article = sample_article("AquaSense")
     article.text = "O‘zbekiston uchun AquaSense platformasi Ali Karimov tomonidan ishlab chiqildi. Fermerlar uchun prototip taqdim etildi."
@@ -123,6 +133,48 @@ def test_show_hn_collects_product_links_not_generic_items(settings, factory):
     assert len(links) == 1
     assert links[0]["url"] == "https://example.org/product"
     assert links[0]["discovery_url"] == "https://news.ycombinator.com/item?id=123"
+
+
+def test_named_article_link_is_verified_before_becoming_official(settings):
+    article = sample_article()
+    article.text += "\nHavolalar: AgroKo‘mak rasmiy sayti: https://agrokomak.example/ | Boshqa: https://unrelated.example/"
+    class Web:
+        def get(self, url):
+            return b"<html><title>AgroKo'mak official project</title><body>AgroKo'mak product</body></html>", url
+    discovery = Discovery(settings, Web())
+    # A spelling mismatch must not turn an unrelated URL into an official link.
+    assert discovery.resolve_official("AgroKo‘mak", article) is None
+    class MatchingWeb:
+        def get(self, url):
+            return "<html><title>AgroKo‘mak rasmiy loyiha</title><body>AgroKo‘mak</body></html>".encode(), url
+    assert Discovery(settings, MatchingWeb()).resolve_official("AgroKo‘mak", article) == ("https://agrokomak.example/", "AgroKo‘mak rasmiy loyiha")
+
+
+def test_verified_official_page_keeps_its_own_evidence_record(settings, factory):
+    article = sample_article()
+    article.text += "\nHavolalar: AgroKo‘mak rasmiy sayti: https://agrokomak.example/"
+    class VerifiedDiscovery(FakeDiscovery):
+        def resolve_official(self, name, source_article):
+            return "https://agrokomak.example/", "AgroKo‘mak rasmiy loyiha"
+    Pipeline(settings, factory, VerifiedDiscovery([article]), FakeAnalyzer()).run()
+    with factory() as session:
+        project = session.scalar(select(Project))
+        assert project.main_url == "https://agrokomak.example/"
+        assert any(e.url == project.main_url and e.quote == "AgroKo‘mak rasmiy loyiha" and e.evidence_type == "official_website" for e in project.evidence_records)
+
+
+def test_global_corroboration_query_does_not_force_uzbekistan(settings):
+    class Search:
+        def __init__(self): self.queries = []
+        def search(self, query, freshness="pm"):
+            self.queries.append(query)
+            return []
+    search = Search()
+    discovery = Discovery(settings, object(), search=search)
+    discovery.corroborate("Leafovers", "https://leafovers.example/", "International")
+    assert "Uzbekistan" not in search.queries[0]
+    discovery.corroborate("AgroKo‘mak", "https://news.example/article", "Uzbekistan")
+    assert "Uzbekistan" in search.queries[1]
 
 
 def test_source_restricted_run_preserves_other_source_queue(settings, factory):

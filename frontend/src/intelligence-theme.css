@@ -220,6 +220,9 @@ footer, footer p { color: var(--text-muted); }
 .public-detail-aside dl { display: grid; gap: 11px; }
 .public-detail-aside dt { color: var(--text-muted); font-size: 12px; }
 .public-detail-aside dd { margin: 3px 0 0; }
+.public-detail .fact { display: block; }
+.public-detail .fact p { margin-bottom: 12px; }
+.public-detail .fact details { display: block; margin-top: 12px; }
 .public-analysis > summary { cursor: pointer; font-weight: 650; }
 .source-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .source-list article { border: 1px solid var(--border); border-radius: 12px; padding: 16px; background: var(--surface); }
