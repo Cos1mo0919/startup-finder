@@ -71,7 +71,7 @@ def test_archive_cli_explains_that_force_is_not_backfill(settings, monkeypatch, 
             self.discovery = SimpleNamespace(force=False)
 
         def run(self, **kwargs):
-            assert kwargs == {"archive": True, "discover": True}
+            assert kwargs == {"archive": True, "discover": True, "force_sources": True, "only_source": None}
             assert self.discovery.force
             return {"status": "completed"}
 
@@ -79,7 +79,7 @@ def test_archive_cli_explains_that_force_is_not_backfill(settings, monkeypatch, 
             pass
 
     monkeypatch.setattr(cli, "Settings", lambda: settings)
-    monkeypatch.setattr(cli, "Pipeline", EmptyPipeline)
+    monkeypatch.setattr(cli, "CatalogPipeline", EmptyPipeline)
     monkeypatch.setattr("sys.argv", ["cli", "--archive", "--force-sources"])
     assert cli.main() == 0
     assert "--backfill --from-date 2022-01-01 --to-date 2026-09-30" in capsys.readouterr().err
@@ -113,7 +113,7 @@ def test_process_url_queues_only_enabled_registered_sources(settings, factory, m
             pass
 
     monkeypatch.setattr(cli, "Settings", lambda: settings)
-    monkeypatch.setattr(cli, "Pipeline", InspectPipeline)
+    monkeypatch.setattr(cli, "CatalogPipeline", InspectPipeline)
     monkeypatch.setattr("sys.argv", ["cli", "--process-url", "https://www.spot.uz/oz/2025/09/12/tilmoch/"])
     assert cli.main() == 0
     with factory.begin() as session:
@@ -212,7 +212,7 @@ def test_debug_cli_does_not_start_pipeline(settings, monkeypatch, capsys, tmp_pa
     def forbidden(*args, **kwargs):
         raise AssertionError("Read-only diagnostics must not start discovery")
 
-    monkeypatch.setattr(cli, "Pipeline", forbidden)
+    monkeypatch.setattr(cli, "CatalogPipeline", forbidden)
     destination = tmp_path / "debug.json"
     monkeypatch.setattr("sys.argv", ["cli", "--debug-report", "--report", str(destination)])
     assert cli.main() == 0

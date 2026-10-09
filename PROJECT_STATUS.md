@@ -343,3 +343,22 @@ scoring and status decisions, deterministic trust-pair checks, source excerpt
 preservation, deduplication and histories. The 15 historical project IDs,
 first-seen/publication dates and source links were unchanged by migration.
 Stage B and Stage C remain in progress on the feature branch; main is unchanged.
+
+## 2026-10-09 — v3.1 Stage B/C validation
+
+Stage B committed as `27cf234`: the public site keeps four navigation items,
+shows project-first cards and an archive based on publication date, with no
+fake score for unevaluated items. Stage C connects the new catalog pipeline to
+hourly discovery, CLI and yearly backfill. Generic keyless pages stay in owner
+review with `llm_unavailable`. A production trusted-page positive allowlist
+has **not** been added without page-level validation. The admin catalog offers
+Publish, Hide, Reject and Merge; histories and source/evidence records persist.
+
+Live keyless Spot and Show HN runs found no new publishable projects. Spot:
+21 section links, 3 already-known candidates reviewed, 0 new rows. Show HN:
+20 new URLs, 26 review-required processing decisions and 4 isolated page
+errors, 0 published. The local database remains 15 projects, including 2
+published legacy cards (DMED, KotibAI), 11 review-required and 2 rejected.
+No real LLM classifier precision was measured because AI_API_KEY is absent.
+Detailed run IDs, source yield and audit samples: `reports/stage-c.md`.
+The immutable baseline and database restore instructions are in `reports/`.

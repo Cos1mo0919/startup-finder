@@ -1,6 +1,6 @@
 # Izlanish — Startup Finder
 
-Веб-сайт для поиска реальных проектов и решаемых ими проблем. Охват Узбекистана сохраняется; по новому разрешению пользователя начато отдельное ежедневное обнаружение международных проектов. Stage 1 ещё не принят, а публикация требует подтверждённых проекта, проблемы, аудитории и решения.
+Веб-сайт для поиска реальных проектов и решаемых ими проблем. Охват Узбекистана сохраняется; по новому разрешению пользователя начато отдельное ежедневное обнаружение международных проектов. Stage 1 ещё не принят. Для каталога v3.1 обязательны конкретная идентичность проекта, содержательное описание, проверяемый URL и дедупликация; анализ проблемы и рынка необязателен для публикации.
 
 Публичный интерфейс на узбекском: главная страница, простой каталог, архив, группы источников и подробная страница проекта с фактами. Техническое состояние доступно владельцу в `/admin`. Приложение не создаёт вымышленных карточек ради заполнения ленты.
 
@@ -19,27 +19,16 @@
 
 ## Режим без платных API
 
-AI не обязателен для публикации. Fallback извлекает названия в кавычках и явные
-названия продуктов без кавычек, автора/команду/организацию и цитируемое доказательство
-создания, запуска или прототипа. Обязательные gates (Узбекистан, дата, автор,
-существование, источник, Tasdiqlanganlik ≥ заданного порога) сохраняются. Обычные
-новости, рубрики интервью и экосистемные инициативы не становятся проектами.
-
-`rating_method=deterministic_fallback` хранится в content и возвращается API;
-для AI-извлечения используется `ai`. Число в обоих случаях считает код по прежней
-шестикомпонентной шкале. Без AI учитываются только извлечённые из цитат признаки;
-неизвестные критерии дают ноль. Это не экспертная оценка. Публичная карточка появляется
-только после подтверждения решаемой проблемы, аудитории и механизма решения.
-Проблема и аудитория извлекаются из узбекских фраз; неизвестные поля не выдумываются.
-Для RU/EN допустимы только узкие структурированные узбекские шаблоны с оригинальными
-именами и цитатами, без заявления о полноценном переводе.
-
-Pending получает причину `ambiguous_project`, `missing_creator`,
-`insufficient_evidence` или `needs_translation`. `/admin/status` показывает число
-опубликованных без AI, методы рейтинга, языки, причины ожидания и происхождение.
-Новая версия fallback повторно проверяет старые кандидаты и может исправить название
-карточки, сохранив её ID, first_seen, дату и исходные цитаты. Новые источники
-объединяются с существующим проектом. Старые записи не удаляются.
+Публикация в каталоге v3.1 не требует анализа проблемы или рынка. Нужны
+конкретное название проекта, содержательное описание, исходный URL и отсутствие
+неразрешённого дубля. Без AI общий RSS/новостной материал остаётся у владельца
+с причиной `llm_unavailable`; очевидный шум отсекается до платного анализа.
+Автоматическая детерминированная публикация разрешена только для заранее
+проверенной пары `adapter` + `page_type` из
+`config/trusted_catalog_pages.json`. Пока положительных производственных пар
+нет, поэтому отсутствие AI ключа снижает автоматический выход. Никакие
+оценки, переводы и факты при этом не выдумываются. Ожидающие записи
+сохраняются и повторно рассматриваются после настройки AI ключа.
 
 Проверка без ключей (также очистите альтернативный `OPENAI_API_KEY`):
 
@@ -63,8 +52,8 @@ CLI после настройки ключа. Seed-импорт при стар�
 `.venv/bin/python -m backend.app.cli --update-sources` (он применяет и enabled из seeds).
 Без Search API события обходятся по релевантным ссылкам/подписям на официальной странице (либо странице исходной публикации)
 в пределах её домена и одному дополнительному уровню страниц участников/победителей.
-Одна статья по-прежнему описывает одну карточку; списки нескольких проектов без
-индивидуальных страниц не гарантируют полное извлечение всех участников.
+Одна страница может дать несколько отдельных кандидатов при достоверном извлечении;
+списки без описания каждого проекта остаются на проверке.
 
 Проверенные дополнения: Qarshi DU (HTML, даты статей), восстановившийся Gazeta RSS;
 для UzHunt исправлены основной блок текста и полная дата, исключены рекомендации.
@@ -169,7 +158,7 @@ Backfill создаёт отдельный run для каждого года. �
 
 Все найденные URL сохраняются до применения лимита обработки. `MAX_CANDIDATES` ограничивает работу за run; остаток не теряется и доступен через `--drain`. Повторное обнаружение URL не создаёт проект автоматически. Новая публикация о старом проекте добавляет доказательства через дедупликацию.
 
-**База не очищается ни после backfill, ни в новый день.** Bugun/7/30 дней фильтруют по `first_seen`, годы — по исходной дате публикации. Проект из 2022 года, впервые найденный сегодня, виден и в Bugun, и в фильтре 2022. При новой статье first_seen не меняется. Выбор года в интерфейсе автоматически снимает фильтр текущего дня.
+**База не очищается ни после backfill, ни в новый день.** Bugun/7/30 дней и годы фильтруют по исходной дате публикации. Проект из 2022 года, впервые найденный сегодня, находится в архиве 2022 года, а не в Bugun. Записи с оценочной датой не показываются как свежие. При новой статье `first_seen` не меняется.
 
 Планировщик работает в одном API-процессе, каждый час в `HH:00` по Ташкенту. Не запускайте несколько `uvicorn --workers` с активным расписанием. Lease защищает и от одновременного CLI-запуска; незавершённая блокировка истекает через 20 минут и продлевается в ходе обработки. Пропущенные во время длительного выключения часы не проигрываются пачкой. После восстановления облачного snapshot необходимо заново запустить процесс.
 
@@ -503,7 +492,7 @@ sanalar, manbalar, rad etish/queue holati va testlar
 [SECOND_PASS_VALIDATION.md](docs/SECOND_PASS_VALIDATION.md) da. Bu natija
 boshqa Codespace bazasiga avtomatik ko‘chmaydi.
 
-## Joriy ochiq mahsulot va Global discovery — 09.10.2026
+## Oldingi public/global bosqich — 09.10.2026 (v3.1 qoidalari quyida)
 
 Ochiq menyu: `Bosh sahifa`, `Loyihalar`, `Arxiv`, `Manbalar`. Bosh sahifa
 faqat nashr sanasiga ko‘ra oxirgi 30 kundagi tayyor loyihalarni ko‘rsatadi.
@@ -516,10 +505,9 @@ Eski to‘g‘ridan-to‘g‘ri sahifa havolalari `/admin`ga yo‘naltiriladi;
 muammolar, g‘oyalar, signallar va sektorlar egasining ichki menyusida turadi.
 
 Ommaviy `/api/projects` faqat `publication_status=PUBLISHED` qaytaradi.
-Loyiha nomi/muallifi va mavjudligi tasdiqlansa-yu, aniq muammo, foydalanuvchi
-yoki yechim yetishmasa, yozuv `REVIEW_REQUIRED` bo‘lib saqlanadi. Loyiha
-`DISCOVERED → VERIFIED_PROJECT → ANALYZED → PUBLISHED` sifat bosqichlaridan
-o‘tadi; rad va dubllar alohida qayd etiladi. Adminning `ACCEPT` amali faqat
+Bu oldingi bosqichda muammo va foydalanuvchi majburiy darvoza edi;
+v3.1 katalogida ular ixtiyoriy tahlil qatlamiga aylandi. Rad va dubllar
+alohida qayd etiladi. Adminning `ACCEPT` amali faqat
 oddiy qayta tekshirish navbatiga qo‘yadi; dalil chegarasini chetlab o‘tmaydi.
 `first_seen` va eski dalillar o‘chirilmaydi. Eski maqola bugun topilsa ham
 `Yangi` hisoblanmaydi.
@@ -533,8 +521,8 @@ Muammo, g‘oya, signal va sektor API so‘rovlari ham shu kalit bilan himoyalan
 
 Global loyihalar uchun bepul Show HN RSS bevosita loyiha saytlari havolalarini
 topadi; HN submission havolasi alohida discovery provenance sifatida saqlanadi.
-Sayt yoki loyiha nomining mavjudligi o‘zi yetarli emas: sanasi, yaratuvchisi,
-muammosi, foydalanuvchisi va manbaga tayangan tavsifi kerak. Noma’lum inglizcha
+Sayt yoki loyiha nomining mavjudligi o‘zi yetarli emas: aniq loyiha, mazmunli
+tavsif, tekshiriladigan URL va deduplikatsiya kerak; muammo tahlili keyin qo‘shiladi. Noma’lum inglizcha
 tavsifni AI kalitisiz to‘qib tarjima qilish o‘rniga nomzod navbatda qoladi.
 Yangilik maqolasidagi loyiha nomi yozilgan rasmiy havola ham ochilib,
 sahifadagi nom mos kelsagina `official_url` va alohida dalil sifatida saqlanadi. Bu bosqich
@@ -553,3 +541,43 @@ davom etadi. `AI_API_KEY` va `SEARCH_API_KEY` ixtiyoriy; birortasi ham oddiy
 manba tekshiruvi uchun talab qilinmaydi. Mavjud `--backfill` tarixiy oynalari
 o‘zgarmadi. Natijalarni to‘liq statistikasi va cheklovlari
 [PUBLIC_GLOBAL_VALIDATION.md](docs/PUBLIC_GLOBAL_VALIDATION.md) da.
+
+## Catalog pipeline v3.1 (09.10.2026)
+
+Текущий hourly scheduler, обычный CLI discovery и годовой `--backfill` используют
+`CatalogPipeline`. Старый problem-first анализ сохранён для weekly Uzbekistan
+и monthly Global deep scans. Реестр, SQLite и исторические карточки сохранены.
+Публичный каталог показывает только `PUBLISHED`; прежний анализ проблемы и
+оценки остаются дополнительной информацией. Старые проекты не становятся
+«новыми» только потому, что были обнаружены сегодня.
+
+Каждый URL сохраняется как кандидат. Шумные темы отклоняются до AI; общий RSS
+без ключа уходит в `review_required` с причиной `llm_unavailable`. Только
+проверенная пара `adapter` + `page_type` из
+`config/trusted_catalog_pages.json` может автоматически публиковаться
+детерминированным путём. На момент этого релиза положительных пар нет: в
+текущих активных источниках нет проверенной официальной структурированной
+страницы проекта. Для такой публикации нужна конкретная проверка парсера,
+длины содержательного описания и источника. Фейковые оценки не записываются:
+`catalog_score=null`, `score_pending=true`, `evidence_count=0`.
+
+Если задан `AI_API_KEY`, каталог использует версионированный prompt
+`config/prompts/catalog_classifier_v1.txt`, проверяет структуру и опору
+ответа на исходный текст и повторно рассматривает ожидающие записи. Четыре
+фактора по 1–10 дают среднее с одним десятичным знаком. Где нет основания
+для novelty/potential, модель обязана поставить 4 с явной причиной. Сбой
+модели оставляет кандидата в review и повторяется с ограничением. Ключ и
+секреты задаются только переменными среды.
+
+В `/admin/review` видны причины, кандидаты, история и извлечённые имена;
+в `/admin/catalog` владелец может опубликовать, скрыть, отклонить или
+объединить проекты, сохранив ссылки и доказательства. Admin API:
+`GET /api/admin/catalog`, `GET /api/admin/projects/{id}`,
+`POST /api/admin/projects/{id}/action?action=PUBLISH|HIDE|REJECT|MERGE`.
+Для HIDE/REJECT нужен `reason`, для MERGE — `target_id`. Все запросы требуют
+`X-Admin-Key`. Исходная статья, maker URL и HN submission URL хранятся
+раздельно, если feed содержит эти данные.
+
+Локальный проверенный snapshot до миграции: `reports/pipeline-baseline.json`.
+Инструкция восстановления: `reports/pipeline-restore.md`. Протокол Stage C и
+ограничения измерения: `reports/stage-c.md`.

@@ -35,6 +35,7 @@ function App() {
         <Route path="/admin" element={<AdminPage />} />
         <Route path="/admin/status" element={<AdminPage />} />
         <Route path="/admin/review" element={<AdminPage section="review" />} />
+        <Route path="/admin/catalog" element={<AdminPage section="catalog" />} />
         <Route path="/admin/sources" element={<AdminPage section="sources" />} />
         <Route path="/admin/muammolar" element={<AdminPage section="problems" />} />
         <Route path="/admin/muammo/:id" element={<AdminPage section="problem" />} />

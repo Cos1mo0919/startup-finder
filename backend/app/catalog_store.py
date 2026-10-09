@@ -114,6 +114,8 @@ def save_catalog_result(session, article, result: CatalogResult, when=None) -> d
             else result.analysis_method
         )
         project.description_needs_translation = result.analysis_method == "deterministic"
+        project.publication_method = "deterministic" if result.analysis_method == "deterministic" else "llm"
+        project.discovery_source_url = project.discovery_source_url or article.discovery_url or url
         project.date_estimated = article.published_at is None if created else project.date_estimated
         project.publication_excerpt = project.publication_excerpt or article.text[:1500]
         project.catalog_score = catalog_score(entry)

@@ -1,3 +1,4 @@
+import json
 import re
 from itertools import zip_longest
 from typing import Protocol
@@ -13,6 +14,28 @@ from ..events import event_queries, followup_due
 from ..network import FetchError, safe_url, canonical_url
 from ..registry import due, record_check, seed_registry, source_for_url, load_sources
 from .parsers import parse_article, parse_feed
+
+
+def structured_project_fields(raw, options):
+    """Extract only explicit page fields selected by a source-specific adapter."""
+    soup = BeautifulSoup(raw, "html.parser")
+    name_selector = options.get("project_name_selector")
+    description_selector = options.get("project_description_selector")
+    if name_selector and description_selector:
+        name_node = soup.select_one(name_selector)
+        description_node = soup.select_one(description_selector)
+        return (name_node.get_text(" ", strip=True) if name_node else "",
+                description_node.get_text(" ", strip=True) if description_node else "")
+    for node in soup.select('script[type="application/ld+json"]'):
+        try:
+            payload = json.loads(node.string or node.get_text())
+            objects = payload if isinstance(payload, list) else payload.get("@graph", [payload])
+            for item in objects:
+                if isinstance(item, dict) and item.get("@type") in ("Product", "SoftwareApplication"):
+                    return str(item.get("name") or ""), str(item.get("description") or "")
+        except (ValueError, TypeError, AttributeError):
+            continue
+    return "", ""
 
 
 class SearchAdapter(Protocol):
@@ -93,6 +116,13 @@ class Discovery:
             )
             result = parse_article(raw, final_url, name, kind, feed_date, source.options if source else None)
             result.source_id = source.id if source else None
+            if source:
+                result.adapter = source.id
+                result.page_type = source.options.get("page_type", "news_article" if source.source_type == "news" else "")
+                result.country_hint = source.country or ""
+                result.structured_category = source.options.get("catalog_category", "")
+                if result.page_type and result.page_type != "news_article":
+                    result.project_name, result.project_description = structured_project_fields(raw, source.options)
             return result
 
     def page_links(self, url, pattern="", match_text=False):

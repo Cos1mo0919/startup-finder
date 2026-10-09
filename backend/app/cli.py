@@ -5,7 +5,7 @@ from datetime import date
 from pathlib import Path
 from .config import Settings
 from .db import make_db
-from .pipeline import Pipeline
+from .catalog_pipeline import CatalogPipeline
 from .registry import seed_registry
 from .db import RegistrySource
 from .evidence import audit_existing
@@ -162,7 +162,7 @@ def main():
             with factory() as session:
                 if session.get(Candidate, url) is None:
                     parser.error("Candidate URL not stored")
-            pipeline = Pipeline(settings, factory)
+            pipeline = CatalogPipeline(settings, factory)
             try:
                 result = pipeline.run(archive=True, discover=False, only_urls=[url])
             finally:
@@ -195,7 +195,7 @@ def main():
                     row.article = {"_queued": True, "_fetch_url": url}
                     row.status = "queued"
                     row.reason = ""
-            pipeline = Pipeline(settings, factory)
+            pipeline = CatalogPipeline(settings, factory)
             try:
                 result = pipeline.run(archive=True, discover=False, only_urls=[url])
             finally:
@@ -218,7 +218,7 @@ def main():
                 "--force-sources bypasses source schedules, not archive coverage limits.",
                 file=sys.stderr,
             )
-        pipeline = Pipeline(settings, factory)
+        pipeline = CatalogPipeline(settings, factory)
         pipeline.discovery.force = args.force_sources
         if args.only_source:
             with factory() as session:
@@ -232,7 +232,9 @@ def main():
 
                 results = []
                 for window in archive_windows(args.from_date, args.to_date):
-                    result = pipeline.run(archive=True, window=window, discover=not args.drain)
+                    pipeline.discovery.window = window
+                    result = pipeline.run(archive=True, discover=not args.drain,
+                                          force_sources=args.force_sources)
                     results.append(result)
                     print(json.dumps({"year": window[0].year, **result}, ensure_ascii=False), flush=True)
                 result = {
@@ -240,7 +242,8 @@ def main():
                     "runs": results,
                 }
             else:
-                result = pipeline.run(archive=args.archive, discover=not args.drain)
+                result = pipeline.run(archive=args.archive, discover=not args.drain,
+                                      force_sources=args.force_sources, only_source=args.only_source)
             if args.report:
                 args.report.parent.mkdir(parents=True, exist_ok=True)
                 args.report.write_text(json.dumps(result, ensure_ascii=False, indent=2))

@@ -247,9 +247,10 @@ def create_app(settings=None):
             query = query.where(Project.confidence >= min_evidence)
         now = now_utc()
         if period == "today":
-            query = query.where(Project.published_at >= today_start(now))
+            query = query.where(Project.published_at >= today_start(now), Project.date_estimated.is_(False))
         elif period in ("7d", "30d"):
-            query = query.where(Project.published_at >= now - timedelta(days=7 if period == "7d" else 30))
+            query = query.where(Project.published_at >= now - timedelta(days=7 if period == "7d" else 30),
+                                Project.date_estimated.is_(False))
         if year:
             query = query.where(
                 Project.published_at >= datetime(year, 1, 1, tzinfo=timezone.utc),
@@ -375,12 +376,17 @@ def create_app(settings=None):
             return {"total": total, "items": [{
                 "url": c.url, "title": (c.article or {}).get("title", ""), "source_id": c.source_id,
                 "status": c.status, "reason": c.reason, "detector_result": c.detector_result,
-                "creator": next((p.creator for pid in c.project_ids or [] if (p := session.get(Project, pid))), ""),
-                "canonical_project": next((p.name for pid in c.project_ids or [] if (p := session.get(Project, pid))), ""),
+                "creator": next((p.creator for pid in c.project_ids or [] if (p := session.get(Project, pid))), "") or next((e.get("creator") for e in (c.article or {}).get("_catalog_entries", []) if e.get("creator")), ""),
+                "canonical_project": next((p.name for pid in c.project_ids or [] if (p := session.get(Project, pid))), "") or next((e.get("name") for e in (c.article or {}).get("_catalog_entries", []) if e.get("name")), ""),
                 "primary_problem": next((p.problem_statement for pid in c.project_ids or [] if (p := session.get(Project, pid))), ""),
                 "evidence": next(([{"url": e.url, "type": e.evidence_type, "quote": e.quote} for e in p.evidence_records[:5]] for pid in c.project_ids or [] if (p := session.get(Project, pid))), []),
                 "confidence": next((p.confidence for pid in c.project_ids or [] if (p := session.get(Project, pid))), None),
                 "review_decision": c.review_decision,
+                "classification_confidence": c.classification_confidence,
+                "classification_history": c.classification_history,
+                "status_history": c.status_history,
+                "publication_method": next((p.publication_method for pid in c.project_ids or [] if (p := session.get(Project, pid))), ""),
+                "analysis_method": c.analysis_mode,
             } for c in rows]}
 
     @app.post("/api/admin/review/action", dependencies=[Depends(require_admin)])
@@ -404,6 +410,41 @@ def create_app(settings=None):
             else:
                 candidate.status, candidate.reason = "review_required", reason or candidate.reason
         return {"url": url, "action": action, "status": candidate.status, "reason": candidate.reason}
+
+    @app.get("/api/admin/projects/{project_id}", dependencies=[Depends(require_admin)])
+    def admin_project(project_id: str):
+        with factory() as session:
+            project = session.get(Project, project_id)
+            if project is None:
+                raise HTTPException(404, "Loyiha topilmadi")
+            return {**serialize_project(project, detail=True),
+                    "classification_history": project.classification_history,
+                    "status_history": project.status_history,
+                    "attribute_history": project.attribute_history,
+                    "review_reason": project.review_reason,
+                    "publication_excerpt": project.publication_excerpt,
+                    "reanalysis_state": project.reanalysis_state}
+
+    @app.get("/api/admin/catalog", dependencies=[Depends(require_admin)])
+    def admin_catalog(page: int = Query(1, ge=1), page_size: int = Query(30, ge=1, le=100)):
+        with factory() as session:
+            query = select(Project).order_by(Project.first_seen.desc())
+            total = session.scalar(select(func.count()).select_from(Project))
+            rows = session.scalars(query.offset((page - 1) * page_size).limit(page_size)).all()
+            return {"total": total, "items": [{"id": project.id, "name": project.name,
+                    "status": project.publication_status, "reason": project.publication_reason,
+                    "method": project.publication_method, "analysis_method": project.analysis_method,
+                    "source_count": len(project.sources)} for project in rows]}
+
+    @app.post("/api/admin/projects/{project_id}/action", dependencies=[Depends(require_admin)])
+    def admin_project_action(project_id: str, action: Literal["PUBLISH", "HIDE", "REJECT", "MERGE"],
+                             reason: str = "", target_id: str = ""):
+        from .catalog_admin import catalog_action
+        with factory.begin() as session:
+            try:
+                return catalog_action(session, project_id, action, reason, target_id)
+            except ValueError as exc:
+                raise HTTPException(404 if str(exc) == "project_not_found" else 422, str(exc)) from exc
 
     @app.get("/api/intelligence/dashboard")
     def intelligence_dashboard():
@@ -529,8 +570,8 @@ def create_app(settings=None):
                         reasons[c.reason] = reasons.get(c.reason, 0) + 1
                 result.append({"source_id": source.id, "name": source.name, "enabled": source.enabled,
                                "items_fetched": source.candidates_found, "candidate_records": len(rows),
-                               "project_candidates": sum(c.detector_result == "PROJECT_CANDIDATE" for c in rows),
-                               "verified_projects": sum(projects[pid].visible for pid in linked),
+                               "project_candidates": sum(c.detector_result in ("PROJECT_CANDIDATE", "PROJECT", "MULTI") for c in rows),
+                               "verified_projects": sum(projects[pid].visible or projects[pid].publication_status == "PUBLISHED" for pid in linked),
                                "published_projects": sum(projects[pid].publication_status == "PUBLISHED" for pid in linked),
                                "rejected_items": sum(c.status == "rejected" for c in rows),
                                "dominant_rejection_reasons": sorted(reasons.items(), key=lambda pair: -pair[1])[:3]})

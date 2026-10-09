@@ -270,3 +270,24 @@ separate `official_website` evidence record. Fetch failures do not drop the orig
 Optional Brave corroboration uses a country-aware query; an international
 candidate is no longer searched as if it originated in Uzbekistan. Neither
 step bypasses the publication gates or requires a paid key.
+
+## Catalog pipeline v3.1
+
+`CatalogPipeline` is the active hourly and CLI project path. Source adapters
+create durable `Candidate` rows; a cheap noise check precedes the structured
+LLM classifier. With no AI key, generic pages remain `review_required` with
+`llm_unavailable`. Deterministic automatic publication requires a positive,
+reviewed `(adapter, page_type)` pair in `config/trusted_catalog_pages.json`.
+The current production file has no positive pair. The classifier contract and
+prompt are versioned in `backend/app/catalog.py` and
+`config/prompts/catalog_classifier_v1.txt`.
+
+`CatalogStore` writes project/source/evidence records and append-only status,
+classification and attribute history fields. The source article and discovery
+submission URL are distinct. `publication_status=PUBLISHED` is the public
+catalog gate; `catalog_score` may be null when no defensible score exists.
+`date_estimated` prevents undated entries from appearing in recent filters.
+The owner catalog actions are implemented in `catalog_admin.py` and protected
+API routes. Weekly Uzbekistan and monthly Global deep intelligence scans still
+run through the older `Pipeline`; their internal entities stay out of public
+navigation. `reports/pipeline-baseline.json` is the pre-migration inventory.

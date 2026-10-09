@@ -160,7 +160,8 @@ def decision(result: CatalogResult, entry: CatalogEntry | None = None) -> tuple[
     if result.reason == "llm_unavailable":
         return "REVIEW_REQUIRED", "llm_unavailable"
     if result.classification == "NOT_PROJECT":
-        return ("REJECTED", result.reason) if confidence >= 0.7 else ("REVIEW_REQUIRED", "uncertain_not_project")
+        return (("REJECTED", result.reason) if confidence >= 0.7 else
+                ("REVIEW_REQUIRED", result.reason if result.analysis_method == "deterministic" else "uncertain_not_project"))
     if result.analysis_method == "deterministic":
         return ("AUTO_PUBLISHED", "trusted_structured_source") if entry else ("REVIEW_REQUIRED", "llm_unavailable")
     if confidence < 0.4:
@@ -201,9 +202,11 @@ class CatalogClassifier:
                                           headers={"Authorization": f"Bearer {self.settings.ai_key}"}, timeout=30)
                 response.raise_for_status()
                 payload = json.loads(response.json()["choices"][0]["message"]["content"])
-                return parse_classifier_response(payload, text)
+                return parse_classifier_response(payload, article.title + "\n" + text)
             except (ClassifierFailure, ValidationError, KeyError, ValueError, json.JSONDecodeError) as exc:
                 last_reason = str(exc) if isinstance(exc, ClassifierFailure) else "invalid_json_schema"
+            except httpx.HTTPError as exc:
+                raise ClassifierFailure("llm_unavailable") from exc
         raise ClassifierFailure(last_reason)
 
 
@@ -234,7 +237,7 @@ def deterministic_entry(article, allowlist: Path) -> CatalogEntry | None:
                          project_type={"startup_profile": "startup", "university_project": "university_project",
                                        "hackathon_entry": "hackathon_project"}.get(article.page_type, "other"),
                          stage="unknown")
-    validate_entry(entry, article.text, "deterministic")
+    validate_entry(entry, article.title + "\n" + article.text, "deterministic")
     return entry
 
 

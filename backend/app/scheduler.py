@@ -7,6 +7,7 @@ from sqlalchemy import select
 from .dates import TASHKENT
 from .db import RegistrySource, SchedulerCheckpoint, aware, now_utc
 from .pipeline import Pipeline
+from .catalog_pipeline import CatalogPipeline
 
 
 def hourly_trigger():
@@ -14,7 +15,7 @@ def hourly_trigger():
 
 
 def run_once(settings, factory, archive=False):
-    pipeline = Pipeline(settings, factory)
+    pipeline = CatalogPipeline(settings, factory)
     try:
         return pipeline.run(archive=archive)
     finally:
@@ -51,7 +52,7 @@ def run_deep_scan(settings, factory, name, now=None):
             checkpoint = SchedulerCheckpoint(name=name, cursor={})
             session.add(checkpoint)
         checkpoint.last_attempt_at = now
-    pipeline = Pipeline(settings, factory)
+    pipeline = CatalogPipeline(settings, factory) if name in ("morning", "evening") else Pipeline(settings, factory)
     try:
         pipeline.discovery.force = name in ("morning", "evening")
         if name in ("local_weekly", "global_monthly"):
