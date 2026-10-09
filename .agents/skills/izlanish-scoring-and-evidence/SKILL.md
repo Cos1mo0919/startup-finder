@@ -9,6 +9,19 @@ description: >
 
 # izlanish Scoring and Evidence
 
+## Current catalog scoring — v3.1
+
+`docs/PROJECT_CATALOG_PIPELINE_V3_1.md` defines the public catalog score.
+It is the code-computed one-decimal average of four independently explained
+1–10 scores: clarity, real_product, novelty and potential. A low score does
+not block publication. No LLM means `catalog_score=null`, `score_pending=true`,
+`evidence_count=0` for a trusted deterministic publication; the public UI
+shows “Baholanmagan”, never a neutral ranking constant as a score. Funding
+alone never proves usage or warrants `real_product >= 8`. The detailed
+problem, market, solution, opportunity and evidence ratings below are a
+separate optional intelligence layer after catalog publication. Their stop
+filters affect opportunity recommendations, not catalog existence.
+
 ## Purpose
 
 This skill defines how izlanish evaluates:
@@ -73,13 +86,8 @@ Used for analysis and storage.
 
 Used in cards and normal UI.
 
-Public UI should show approximately:
-
-- Muammo
-- Bozor
-- Dalil
-- Yechim
-- Imkoniyat
+The public catalog card shows the four-factor catalog score or “Baholanmagan”.
+Deep intelligence scores are optional detail content.
 
 Detailed sub-scores should be shown only on detail pages.
 
@@ -1138,13 +1146,8 @@ Do not let evidence score replace market score.
 
 # 45. UI Rules for Scores
 
-Main card should show only:
-
-- Muammo
-- Bozor
-- Dalil
-- Yechim
-- Imkoniyat
+The compact catalog card shows its catalog score when scored, or “Baholanmagan”.
+Deep analysis appears only when populated on the detail page.
 
 Detailed page may show all criteria.
 

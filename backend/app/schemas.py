@@ -45,6 +45,12 @@ class Article(BaseModel):
     language: str = ""
     discovery_url: str | None = None
     discovery_title: str = ""
+    adapter: str = ""
+    page_type: str = ""
+    project_name: str = ""
+    project_description: str = ""
+    structured_category: str = ""
+    country_hint: str = ""
 
 
 class Fact(BaseModel):

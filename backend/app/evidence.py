@@ -268,6 +268,10 @@ def audit_existing(factory, threshold):
 
     with factory.begin() as session:
         for project in session.scalars(select(Project)):
+            if project.analysis_method in {"llm", "deterministic", "hybrid", "manual"}:
+                # The catalog gate is independent of legacy problem/evidence scoring.
+                # Re-running the old audit must not withdraw a catalog publication.
+                continue
             analysis = Analysis.model_validate(project.content)
             articles = [
                 Article(

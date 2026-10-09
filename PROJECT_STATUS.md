@@ -331,3 +331,15 @@ were committed. No deployment was made. Checks: 204 backend tests, 10
 desktop/mobile browser tests, Ruff and production TypeScript/Vite build passed.
 The existing Starlette/httpx dependency warning remains. User acceptance is
 still pending.
+
+## 2026-10-09 — v3.1 catalog pipeline in progress (feature branch)
+
+The user supplied `docs/PROJECT_CATALOG_PIPELINE_V3_1.md` and explicitly
+replaced the problem gate for catalog publication. Baseline commit `2132813`
+records 15 projects: 2 published, 11 in review, 2 rejected. A verified SQLite
+backup and exact restore command are recorded in `reports/pipeline-restore.md`.
+Stage A adds schema v7, a versioned classifier prompt, validated catalog
+scoring and status decisions, deterministic trust-pair checks, source excerpt
+preservation, deduplication and histories. The 15 historical project IDs,
+first-seen/publication dates and source links were unchanged by migration.
+Stage B and Stage C remain in progress on the feature branch; main is unchanged.

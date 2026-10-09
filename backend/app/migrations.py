@@ -29,6 +29,30 @@ ADDITIONS = {
         "publication_reason": "VARCHAR(100) NOT NULL DEFAULT ''",
         "secondary_problems": "JSON NOT NULL DEFAULT '[]'",
         "discovery_source_url": "TEXT",
+        "analysis_method": "VARCHAR(20) NOT NULL DEFAULT 'legacy'",
+        "catalog_score": "FLOAT",
+        "evidence_count": "INTEGER NOT NULL DEFAULT 0",
+        "classification_confidence": "FLOAT",
+        "catalog_scores": "JSON NOT NULL DEFAULT '{}'",
+        "catalog_score_reasons": "JSON NOT NULL DEFAULT '{}'",
+        "score_evidence": "JSON NOT NULL DEFAULT '{}'",
+        "score_pending": "BOOLEAN NOT NULL DEFAULT TRUE",
+        "short_description": "TEXT NOT NULL DEFAULT ''",
+        "description_needs_translation": "BOOLEAN NOT NULL DEFAULT FALSE",
+        "date_estimated": "BOOLEAN NOT NULL DEFAULT FALSE",
+        "publication_method": "VARCHAR(25) NOT NULL DEFAULT 'automated'",
+        "sector_method": "VARCHAR(20) NOT NULL DEFAULT 'keyword'",
+        "project_type": "VARCHAR(30) NOT NULL DEFAULT 'other'",
+        "project_type_method": "VARCHAR(20) NOT NULL DEFAULT 'source_context'",
+        "project_stage": "VARCHAR(20) NOT NULL DEFAULT 'unknown'",
+        "review_reason": "VARCHAR(100) NOT NULL DEFAULT ''",
+        "publication_excerpt": "TEXT NOT NULL DEFAULT ''",
+        "classification_history": "JSON NOT NULL DEFAULT '[]'",
+        "status_history": "JSON NOT NULL DEFAULT '[]'",
+        "attribute_history": "JSON NOT NULL DEFAULT '[]'",
+        "reanalysis_state": "VARCHAR(30) NOT NULL DEFAULT ''",
+        "reanalysis_attempts": "INTEGER NOT NULL DEFAULT 0",
+        "reanalysis_next_at": "DATETIME",
     },
     "project_sources": {"source_id": "VARCHAR(80) REFERENCES sources(id)"},
     "runs": {"details": "JSON NOT NULL DEFAULT '{}'"},
@@ -44,6 +68,9 @@ ADDITIONS = {
         "project_ids": "JSON NOT NULL DEFAULT '[]'",
         "detector_result": "VARCHAR(30) NOT NULL DEFAULT 'NEEDS_EXTRACTION'",
         "review_decision": "VARCHAR(30) NOT NULL DEFAULT ''",
+        "classification_confidence": "FLOAT",
+        "classification_history": "JSON NOT NULL DEFAULT '[]'",
+        "status_history": "JSON NOT NULL DEFAULT '[]'",
     },
     "sources": {
         "country": "VARCHAR(100) NOT NULL DEFAULT ''",
@@ -150,4 +177,7 @@ def migrate(engine, metadata):
                          {"at": datetime.now(timezone.utc).isoformat()})
         if conn.scalar(text("SELECT version FROM schema_migrations WHERE version=6")) is None:
             conn.execute(text("INSERT INTO schema_migrations(version,applied_at) VALUES(6,:at)"),
+                         {"at": datetime.now(timezone.utc).isoformat()})
+        if conn.scalar(text("SELECT version FROM schema_migrations WHERE version=7")) is None:
+            conn.execute(text("INSERT INTO schema_migrations(version,applied_at) VALUES(7,:at)"),
                          {"at": datetime.now(timezone.utc).isoformat()})

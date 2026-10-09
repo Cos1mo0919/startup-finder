@@ -11,6 +11,17 @@ description: >
 
 # izlanish Discovery Operations
 
+## Current catalog workflow — v3.1
+
+Follow `docs/PROJECT_CATALOG_PIPELINE_V3_1.md` for catalog discovery.
+Generic keyless RSS/news stays `REVIEW_REQUIRED` with `llm_unavailable`;
+only explicit repository allowlisted `adapter + page_type` pairs may publish
+deterministically after meaningful extraction and deduplication. Maintain an
+idempotent enrichment queue for deterministic publications when LLM access
+later appears. Preserve excerpts and status/classification histories. An old
+project found today remains in its publication-date archive. Uzbekistan and
+Global project discovery continue together.
+
 ## Purpose
 
 This skill defines how the izlanish / startup-finder system discovers, queues,

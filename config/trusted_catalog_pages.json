@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "adapter": "itpark",
+      "page_type": "news_article",
+      "trusted_for_deterministic_publish": false,
+      "reason": "General news is discovery material, not a structured project profile."
+    }
+  ]
+}

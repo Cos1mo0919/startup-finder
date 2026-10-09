@@ -11,6 +11,20 @@ description: >
 
 # izlanish Product Intelligence
 
+## Current catalog rule — v3.1
+
+`docs/PROJECT_CATALOG_PIPELINE_V3_1.md` governs project catalog publication.
+A concrete, identifiable project with a meaningful source-backed description
+may be published without a problem statement, creator, market score, or
+opportunity grade. Problem, market and opportunity analysis below is optional
+post-publication enrichment. A missing problem must never, by itself, reject
+or hide a catalog project. Generic news without a project remains in review or
+is rejected according to classifier confidence. The public catalog is about
+projects; deeper intelligence stays internal. Global discovery is authorized
+alongside Uzbekistan coverage. When an older instruction below says a problem
+is mandatory for publication, read it as mandatory only for a *strong
+opportunity recommendation*.
+
 ## Purpose
 
 This skill defines the core product logic of the izlanish / startup-finder system.
@@ -104,7 +118,7 @@ Examples:
 
 A PROJECT must have evidence that it actually exists.
 
-A PROJECT must also have a meaningful problem relationship.
+A PROJECT may have a meaningful problem relationship; it is optional for catalog publication.
 
 ## PROBLEM
 
@@ -212,7 +226,7 @@ Always preserve a reason for IGNORE when useful for diagnostics.
 
 # 3. Mandatory Problem Gate
 
-Every PROJECT candidate must pass a problem gate.
+Every PROJECT candidate may undergo a problem gate for optional intelligence enrichment.
 
 The required primary question is:
 
@@ -691,13 +705,8 @@ Recommended factors:
 - implementation_feasibility
 - uzbekistan_applicability
 
-Main UI should show only simplified scores:
-
-- Muammo
-- Bozor
-- Dalil
-- Yechim
-- Imkoniyat
+The compact public catalog shows the v3.1 catalog score when available.
+The detailed intelligence scores below belong in the optional detail section.
 
 Do not overload the main card with every internal criterion.
 
@@ -770,14 +779,11 @@ Do not assign A/B to fatal stop-filter failures.
 
 # 16. Publication Rules
 
-An item may be published as PROJECT only when:
-
-- project existence is reasonably evidenced;
-- primary problem is identified;
-- problem gate is not REJECT;
-- item is not merely a minor feature;
-- duplicate handling is complete;
-- facts and analysis are separated.
+An item may be published as PROJECT when its identity, concrete function,
+source URL and description meet the v3.1 LLM or trusted deterministic rules;
+deduplication is complete. Problem intelligence and opportunity grade are not
+publication gates. Deterministic publication requires the explicit adapter +
+page_type allowlist; generic keyless RSS/news goes to review.
 
 If uncertain:
 
