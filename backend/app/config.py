@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     search_queries_per_source: int = Field(default=3, ge=1, le=30)
     max_event_followups: int = Field(default=3, ge=0, le=20)
     max_candidates: int = Field(default=30, ge=1, le=200)
+    catalog_neutral_rank: float = Field(default=4.5, ge=0, le=10)
     fetch_timeout: float = Field(default=15, ge=1, le=60)
     max_page_bytes: int = Field(default=2_000_000, ge=1000, le=5_000_000)
     user_agent: str = "StartupFinder/0.1 (+public research aggregator; respects robots.txt)"

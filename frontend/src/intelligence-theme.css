@@ -213,6 +213,16 @@ footer, footer p { color: var(--text-muted); }
 .catalog-grid .project-card .card-body { align-items: start; }
 .catalog-grid .project-card .summary { display: block; overflow: hidden; }
 .catalog-grid .project-card .card-evidence { color: var(--accent); font-size: 12px; }
+.catalog-grid .project-card .summary { font-size: 14px; line-height: 1.55; }
+.project-card .card-problem { padding: 10px 12px; font-size: 12px; margin: 6px 0 12px; }
+.project-card .card-date { text-align: right; }
+.project-initial { font-size: 24px; font-weight: 700; color: var(--accent); }
+.catalog-detail-meta, .catalog-sector-list { display: flex; flex-wrap: wrap; gap: 10px; }
+.catalog-detail-meta span, .catalog-sector-list span { border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px; color: var(--text-secondary); font-size: 12px; }
+.catalog-factor-list { display: grid; gap: 10px; }
+.catalog-factor-list div { display: grid; grid-template-columns: 140px 1fr; gap: 12px; }
+.catalog-factor-list dt { color: var(--text-muted); }
+.catalog-factor-list dd { margin: 0; }
 .public-detail-layout { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 24px; }
 .public-detail-main { min-width: 0; }
 .public-detail-aside { align-self: start; padding: 18px; border: 1px solid var(--border); border-radius: 15px; background: var(--surface); }

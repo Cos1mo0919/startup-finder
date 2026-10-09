@@ -10,7 +10,7 @@ test("public navigation stays focused on projects", async ({ page }) => {
     await expect(navigation.getByRole("link", { name: label })).toBeVisible();
   }
   await expect(page.getByRole("heading", { name: "izlanish." })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "So‘nggi loyihalar" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Tanlangan loyihalar" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Eng kuchli imkoniyatlar" })).toHaveCount(0);
   await page.goto("/manbalar");
   await expect(page.getByRole("heading", { name: "Manbalar" })).toBeVisible();

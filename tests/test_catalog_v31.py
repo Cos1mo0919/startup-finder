@@ -173,6 +173,51 @@ def test_catalog_publication_survives_legacy_audit_and_restart(settings, factory
         assert session.scalar(select(Project)).publication_status == "PUBLISHED"
 
 
+def test_unscored_project_is_public_without_problem_or_numeric_score(settings, factory):
+    from fastapi.testclient import TestClient
+    from backend.app.main import create_app
+
+    item = article()
+    entry = CatalogEntry(name="KotibAI", confidence=0.9, country="Uzbekistan",
+                         description_uz="KotibAI o‘zbek tilidagi ovozli xabarlarni matnga o‘giradi va murakkab biznes jarayonlarini avtomatlashtirish imkonini beradi")
+    with factory.begin() as session:
+        save_catalog_result(session, item, CatalogResult("PROJECT", 0.9, (entry,), analysis_method="deterministic"))
+    with TestClient(create_app(settings)) as client:
+        cards = client.get("/api/projects?sort=catalog").json()
+        assert cards["total"] == 1
+        card = cards["items"][0]
+        assert card["catalog_score"] is None and card["score_pending"] is True
+        assert card["problem_statement"] == ""
+        assert card["short_description"].startswith("KotibAI")
+        home = client.get("/api/catalog/home").json()
+        assert home["total"] == 1 and home["uzbekistan"][0]["id"] == card["id"]
+        assert client.get("/api/projects?year=2026").json()["total"] == 1
+
+
+def test_bad_source_images_use_fallback():
+    from backend.app.main import usable_images
+
+    assert usable_images([{"url": "https://example.org/publisher-logo.png"},
+                          {"url": "https://example.org/tiny.png", "width": 1, "height": 1},
+                          {"url": "https://example.org/product-photo.jpg", "width": 800, "height": 500}]) == [
+                              {"url": "https://example.org/product-photo.jpg", "width": 800, "height": 500}
+                          ]
+
+
+def test_unscored_recency_does_not_outrank_strong_evidence(settings, factory):
+    from backend.app.catalog_ranking import rank
+    from datetime import timedelta
+
+    now = datetime(2026, 10, 9, tzinfo=timezone.utc)
+    old = Project(name="Strong", normalized_project_name="strong", fingerprint="strong",
+                  published_at=now - timedelta(days=180), content={}, catalog_score=7.5,
+                  catalog_scores={"real_product": 8}, evidence_count=4)
+    new = Project(name="New", normalized_project_name="new", fingerprint="new",
+                  published_at=now, content={}, catalog_score=None,
+                  catalog_scores={}, evidence_count=0)
+    assert rank(old, at=now) > rank(new, at=now)
+
+
 def test_llm_disagreement_is_reviewed_without_deletion(settings, factory):
     item = article()
     entry = CatalogEntry(name="KotibAI", confidence=0.9, description_uz="KotibAI o‘zbek tilidagi ovozli xabarlarni matnga o‘giradi va murakkab biznes jarayonlarini avtomatlashtirish imkonini beradi")

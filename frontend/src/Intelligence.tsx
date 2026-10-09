@@ -8,36 +8,23 @@ import type { Project } from "./types";
 type Problem = { id: string; title_uz: string; description_uz: string; scope: string; sector: string; affected_users: string; evidence_level: number; source_count: number; first_seen_at: string; first_evidence_published_at: string | null; evidence?: {source_url: string; quote: string; evidence_type: string}[]; projects?: {id: string; name: string}[]; ideas?: Idea[] };
 type Idea = { id: string; problem_id: string; idea_title: string; idea_summary: string; target_user: string; proposed_solution: string; current_alternatives: string; why_current_alternatives_fail: string; business_model_hypothesis: string; mvp_hypothesis: string; main_risks: string; evidence_basis: string[]; status: string };
 type Signal = {url: string; title: string; summary_uz: string; signal_type: string; country: string; sector: string; published_at: string; why_it_matters_uz: string};
-type ProjectPreview = {id:string;name:string;problem:string;solution:string;affected_users:string;evidence_score:number;country:string;sector:string;published_at:string;source_count:number};
-type Dashboard = {today: {projects:number;sources_checked:number}; total: {projects:number}; latest_projects: ProjectPreview[]};
+type HomeData = {total:number;top:Project[];uzbekistan:Project[];global:Project[];sectors:{sector:string;projects:number;average_catalog_score:number|null}[]};
 const scopeLabels: Record<string,string> = {EVERYDAY:"Kundalik muammo", UZBEKISTAN_LOCAL:"O‘zbekiston muammosi", GLOBAL:"Jahon tendensiyasi"};
 const signalLabels: Record<string,string> = {ecosystem:"Ekotizim", TECHNOLOGY:"Texnologiya", REGULATION:"Qonunchilik", PROGRAM:"Dastur", INVESTMENT:"Investitsiya", FUND:"Jamg‘arma", DEMAND:"Talab"};
 function Empty({children}:{children:string}) { return <p className="intel-empty">{children}</p> }
 function ProblemCard({p}:{p:Problem}) {return <article className="intel-card"><span className="tag">{scopeLabels[p.scope] || p.scope}</span><h3><Link to={`/admin/muammo/${p.id}`}>{p.title_uz}</Link></h3><p>Kimda: {p.affected_users || "Aniqlanmagan"}</p><small>{p.source_count || 1} ta manba · {date(p.first_evidence_published_at || p.first_seen_at)}</small></article>}
 function SignalCard({s}:{s:Signal}) {return <article className="intel-card"><span className="tag">{signalLabels[s.signal_type]||s.signal_type}</span><h3>{s.title}</h3><p>{s.summary_uz}</p><small>{s.country} · {date(s.published_at)}</small><div><External href={s.url}>Asl manba</External></div></article>}
-function ProjectPreviewCard({p}:{p:ProjectPreview}) {
-  return <article className="intel-project-card">
-    <div className="intel-project-top"><h3><Link to={"/loyiha/" + p.id}>{p.name}</Link></h3><span>{p.country === "Uzbekistan" ? "O‘zbekiston" : "Global"}</span></div>
-    <div className="intel-project-problem"><strong>Qanday muammoni hal qiladi?</strong><p>{p.problem}</p></div>
-    <p className="intel-project-audience">Kim uchun? <strong>{p.affected_users}</strong></p>
-    <p><strong>Yechim</strong> {p.solution}</p>
-    <p className="card-evidence">Dalil: {p.source_count} ta manba · Tasdiqlanganlik {p.evidence_score.toFixed(1)}/10</p>
-    <small>{date(p.published_at)} · {p.country} · {p.source_count} ta manba</small>
-  </article>;
-}
 export function DashboardPage() {
-  const {data,loading}=useApi<Dashboard>("/api/intelligence/dashboard");
+  const {data,loading}=useApi<HomeData>("/api/catalog/home");
+  const meta=useApi<{categories:Record<string,string>}>("/api/meta");
   if(loading)return <main className="page"><Loading/></main>;
+  const categories=meta.data?.categories||{};
   return <main className="page intel-page intel-dashboard public-home">
-    <section className="intel-overview">
-      <div className="intel-overview-copy"><h1>izlanish.</h1><p>Haqiqiy muammolarni hal qilayotgan loyihalarni topamiz.</p></div>
-      <div className="intel-metrics">{[
-        ["So‘nggi yangi loyihalar",data?.today.projects],
-        ["Jami loyihalar",data?.total.projects],
-        ["Bugun tekshirilgan manbalar",data?.today.sources_checked],
-      ].map(([label,value])=><div key={String(label)}><strong>{value ?? 0}</strong><span>{label}</span></div>)}</div>
-    </section>
-    <section className="intel-section intel-projects"><div className="intel-heading"><h2>So‘nggi loyihalar</h2><Link to="/loyihalar">Barcha loyihalar →</Link></div>{data?.latest_projects.length?<div className="intel-project-grid">{data.latest_projects.slice(0,3).map(p=><ProjectPreviewCard p={p} key={p.id}/>)}</div>:<div className="intel-quiet-state"><strong>Oxirgi 30 kunda yangi loyiha nashr etilmadi.</strong><span>Oldingi loyihalar arxivda saqlanadi.</span><Link to="/arxiv">Arxivni ko‘rish →</Link></div>}</section>
+    <section className="intel-overview"><div className="intel-overview-copy"><h1>izlanish.</h1><p>Loyihalarni, ularning vazifasini va asl manbalarini bir joyda ko‘ring.</p></div><div className="intel-metrics"><div><strong>{data?.total||0}</strong><span>Katalogdagi loyihalar</span></div><div><strong>{data?.uzbekistan.length||0}</strong><span>O‘zbekiston tanlanmasi</span></div><div><strong>{data?.global.length||0}</strong><span>Global tanlanma</span></div></div></section>
+    <section className="intel-section intel-projects"><div className="intel-heading"><h2>Tanlangan loyihalar</h2><Link to="/loyihalar">Barcha loyihalar →</Link></div>{data?.top.length?<div className="catalog-grid">{data.top.map(project=><Card key={project.id} project={project} categories={categories}/>)}</div>:<div className="intel-quiet-state"><strong>Hozircha nashrga tayyor loyiha yo‘q.</strong><span>Nomzodlar manbalar asosida tekshirilmoqda.</span></div>}</section>
+    {!!data?.uzbekistan.length&&<section className="intel-section"><div className="intel-heading"><h2>O‘zbekiston loyihalari</h2><Link to="/loyihalar?country=Uzbekistan">Barchasi →</Link></div><div className="catalog-grid">{data.uzbekistan.slice(0,2).map(project=><Card key={project.id} project={project} categories={categories}/>)}</div></section>}
+    {!!data?.global.length&&<section className="intel-section"><div className="intel-heading"><h2>Global loyihalar</h2><Link to="/loyihalar?country=global">Barchasi →</Link></div><div className="catalog-grid">{data.global.slice(0,2).map(project=><Card key={project.id} project={project} categories={categories}/>)}</div></section>}
+    {!!data?.sectors.length&&<section className="intel-section"><h2>Soha bo‘yicha</h2><div className="catalog-sector-list">{data.sectors.slice(0,6).map(row=><span key={row.sector}>{categories[row.sector]||row.sector}: {row.projects}</span>)}</div></section>}
   </main>;
 }
 

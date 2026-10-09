@@ -1,18 +1,18 @@
 import { test, expect } from "@playwright/test";
 
-test("project catalog and detail show the problem before analysis", async ({ page }, info) => {
+test("project catalog and detail show the product before optional analysis", async ({ page }, info) => {
   const errors: string[] = [];
   page.on("pageerror", error => errors.push(error.message));
   await page.goto("/loyihalar");
   await expect(page.getByRole("heading", { name: "Loyihalar", exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "AgroKo‘mak" })).toBeVisible();
   await expect(page.locator("html")).toHaveAttribute("lang", "uz");
-  await expect(page.getByText("Qanday muammoni hal qiladi?").first()).toBeVisible();
+  await expect(page.locator(".project-card .summary").first()).toBeVisible();
+  await expect(page.locator(".project-card .card-evidence").first()).toContainText("Baholanmagan");
   await expect(page.locator(".project-card")).not.toContainText("Kutilmoqda");
   await page.getByRole("link", { name: "AgroKo‘mak" }).click();
-  await expect(page.getByRole("heading", { name: "Qanday muammoni hal qiladi?" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Kim uchun?" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Yechim qanday ishlaydi?" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Loyiha nima qiladi?" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Asl manbalar" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Tasdiqlangan asosiy faktlar" })).toBeVisible();
   await page.screenshot({ path: `test-results/detail-${info.project.name}.png`, fullPage: true });
   await page.goto("/loyihalar");

@@ -9,7 +9,6 @@ import React, { useState } from "react";
 import { Link, NavLink } from "react-router-dom";
 import type { Component, Project } from "./types";
 
-import { audienceLabels } from "./labels";
 import { date } from "./utils";
 export function External({
   href,
@@ -51,7 +50,7 @@ export function Header() {
           <NavLink to="/arxiv">Arxiv</NavLink>
           <NavLink to="/manbalar">Manbalar</NavLink>
         </nav>
-        <span className="header-note">Yaxshi g‘oyalar e’tiborga loyiq.</span>
+        <span className="header-note">Haqiqiy loyihalar, asl manbalar.</span>
       </div>
     </header>
   );
@@ -62,7 +61,7 @@ export function Footer() {
       <Link className="footer-brand" to="/">
         izlanish.
       </Link>
-      <p>Haqiqiy muammolarni hal qilayotgan loyihalar.</p>
+      <p>Haqiqiy loyihalar va ularning manbalari.</p>
       <span>Faktlar — manbalardan. Tahlil — alohida.</span>
     </footer>
   );
@@ -95,8 +94,8 @@ export function ProjectImage({ project }: { project: Project }) {
     />
   ) : (
     <div className="image-placeholder">
-      <Layers3 size={32} />
-      <span>Rasm mavjud emas</span>
+      <Layers3 size={25} />
+      <span className="project-initial">{project.name.slice(0,1).toLocaleUpperCase()}</span>
     </div>
   );
 }
@@ -112,9 +111,9 @@ export function Card({
       <div className="card-top">
         <span className="category">
           <Leaf size={13} />
-          {categories[p.primary_sector || p.category] || "Boshqa"}
+          {categories[p.primary_sector] || p.primary_sector || categories[p.category] || "Boshqa"}
         </span>
-        <span className="card-date">{date(p.published_at)}</span>
+        <span className="card-date">{p.country === "Uzbekistan" ? "O‘zbekiston" : p.country || "Davlat noma’lum"} · {date(p.published_at)}{p.date_estimated ? " (taxminiy)" : ""}</span>
       </div>
       <div className="card-body">
         <div className="card-copy">
@@ -122,10 +121,9 @@ export function Card({
             {p.name}
             <ArrowUpRight size={20} />
           </Link>
-          <p className="card-problem"><strong>Qanday muammoni hal qiladi?</strong> {p.problem_statement}</p>
-          <p className="card-audience"><span>Kim uchun?</span><strong>{p.problem_subject || p.audience_groups.join(", ") || audienceLabels[p.audience]}</strong></p>
-          <p className="summary"><strong>Yechim</strong> {p.solution_uz}</p>
-          <p className="card-evidence">Dalil: {p.source_count} ta manba · Tasdiqlanganlik {p.confidence.toFixed(1)}/10</p>
+          <p className="summary">{p.short_description || p.summary_uz}</p>
+          {p.problem_statement && <p className="card-problem"><strong>Qanday muammoni hal qiladi?</strong> {p.problem_statement}</p>}
+          <p className="card-evidence">{p.catalog_score === null || p.score_pending ? "Baholanmagan" : `${p.catalog_score.toFixed(1)} / 10`} · {p.source_count} ta manba</p>
         </div>
         <ProjectImage project={p} />
       </div>

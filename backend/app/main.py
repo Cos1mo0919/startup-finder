@@ -20,6 +20,16 @@ from .intelligence import migrate_existing_problems
 from .intelligence_api import dashboard, idea_json, problem_json, sector_intelligence, signal_json, status_extra
 from .signal_quality import audit_signals
 from .publication import lifecycle_stage, synchronize_candidate_publication
+from .catalog_ranking import rank as catalog_rank
+
+
+def usable_images(images):
+    """Reject obvious publisher artwork, trackers and known tiny images."""
+    blocked = ("logo", "social-share", "social_share", "share-image", "favicon", "icon", "pixel", "banner", "advert")
+    return [item for item in images or [] if item.get("url", "").startswith("https://")
+            and not any(word in item["url"].lower() for word in blocked)
+            and (not item.get("width") or item["width"] >= 160)
+            and (not item.get("height") or item["height"] >= 90)]
 
 
 def iso(value):
@@ -53,18 +63,30 @@ def serialize_project(project, detail=False):
         )
     }
     result.update(
-        summary_uz=content["summary_uz"],
+        summary_uz=content.get("summary_uz", ""),
+        short_description=project.short_description or content.get("summary_uz", ""),
+        catalog_score=project.catalog_score,
+        catalog_scores=project.catalog_scores or {},
+        score_pending=project.score_pending,
+        evidence_count=project.evidence_count,
+        classification_confidence=project.classification_confidence,
+        description_needs_translation=project.description_needs_translation,
+        date_estimated=project.date_estimated,
+        project_type=project.project_type,
+        project_stage=project.project_stage,
+        analysis_method=project.analysis_method,
         audience_groups=content.get("audience_groups", []),
         first_seen=iso(project.first_seen),
         last_seen=iso(project.last_seen),
         published_at=iso(project.published_at),
-        images=project.images,
+        images=usable_images(project.images),
         primary_sector=project.primary_sector,
         sectors=project.sectors,
         real_project_confidence=project.real_project_confidence,
         source_count=len(project.sources),
-        analysis_mode=content["analysis_mode"],
-        rating_method="ai" if content["analysis_mode"] == "ai" else "deterministic_fallback",
+        analysis_mode=content.get("analysis_mode", project.analysis_method),
+        rating_method=(project.analysis_method if project.analysis_method != "legacy" else
+                       "ai" if content.get("analysis_mode") == "ai" else "deterministic_fallback"),
         problem_statement=project.problem_statement,
         problem_subject=project.problem_subject,
         problem_scope=project.problem_scope,
@@ -91,6 +113,10 @@ def serialize_project(project, detail=False):
             confidence_components=project.confidence_components,
             opportunity_details=project.opportunity_details,
             secondary_problems=project.secondary_problems or [],
+            sector_method=project.sector_method,
+            project_type_method=project.project_type_method,
+            publication_method=project.publication_method,
+            score_reasons=project.catalog_score_reasons or {},
             sources=[
                 {
                     "url": s.url,
@@ -173,7 +199,7 @@ def create_app(settings=None):
         grade: str = "",
         problem_scope: str = "",
         min_evidence: float = Query(default=0, ge=0, le=10),
-        sort: Literal["date", "rating", "confidence", "usefulness"] = "date",
+        sort: Literal["date", "rating", "confidence", "usefulness", "catalog"] = "date",
         page: int = Query(default=1, ge=1, le=10000),
         page_size: int = Query(default=12, ge=1, le=50),
     ):
@@ -200,7 +226,7 @@ def create_app(settings=None):
                 )
             )
         if country == "global":
-            query = query.where(Project.country != "Uzbekistan")
+            query = query.where(Project.country != "Uzbekistan", Project.country != "")
         elif country:
             query = query.where(Project.country == country)
         if city:
@@ -234,17 +260,52 @@ def create_app(settings=None):
             "rating": Project.rating,
             "usefulness": Project.rating,
             "confidence": Project.confidence,
+            "catalog": Project.published_at,
         }[sort]
         with factory() as session:
             total = session.scalar(select(func.count()).select_from(query.subquery()))
-            items = session.scalars(
-                query.order_by(order.desc(), Project.id).offset((page - 1) * page_size).limit(page_size)
-            ).all()
+            if sort == "catalog":
+                all_items = session.scalars(query).all()
+                items = sorted(all_items, key=lambda project: (
+                    catalog_rank(project, neutral=settings.catalog_neutral_rank),
+                    aware(project.published_at), project.id), reverse=True)[(page - 1) * page_size:page * page_size]
+            else:
+                items = session.scalars(
+                    query.order_by(order.desc(), Project.id).offset((page - 1) * page_size).limit(page_size)
+                ).all()
             return {
                 "items": [serialize_project(p) for p in items],
                 "total": total,
                 "page": page,
                 "page_size": page_size,
+            }
+
+    @app.get("/api/catalog/home")
+    def catalog_home():
+        with factory() as session:
+            all_items = session.scalars(select(Project).where(Project.publication_status == "PUBLISHED")).all()
+            ordered = sorted(all_items, key=lambda project: (
+                catalog_rank(project, neutral=settings.catalog_neutral_rank),
+                aware(project.published_at)), reverse=True)
+            local = [project for project in ordered if project.country == "Uzbekistan"]
+            global_items = [project for project in ordered if project.country and project.country != "Uzbekistan"]
+            sectors = {}
+            for project in all_items:
+                key = project.primary_sector or "Other"
+                bucket = sectors.setdefault(key, {"sector": key, "projects": 0, "scored": 0, "sum_score": 0.0})
+                bucket["projects"] += 1
+                if project.catalog_score is not None:
+                    bucket["scored"] += 1
+                    bucket["sum_score"] += project.catalog_score
+            return {
+                "total": len(all_items),
+                "top": [serialize_project(project) for project in ordered[:6]],
+                "uzbekistan": [serialize_project(project) for project in local[:4]],
+                "global": [serialize_project(project) for project in global_items[:4]],
+                "sectors": [{"sector": value["sector"], "projects": value["projects"],
+                             "average_catalog_score": round(value["sum_score"] / value["scored"], 1)
+                             if value["scored"] else None}
+                            for value in sorted(sectors.values(), key=lambda value: (-value["projects"], value["sector"]))],
             }
 
     @app.get("/api/projects/{project_id}")
