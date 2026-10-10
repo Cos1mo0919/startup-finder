@@ -13,7 +13,7 @@ from .sectors import SECTORS, LEGACY
 from .config import Settings
 from .dates import TASHKENT, today_start
 from .db import (Candidate, EcosystemSignal, Problem, ProblemEvidence, Project,
-                 ProjectProblemLink, ProviderHealth, RawDiscovery, RegistrySource, Run,
+                 ProjectDeepAnalysis, ProjectProblemLink, ProviderHealth, RawDiscovery, RegistrySource, Run,
                  SolutionIdea, aware, make_db, now_utc)
 from .llm_service import LLMService
 from .scheduler import make_scheduler
@@ -318,6 +318,11 @@ def create_app(settings=None):
             if project is None or project.publication_status != "PUBLISHED":
                 raise HTTPException(404, "Loyiha topilmadi")
             result = serialize_project(project, detail=True)
+            deep = session.get(ProjectDeepAnalysis, project_id)
+            if deep and deep.criteria:
+                result["deep_analysis"] = {"criteria": deep.criteria,
+                                           "weighted_score": deep.weighted_score,
+                                           "weights_version": deep.weights_version}
             links = session.scalars(select(ProjectProblemLink).where(ProjectProblemLink.project_id == project_id)).all()
             result["related_problems"] = [{"id": problem.id, "title_uz": problem.title_uz}
                                           for link in links if (problem := session.get(Problem, link.problem_id))]
@@ -352,6 +357,8 @@ def create_app(settings=None):
             )
             raw_counts = {state: amount for state, amount in session.execute(
                 select(RawDiscovery.status, func.count()).group_by(RawDiscovery.status)).all()}
+            deep_counts = {state: amount for state, amount in session.execute(
+                select(ProjectDeepAnalysis.status, func.count()).group_by(ProjectDeepAnalysis.status)).all()}
             provider_rows = {row.name: row for row in session.scalars(select(ProviderHealth))}
             provider_status = []
             for configured in LLMService(settings).status():
@@ -388,6 +395,12 @@ def create_app(settings=None):
             "llm_provider_order": [item["name"] for item in provider_status],
             "llm_providers": provider_status,
             "raw_discoveries": raw_counts,
+            "deep_analysis": deep_counts,
+            "telegram_ingestion_configured": bool(settings.telegram_api_id and
+                                                   settings.telegram_api_hash.get_secret_value() and
+                                                   settings.telegram_session.get_secret_value()),
+            "telegram_alerts_configured": bool(settings.telegram_bot_token.get_secret_value() and
+                                               settings.admin_telegram_chat_id),
             "search_enabled": bool(settings.search_api_key.get_secret_value()),
             **radar,
             **intelligence,

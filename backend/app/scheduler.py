@@ -111,6 +111,15 @@ def make_scheduler(settings, factory):
                       id="raw_processing", max_instances=1, coalesce=True)
     scheduler.add_job(reanalyze_once, "interval", hours=6, args=[settings, factory],
                       id="catalog_reanalysis", max_instances=1, coalesce=True)
+    from .telegram_ingest import poll_once
+    from .admin_alerts import send_alerts
+    from .deep_analysis import deep_analysis_once
+    scheduler.add_job(poll_once, "interval", minutes=15, args=[settings, factory],
+                      id="telegram_ingestion", max_instances=1, coalesce=True)
+    scheduler.add_job(send_alerts, "interval", minutes=30, args=[settings, factory],
+                      id="admin_alerts", max_instances=1, coalesce=True)
+    scheduler.add_job(deep_analysis_once, "interval", hours=4, args=[settings, factory],
+                      id="deep_analysis", max_instances=1, coalesce=True)
     scheduler.add_job(reconcile_due, "interval", minutes=15, args=[settings, factory],
                       id="reconciliation", max_instances=1, coalesce=True, next_run_time=now_utc())
     return scheduler

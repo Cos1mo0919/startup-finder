@@ -7,7 +7,7 @@ from .config import Settings
 from .db import make_db
 from .catalog_pipeline import CatalogPipeline
 from .registry import seed_registry
-from .db import RegistrySource
+from .db import RegistrySource, SourceBlock
 from .evidence import audit_existing
 from .radar_api import source_json
 from sqlalchemy import select
@@ -64,6 +64,9 @@ def main():
     toggle = parser.add_mutually_exclusive_group()
     toggle.add_argument("--enable-source", action="store_true")
     toggle.add_argument("--disable-source", action="store_true")
+    toggle.add_argument("--block-source", action="store_true", help="Disable a single source ID with audit reason")
+    toggle.add_argument("--restore-source", action="store_true", help="Restore a previously blocked source ID")
+    parser.add_argument("--block-reason", default="")
     parser.add_argument(
         "--audit", action="store_true", help="Re-evaluate all stored project evidence and feed visibility"
     )
@@ -113,14 +116,29 @@ def main():
                 )
             )
             return 0
-        if args.enable_source or args.disable_source:
+        if args.enable_source or args.disable_source or args.block_source or args.restore_source:
             if not args.source_id:
                 parser.error("--source-id is required")
+            if args.block_source and not args.block_reason.strip():
+                parser.error("--block-reason is required")
             with factory.begin() as session:
                 source = session.get(RegistrySource, args.source_id)
                 if not source:
                     parser.error("Unknown source ID")
-                source.enabled = args.enable_source
+                if args.restore_source:
+                    last = session.scalar(select(SourceBlock).where(SourceBlock.source_id == source.id)
+                                          .order_by(SourceBlock.id.desc()))
+                    if not last or last.action != "BLOCK":
+                        parser.error("Source is not blocked")
+                if args.enable_source:
+                    last = session.scalar(select(SourceBlock).where(SourceBlock.source_id == source.id)
+                                          .order_by(SourceBlock.id.desc()))
+                    if last and last.action == "BLOCK":
+                        parser.error("Source is blocked; use --restore-source")
+                source.enabled = args.enable_source or args.restore_source
+                if args.block_source or args.restore_source:
+                    session.add(SourceBlock(source_id=source.id, action="BLOCK" if args.block_source else "RESTORE",
+                                            actor="cli_admin", reason=args.block_reason or "operator_restore"))
             return 0
         if args.list_sources:
             with factory() as session:

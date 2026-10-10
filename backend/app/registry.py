@@ -5,7 +5,7 @@ from typing import Literal
 from urllib.parse import urlsplit
 from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import select
-from .db import RegistrySource, aware, now_utc
+from .db import RegistrySource, SourceBlock, aware, now_utc
 from .network import safe_url, canonical_url
 
 FREQUENCIES = {5: 60, 4: 180, 3: 480, 2: 1440, 1: 10080}
@@ -79,7 +79,12 @@ def seed_registry(factory, path, update=False):
                 session.add(source)
                 added += 1
             fields = config.model_dump(exclude={"kind", "id"})
+            with session.no_autoflush:
+                last_block = session.scalar(select(SourceBlock).where(SourceBlock.source_id == source.id)
+                                            .order_by(SourceBlock.id.desc())) if source.id else None
             for key, value in fields.items():
+                if key == "enabled" and last_block and last_block.action == "BLOCK":
+                    value = False
                 setattr(source, key, value)
             source.trust_kind = config.kind
             source.updated_at = now_utc()

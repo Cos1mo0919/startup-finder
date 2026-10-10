@@ -39,6 +39,8 @@ class CatalogPipeline(Pipeline):
 
     def _classify(self, article):
         self.last_llm_analysis = None
+        if self.llm_service:
+            self.llm_service.last_attempt_count = 0
         if OBVIOUS_NOISE.search(article.title) and not re.search(
             r"\b(startup|startap|project|loyiha|platform|app|prototype|prototip|product|ilova)\b",
             article.title, re.I,
@@ -252,7 +254,18 @@ class CatalogPipeline(Pipeline):
                     if not cached.get("_queued") and cached.get("text"):
                         article = Article.model_validate(cached)
                     else:
-                        article = self.discovery.article(cached.get("_fetch_url", url), parse_date(cached.get("_feed_date")))
+                        with self.factory() as session:
+                            stored_raw = session.get(RawDiscovery, raw_id)
+                            telegram = stored_raw.source_type == "telegram"
+                            raw_data = (stored_raw.source_name, stored_raw.title, stored_raw.raw_text,
+                                        stored_raw.publication_date, stored_raw.page_type,
+                                        stored_raw.source_adapter) if telegram else None
+                        if raw_data:
+                            article = Article(url=url, publisher=raw_data[0], title=raw_data[1],
+                                              text=raw_data[2] or "", published_at=raw_data[3],
+                                              kind="unknown", page_type=raw_data[4], adapter=raw_data[5])
+                        else:
+                            article = self.discovery.article(cached.get("_fetch_url", url), parse_date(cached.get("_feed_date")))
                     article.discovery_url = article.discovery_url or cached.get("_discovery_url")
                     article.discovery_title = article.discovery_title or cached.get("_discovery_title", "")
                     article.source_id = source_id or article.source_id
@@ -295,6 +308,10 @@ class CatalogPipeline(Pipeline):
                             raw.llm_model = self.last_llm_analysis.model
                             raw.llm_attempt_count += self.last_llm_analysis.attempt_count
                             raw.classifier_prompt_version = self.last_llm_analysis.prompt_version
+                            raw.analyzed_at = now
+                        elif self.llm_service and self.llm_service.last_attempt_count:
+                            raw.llm_attempt_count += self.llm_service.last_attempt_count
+                            raw.classifier_prompt_version = "catalog_classifier_v1"
                             raw.analyzed_at = now
                     for key, value in outcomes.items():
                         counts[key] += value

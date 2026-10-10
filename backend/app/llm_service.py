@@ -142,6 +142,7 @@ class LLMService:
                                         "timeouts": 0, "rate_limits": 0, "quota_errors": 0,
                                         "invalid_json": 0, "schema_failures": 0,
                                         "latency_total_ms": 0.0} for provider in self.providers}
+        self.last_attempt_count = 0
 
     @property
     def available(self):
@@ -205,17 +206,26 @@ class LLMService:
                 f"Source country hint: {article.country_hint}\nPublished: {article.published_at or ''}\n"
                 f"URL: {article.url}\n<article>\n{text}\n</article>")
         system = PROMPT_PATH.read_text()
+        return self.analyze_json(system, user, lambda payload: parse_classifier_response(
+            payload, article.title + "\n" + text))
+
+    def analyze_json(self, system: str, user: str, validate):
+        """Shared fallback path for classification and optional deep enrichment."""
+        if not self.available:
+            raise LLMUnavailable("llm_unavailable")
         attempts = 0
+        self.last_attempt_count = 0
         for provider in self.providers:
             if not provider.configured or self.failures[provider.name] >= self.settings.llm_circuit_breaker_failures:
                 continue
             for _ in range(1 + self.settings.llm_max_retries_per_provider):
                 began = monotonic()
                 attempts += 1
+                self.last_attempt_count = attempts
                 try:
                     payload = provider.complete(system, user, self.settings.llm_timeout_seconds)
                     self._metric(provider.name, "request", round((monotonic() - began) * 1000, 2))
-                    result = parse_classifier_response(payload, article.title + "\n" + text)
+                    result = validate(payload)
                     self._metric(provider.name, "success")
                     return LLMAnalysis(result, provider.name, provider.model, attempts)
                 except ProviderFailure as exc:
@@ -223,7 +233,7 @@ class LLMService:
                     self._metric(provider.name, exc.code)
                     if exc.code in {"rate_limited", "quota_exceeded", "missing_key"}:
                         break
-                except ClassifierFailure as exc:
+                except (ClassifierFailure, ValueError) as exc:
                     self._metric(provider.name, "request", round((monotonic() - began) * 1000, 2))
                     self._metric(provider.name, "business_validation_failed" if str(exc).startswith("invalid_score") else "schema_validation_failed")
                 if self.failures[provider.name] >= self.settings.llm_circuit_breaker_failures:

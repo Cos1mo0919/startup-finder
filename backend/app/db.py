@@ -196,6 +196,32 @@ class ProviderHealth(Base):
     latency_total_ms: Mapped[float] = mapped_column(Float, default=0)
 
 
+class ProjectDeepAnalysis(Base):
+    __tablename__ = "project_deep_analyses"
+    project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), primary_key=True)
+    status: Mapped[str] = mapped_column(String(30), default="pending")
+    criteria: Mapped[dict] = mapped_column(JSON, default=dict)
+    weighted_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    weights_version: Mapped[str] = mapped_column(String(60), default="")
+    provider: Mapped[str] = mapped_column(String(40), default="")
+    model: Mapped[str] = mapped_column(String(100), default="")
+    error: Mapped[str] = mapped_column(String(100), default="")
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    analyzed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class SourceBlock(Base):
+    """Append-only operator decision about one adapter/feed/channel, not a domain."""
+    __tablename__ = "source_blocks"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    source_id: Mapped[str] = mapped_column(ForeignKey("sources.id"), index=True)
+    action: Mapped[str] = mapped_column(String(20))
+    actor: Mapped[str] = mapped_column(String(80))
+    reason: Mapped[str] = mapped_column(Text)
+    at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+
+
 class Run(Base):
     details: Mapped[dict] = mapped_column(JSON, default=dict)
     __tablename__ = "runs"

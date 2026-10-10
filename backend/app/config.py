@@ -10,6 +10,12 @@ class Settings(BaseSettings):
     database_url: str = f"sqlite:///{ROOT / 'data/finder.sqlite3'}"
     sources_file: Path = ROOT / "config/sources.json"
     trusted_catalog_file: Path = ROOT / "config/trusted_catalog_pages.json"
+    telegram_channels_file: Path = ROOT / "config/telegram_channels.json"
+    telegram_api_id: int = 0
+    telegram_api_hash: SecretStr = SecretStr("")
+    telegram_session: SecretStr = SecretStr("")
+    telegram_bot_token: SecretStr = SecretStr("")
+    admin_telegram_chat_id: str = ""
     ai_api_key: SecretStr = SecretStr("")
     openai_api_key: SecretStr = SecretStr("")
     ai_base_url: str = "https://api.openai.com/v1"
