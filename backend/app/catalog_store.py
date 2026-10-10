@@ -33,19 +33,53 @@ def save_catalog_result(session, article, result: CatalogResult, when=None) -> d
     candidate.classification_confidence = result.confidence
     candidate.detector_result = result.classification
     candidate.classification_history = history(candidate.classification_history, result.classification, result.analysis_method, result.reason, when)
+    from .publication import manual_source_reviews
+    manual_reason = manual_source_reviews().get(url)
+    if manual_reason:
+        if candidate.entity_type != "IGNORE":
+            candidate.classification_history = history(candidate.classification_history,
+                candidate.entity_type, "manual", "superseded_entity_type", when)
+        candidate.entity_type = "IGNORE"
+        candidate.status, candidate.reason = "review_required", manual_reason
+        candidate.status_history = history(candidate.status_history, "REVIEW_REQUIRED", "manual", manual_reason, when)
+        linked = [session.get(Project, pid) for pid in candidate.project_ids or []]
+        linked.extend(session.scalars(select(Project).join(Source).where(Source.url == url)))
+        for project in linked:
+            if project and project.publication_status == "PUBLISHED" and len(project.sources) == 1:
+                project.publication_status = "REVIEW_REQUIRED"
+                project.visible = False
+                project.publication_method = "admin"
+                project.publication_reason = project.review_reason = manual_reason
+                project.classification_history = history(project.classification_history,
+                    "NOT_PROJECT", "manual", manual_reason, when)
+                project.status_history = history(project.status_history, "REVIEW_REQUIRED", "manual", manual_reason, when)
+        counts["review_required"] += 1
+        return counts
+    if result.classification in {"PROJECT", "MULTI"} and result.entries:
+        if candidate.entity_type != "PROJECT":
+            candidate.classification_history = history(
+                candidate.classification_history, candidate.entity_type, "legacy", "superseded_entity_type", when)
+        candidate.entity_type = "PROJECT"
+    elif result.classification == "NOT_PROJECT" and result.confidence >= 0.7:
+        if candidate.entity_type != "IGNORE":
+            candidate.classification_history = history(
+                candidate.classification_history, candidate.entity_type, "legacy", "superseded_entity_type", when)
+        candidate.entity_type = "IGNORE"
     if not result.entries:
         if result.classification == "NOT_PROJECT" and result.analysis_method == "llm":
             linked = [session.get(Project, project_id) for project_id in candidate.project_ids or []]
-            deterministic = [project for project in linked if project and project.analysis_method == "deterministic"]
-            for project in deterministic:
+            affected = [project for project in linked if project and project.publication_method != "admin"
+                        and (project.analysis_method == "deterministic" or len(project.sources) == 1)]
+            for project in affected:
                 project.classification_history = history(project.classification_history, "NOT_PROJECT", "llm", result.reason, when)
                 if result.confidence >= 0.7:
                     project.publication_status = "REVIEW_REQUIRED"
+                    project.visible = False
                     project.review_reason = project.publication_reason = "llm_reclassified_not_project"
                     project.status_history = history(project.status_history, "REVIEW_REQUIRED", "llm", project.review_reason, when)
                 else:
                     project.review_reason = "llm_disagrees"
-            if deterministic:
+            if affected:
                 candidate.status = "review_required" if result.confidence >= 0.7 else "published"
                 candidate.reason = "llm_reclassified_not_project" if result.confidence >= 0.7 else "llm_disagrees"
                 candidate.status_history = history(candidate.status_history, candidate.status.upper(), "llm", candidate.reason, when)
@@ -66,7 +100,9 @@ def save_catalog_result(session, article, result: CatalogResult, when=None) -> d
             counts["duplicates"] += 1
             if project.publication_status == "PUBLISHED" and state == "REVIEW_REQUIRED":
                 state, reason = "AUTO_PUBLISHED", "existing_published_project"
-        if project is None and state == "REJECTED":
+            elif project.publication_method == "admin" and project.publication_status != "PUBLISHED":
+                state, reason = "REVIEW_REQUIRED", "admin_review_required"
+        if state == "REJECTED":
             counts["rejected"] += 1
             candidate.reason = reason
             continue
@@ -133,6 +169,7 @@ def save_catalog_result(session, article, result: CatalogResult, when=None) -> d
         project.project_type_method = "llm" if result.analysis_method == "llm" else "source_context"
         project.project_stage = entry.stage
         project.publication_status = "PUBLISHED" if state == "AUTO_PUBLISHED" else state
+        project.visible = project.publication_status == "PUBLISHED"
         project.publication_reason = reason
         project.review_reason = reason if state == "REVIEW_REQUIRED" else ""
         project.classification_history = history(project.classification_history, "PROJECT", result.analysis_method, reason, when)

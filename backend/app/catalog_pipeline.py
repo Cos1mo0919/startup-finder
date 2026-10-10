@@ -12,7 +12,7 @@ from sqlalchemy import case, func, or_, select, update
 
 from .catalog import (CatalogResult, ClassifierFailure,
                       deterministic_entry)
-from .catalog_store import save_catalog_result
+from .catalog_store import history, save_catalog_result
 from .llm_service import LLMService, LLMUnavailable, PROMPT_VERSION
 from .raw_discovery import cheap_decision, ingest_raw, record_transition
 from .dates import parse_date
@@ -282,6 +282,10 @@ class CatalogPipeline(Pipeline):
                             candidate.updated_at = now
                             if known_project_id:
                                 candidate.project_ids = list(dict.fromkeys([*(candidate.project_ids or []), known_project_id]))
+                                if candidate.entity_type != "PROJECT":
+                                    candidate.classification_history = history(candidate.classification_history,
+                                        candidate.entity_type, "legacy", "superseded_entity_type", now)
+                                    candidate.entity_type = "PROJECT"
                         else:
                             raw.status = "processing"
                             raw.processing_started_at = now

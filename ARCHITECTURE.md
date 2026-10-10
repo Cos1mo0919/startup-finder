@@ -1,5 +1,24 @@
 # Stage 1 — Uzbekistan
 
+## Canonical catalog publication (current)
+
+`Project.publication_status == PUBLISHED` is the single public API gate.
+The legacy `Project.visible` flag is a compatibility mirror. A candidate's
+`status` describes its source observation and can differ in count from projects
+because one multi-project page may link to several canonical projects.
+Catalog LLM classification writes current `Candidate.entity_type` and appends
+the superseded legacy value to `classification_history`. Startup reconciliation
+requires an exact `project_sources.url` link and an existing published project
+before repairing legacy `IGNORE` or retaining a published candidate. Orphans
+move to review. Cheap URL dedup only skips classification for an already
+published project. Admin changes update the mirror and linked candidate state.
+The public catalog truncates display text only; stored evidence remains intact.
+The old problem migration does not recalculate publication for catalog-analyzed
+projects. Reconciliation can restore a project withdrawn solely by the old
+problem gate only when an exact published candidate and original validation
+evidence survive. Exact-URL manual reviews from
+`config/publication_review.json` take precedence and retain audit history.
+
 ## Scope and stack
 This is a web application for evidenced projects connected with Uzbekistan. The UI and generated descriptions use Uzbek Latin. Global and a separate GitHub/tools section are explicitly out of scope until user approval.
 

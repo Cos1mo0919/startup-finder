@@ -47,7 +47,7 @@ def ingest_raw(session, *, source_adapter: str, source_url: str, source_name: st
 def cheap_decision(session, row: RawDiscovery) -> tuple[str, str, str | None]:
     """Return (action, reason, project_id); uncertain content continues."""
     project = session.scalar(select(Project).join(Source, Source.project_id == Project.id)
-                             .where(Source.url == row.source_url))
+                             .where(Source.url == row.source_url, Project.publication_status == "PUBLISHED"))
     if project:
         return "duplicate", "known_project_source", project.id
     if NOISE_TITLE.search(row.title or "") and not PROJECT_HINT.search(row.title or ""):

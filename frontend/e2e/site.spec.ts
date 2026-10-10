@@ -28,6 +28,23 @@ test("project catalog and detail show the product before optional analysis", asy
   expect(errors).toEqual([]);
 });
 
+test("catalog cards shorten presentation while detail retains source description", async ({ page, request }) => {
+  const original = await (await request.get("/api/projects?period=all")).json();
+  const longDescription = Array.from({ length: 45 }, (_, i) => `tavsif${i}`).join(" ");
+  const item = { ...original.items[0], short_description: longDescription,
+                 summary_uz: longDescription, problem_statement: longDescription };
+  await page.route("**/api/projects?*", route => route.fulfill({ json: { ...original, items: [item], total: 1 } }));
+  await page.goto("/loyihalar");
+  const card = page.locator(".project-card").first();
+  await expect(card.locator(".summary")).toContainText("tavsif19");
+  await expect(card.locator(".summary")).not.toContainText("tavsif20");
+  await expect(card.locator(".card-problem")).not.toContainText("tavsif24");
+  await expect(card.getByRole("link", { name: "Batafsil" })).toBeVisible();
+  await page.route("**/api/projects/*", route => route.fulfill({ json: item }));
+  await card.getByRole("link", { name: "Batafsil" }).click();
+  await expect(page.locator("body")).toContainText("tavsif44");
+});
+
 test("admin access requires a key and keeps technical pages separate", async ({ page }) => {
   await page.goto("/muammolar");
   await expect(page).toHaveURL(/\/admin$/);

@@ -27,6 +27,20 @@ def test_keyless_news_is_review_not_published(settings, factory):
     pipeline.close()
 
 
+def test_source_match_to_hidden_project_is_not_a_published_duplicate(settings, factory):
+    from backend.app.raw_discovery import cheap_decision, ingest_raw
+
+    page = sample_article()
+    entry = CatalogEntry(name="AgroKo‘mak", confidence=0.9,
+                         description_uz="AgroKo‘mak fermerlarga suv sarfini kuzatish va sug‘orishni rejalash imkonini beradi")
+    with factory.begin() as session:
+        save_catalog_result(session, page, CatalogResult("PROJECT", 0.9, (entry,)))
+        project = session.scalar(select(Project))
+        project.publication_status = "REVIEW_REQUIRED"
+        raw, _ = ingest_raw(session, source_adapter="test", source_url=page.url, title=page.title)
+        assert cheap_decision(session, raw)[0] == "classify"
+
+
 def test_keyless_scholarship_is_rejected(settings, factory):
     page = sample_article()
     page.title = "Davlat stipendiyasi uchun arizalar boshlandi"

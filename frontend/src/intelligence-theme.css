@@ -211,10 +211,10 @@ footer, footer p { color: var(--text-muted); }
 .catalog-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
 .catalog-grid .project-card { min-width: 0; }
 .catalog-grid .project-card .card-body { align-items: start; }
-.catalog-grid .project-card .summary { display: block; overflow: hidden; }
+.catalog-grid .project-card .summary { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; }
 .catalog-grid .project-card .card-evidence { color: var(--accent); font-size: 12px; }
 .catalog-grid .project-card .summary { font-size: 14px; line-height: 1.55; }
-.project-card .card-problem { padding: 10px 12px; font-size: 12px; margin: 6px 0 12px; }
+.project-card .card-problem { padding: 10px 12px; font-size: 12px; margin: 6px 0 12px; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; }
 .project-card .card-date { text-align: right; }
 .project-initial { font-size: 24px; font-weight: 700; color: var(--accent); }
 .catalog-detail-meta, .catalog-sector-list { display: flex; flex-wrap: wrap; gap: 10px; }

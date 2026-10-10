@@ -10,6 +10,11 @@ import { Link, NavLink } from "react-router-dom";
 import type { Component, Project } from "./types";
 
 import { date } from "./utils";
+
+export function cardExcerpt(value: string, maxWords = 20): string {
+  const words = value.trim().split(/\s+/).filter(Boolean);
+  return words.length > maxWords ? `${words.slice(0, maxWords).join(" ")}…` : words.join(" ");
+}
 export function External({
   href,
   children,
@@ -121,8 +126,8 @@ export function Card({
             {p.name}
             <ArrowUpRight size={20} />
           </Link>
-          <p className="summary">{p.short_description || p.summary_uz}</p>
-          {p.problem_statement && <p className="card-problem"><strong>Qanday muammoni hal qiladi?</strong> {p.problem_statement}</p>}
+          <p className="summary">{cardExcerpt(p.short_description || p.summary_uz)}</p>
+          {p.problem_statement && <p className="card-problem"><strong>Qanday muammoni hal qiladi?</strong> {cardExcerpt(p.problem_statement, 24)}</p>}
           <p className="card-evidence">{p.catalog_score === null || p.score_pending ? "Baholanmagan" : `${p.catalog_score.toFixed(1)} / 10`} · {p.source_count} ta manba</p>
         </div>
         <ProjectImage project={p} />

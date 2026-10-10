@@ -1,5 +1,37 @@
 # Project status
 
+## 2026-10-10 — catalog publication consistency
+
+The current checkout had 12 candidate URLs marked published but 11 canonical
+`PUBLISHED` projects. Ten of those candidates retained `entity_type=IGNORE`
+from older processing. A backed-up local reconciliation verified each against
+an exact canonical project source URL, preserved prior types in classification
+history and corrected those ten to `PROJECT`. The canonical public count stayed
+11 before and after; `/api/projects` and `/api/catalog/home` both returned 11.
+No candidate was promoted solely from its candidate status. The Codespace
+database cited by the user (10 published candidates, 2 public projects) is a
+different SQLite file and has not been inspected or changed by this local repair.
+
+Catalog writes now synchronize current classification and project publication,
+known URL dedup requires an already published project, admin actions update
+linked state, and a newer high-confidence NOT_PROJECT can withdraw a single-source
+automatic card to review. Card excerpt length is limited only in React; detail
+text and stored evidence are unchanged. Local suspicious-source audit: All Things
+Banana, Piet in Piet and Tumar Innovation Hub remain review/hidden; Woodpecker
+remains rejected under old rules pending reliable classifier review; Turan Security
+is absent from this DB. A live Gemini recheck timed out, so no new LLM verdict is
+claimed. Full browser and backend checks are recorded in the final task report.
+
+The user supplied a separate Codespace listing: 10 published candidates, six
+with legacy `IGNORE`, and 2 public cards. That listing omits canonical
+`publication_status`, so the exact number of old-gate withdrawals is not yet
+measured there. Startup repair now prevents the old problem migration from
+withdrawing catalog publications and conservatively restores records withdrawn
+only by that old gate when original validation survives. Manual exact-URL review
+keeps the All Things Banana portal and Tumar webinar out of the public catalog.
+The fetched Turan Security article describes concrete cybersecurity services
+and a Threat Intelligence product beyond its competition headline.
+
 ## Current stage
 **Stage 1 ещё не принят. По явному новому разрешению пользователя начат отдельный Global discovery; Узбекистан остаётся основным направлением.** Актуальное состояние см. в последнем разделе этого файла; старые разделы сохранены как история работ.
 

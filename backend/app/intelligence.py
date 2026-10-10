@@ -274,6 +274,10 @@ def migrate_existing_problems(factory):
 
     with factory.begin() as session:
         for project in session.scalars(select(Project)):
+            if project.analysis_method in {"llm", "deterministic", "hybrid", "manual"}:
+                # Catalog publication is independent of optional problem analysis.
+                # A mixed legacy content shape must not reapply the old gate.
+                continue
             if project.problem_gate_status == "PASS" and (project.opportunity_details or {}).get("criteria"):
                 refresh_publication(project)
                 continue

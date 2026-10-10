@@ -177,7 +177,165 @@ def test_catalog_persistence_preserves_source_and_deduplicates(settings, factory
         assert project.publication_excerpt in item.text
         assert len(project.sources) == 1
         assert len(project.status_history) == 1
+        candidate = session.get(Candidate, item.url)
+        assert candidate.status == "published" and candidate.entity_type == "PROJECT"
+
+
+def test_legacy_entity_type_reconciles_only_with_valid_canonical_project(settings, factory):
+    from backend.app.publication import synchronize_candidate_publication
+    from backend.app.db import Candidate
+
+    item = article()
+    result = parse_classifier_response(project_payload(), item.text)
+    with factory.begin() as session:
+        save_catalog_result(session, item, result)
+        candidate = session.get(Candidate, item.url)
+        candidate.entity_type = "IGNORE"
+        session.add(Candidate(url="https://example.org/not-a-project", article={},
+                              status="published", entity_type="IGNORE", project_ids=[]))
+    synchronize_candidate_publication(factory)
+    with factory() as session:
+        candidate = session.get(Candidate, item.url)
+        assert candidate.status == "published" and candidate.entity_type == "PROJECT"
+        assert any(row["value"] == "IGNORE" and row["reason"] == "superseded_entity_type"
+                   for row in candidate.classification_history)
+        orphan = session.get(Candidate, "https://example.org/not-a-project")
+        assert orphan.status == "review_required" and orphan.entity_type == "IGNORE"
+        assert orphan.reason == "no_canonical_published_project"
+
+
+def test_hidden_canonical_project_cannot_leave_published_candidate(settings, factory):
+    from backend.app.publication import synchronize_candidate_publication
+    from backend.app.db import Candidate
+
+    item = article()
+    with factory.begin() as session:
+        save_catalog_result(session, item, parse_classifier_response(project_payload(), item.text))
+        project = session.scalar(select(Project))
+        project.publication_status = "REVIEW_REQUIRED"
+        project.visible = False
+    synchronize_candidate_publication(factory)
+    with factory() as session:
+        assert session.get(Candidate, item.url).status == "review_required"
+
+
+def test_historical_published_project_repairs_legacy_ignore_without_losing_audit(settings, factory):
+    from backend.app.publication import synchronize_candidate_publication
+
+    item = article()
+    with factory.begin() as session:
+        save_catalog_result(session, item, parse_classifier_response(project_payload(), item.text))
+        project = session.scalar(select(Project))
+        project.analysis_method = "legacy"
+        project.short_description = ""
+        candidate = session.get(Candidate, item.url)
+        candidate.entity_type = "IGNORE"
+        candidate.detector_result = "NEEDS_EXTRACTION"
+        candidate.classification_confidence = None
+    synchronize_candidate_publication(factory)
+    with factory() as session:
+        project = session.scalar(select(Project))
+        candidate = session.get(Candidate, item.url)
+        assert project.publication_status == "PUBLISHED" and project.visible
+        assert candidate.status == "published" and candidate.entity_type == "PROJECT"
+        assert any(row["value"] == "IGNORE" for row in candidate.classification_history)
+
+
+def test_reconciliation_with_newer_not_project_hides_single_source_card(settings, factory):
+    from backend.app.publication import synchronize_candidate_publication
+
+    item = article()
+    with factory.begin() as session:
+        save_catalog_result(session, item, parse_classifier_response(project_payload(), item.text))
+        candidate = session.get(Candidate, item.url)
+        candidate.detector_result = "NOT_PROJECT"
+        candidate.classification_confidence = 0.92
+        candidate.entity_type = "IGNORE"
+    synchronize_candidate_publication(factory)
+    with factory() as session:
+        assert session.scalar(select(Project)).publication_status == "REVIEW_REQUIRED"
+        candidate = session.get(Candidate, item.url)
+        assert candidate.status == "review_required" and candidate.entity_type == "IGNORE"
+
+
+def test_validated_catalog_project_recovers_from_old_problem_gate(settings, factory):
+    from backend.app.publication import synchronize_candidate_publication
+
+    item = article()
+    with factory.begin() as session:
+        save_catalog_result(session, item, parse_classifier_response(project_payload(), item.text))
+        project = session.scalar(select(Project))
+        project.publication_status = "REVIEW_REQUIRED"
+        project.publication_reason = "pending_problem_analysis"
+        project.visible = True
+    synchronize_candidate_publication(factory)
+    with factory() as session:
+        assert session.scalar(select(Project)).publication_status == "PUBLISHED"
         assert session.get(Candidate, item.url).status == "published"
+
+
+def test_historical_extractively_verified_project_recovers_from_old_gate(settings, factory):
+    from backend.app.publication import synchronize_candidate_publication
+
+    item = article()
+    with factory.begin() as session:
+        save_catalog_result(session, item, parse_classifier_response(project_payload(), item.text))
+        project = session.scalar(select(Project))
+        project.analysis_method = "legacy"
+        project.creator = "Verified creator"
+        project.confidence = 7
+        project.short_description = ""
+        project.content = {**project.content, "facts": [{"quote": item.text[:80], "source_url": item.url}]}
+        project.publication_status = "REVIEW_REQUIRED"
+        project.publication_reason = "pending_problem_analysis"
+        project.visible = True
+        candidate = session.get(Candidate, item.url)
+        candidate.analysis_mode = "extractive"
+        candidate.detector_result = "NEEDS_EXTRACTION"
+        candidate.entity_type = "IGNORE"
+    synchronize_candidate_publication(factory)
+    with factory() as session:
+        assert session.scalar(select(Project)).publication_status == "PUBLISHED"
+        assert session.get(Candidate, item.url).entity_type == "PROJECT"
+
+
+@pytest.mark.parametrize(("url", "reason"), [
+    ("https://www.spot.uz/oz/2026/02/06/tumar-innovation-hub", "webinar_announcement_not_project"),
+    ("https://allthingsbanana.com/", "multi_tool_portal_not_one_project"),
+])
+def test_manual_source_review_overrides_llm_publication_without_deleting_evidence(settings, factory, url, reason, monkeypatch):
+    from backend.app.publication import synchronize_candidate_publication
+    from tests.conftest import sample_article
+
+    item = sample_article("Tumar Innovation Hub", url)
+    entry = CatalogEntry(name="Tumar Innovation Hub", confidence=0.9,
+                         description_uz="Tumar Innovation Hub tadbirkorlarga xalqaro bozorlarga chiqish bo‘yicha turli mavzularda amaliy maslahatlar taqdim etadi")
+    with monkeypatch.context() as patch:
+        patch.setattr("backend.app.publication.manual_source_reviews", lambda: {})
+        with factory.begin() as session:
+            save_catalog_result(session, item, CatalogResult("PROJECT", 0.9, (entry,)))
+    synchronize_candidate_publication(factory)
+    with factory() as session:
+        project = session.scalar(select(Project))
+        candidate = session.get(Candidate, item.url)
+        assert project.publication_status == "REVIEW_REQUIRED" and not project.visible
+        assert len(project.sources) == 1
+        assert candidate.status == "review_required" and candidate.entity_type == "IGNORE"
+        assert candidate.reason == reason
+
+
+def test_new_manual_review_source_never_creates_public_project(settings, factory):
+    from tests.conftest import sample_article
+
+    item = sample_article("Tumar Innovation Hub", "https://www.spot.uz/oz/2026/02/06/tumar-innovation-hub")
+    entry = CatalogEntry(name="Tumar Innovation Hub", confidence=0.9,
+                         description_uz="Tumar Innovation Hub xalqaro bozorlarga kirish bo‘yicha tadbirkorlarga ma'lumot beruvchi loyiha sifatida tilga olinadi")
+    with factory.begin() as session:
+        save_catalog_result(session, item, CatalogResult("PROJECT", 0.9, (entry,)))
+    with factory() as session:
+        assert session.scalars(select(Project)).all() == []
+        candidate = session.get(Candidate, item.url)
+        assert candidate.status == "review_required" and candidate.entity_type == "IGNORE"
 
 
 def test_catalog_publication_survives_legacy_audit_and_restart(settings, factory):
@@ -194,6 +352,21 @@ def test_catalog_publication_survives_legacy_audit_and_restart(settings, factory
         listed = client.get("/api/projects?period=all").json()
         assert listed["total"] == 1
         assert listed["items"][0]["name"] == "KotibAI"
+    with factory() as session:
+        assert session.scalar(select(Project)).publication_status == "PUBLISHED"
+
+
+def test_catalog_publication_survives_old_analysis_shape_on_restart(settings, factory):
+    from backend.app.intelligence import migrate_existing_problems
+    from tests.conftest import sample_analysis, sample_article
+
+    item = article()
+    with factory.begin() as session:
+        save_catalog_result(session, item, parse_classifier_response(project_payload(), item.text))
+        project = session.scalar(select(Project))
+        project.content = sample_analysis(sample_article()).model_dump(mode="json")
+        project.problem_gate_status = "PENDING"
+    migrate_existing_problems(factory)
     with factory() as session:
         assert session.scalar(select(Project)).publication_status == "PUBLISHED"
 
@@ -257,6 +430,21 @@ def test_llm_disagreement_is_reviewed_without_deletion(settings, factory):
         assert project.review_reason == "llm_reclassified_not_project"
         assert len(project.status_history) == 2
         assert len(session.scalars(select(Source)).all()) == 1
+
+
+def test_newer_llm_not_project_hides_single_source_publication(settings, factory):
+    item = article()
+    with factory.begin() as session:
+        save_catalog_result(session, item, parse_classifier_response(project_payload(), item.text))
+    with factory.begin() as session:
+        save_catalog_result(session, item, CatalogResult("NOT_PROJECT", 0.93, reason="article_not_project"))
+    with factory() as session:
+        project = session.scalar(select(Project))
+        candidate = session.get(Candidate, item.url)
+        assert project.publication_status == "REVIEW_REQUIRED" and not project.visible
+        assert candidate.status == "review_required" and candidate.entity_type == "IGNORE"
+        assert any(row["value"] == "PROJECT" and row["reason"] == "superseded_entity_type"
+                   for row in candidate.classification_history)
 
 
 def test_similar_names_with_conflicting_creators_not_merged(settings, factory):
