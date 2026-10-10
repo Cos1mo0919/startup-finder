@@ -13,7 +13,7 @@ from sqlalchemy import case, func, or_, select, update
 from .catalog import (CatalogResult, ClassifierFailure,
                       deterministic_entry)
 from .catalog_store import save_catalog_result
-from .llm_service import LLMService, LLMUnavailable
+from .llm_service import LLMService, LLMUnavailable, PROMPT_VERSION
 from .raw_discovery import cheap_decision, ingest_raw, record_transition
 from .dates import parse_date
 from .dates import TASHKENT
@@ -39,6 +39,7 @@ class CatalogPipeline(Pipeline):
 
     def _classify(self, article):
         self.last_llm_analysis = None
+        llm_attempted = False
         if self.llm_service:
             self.llm_service.last_attempt_count = 0
         if OBVIOUS_NOISE.search(article.title) and not re.search(
@@ -53,14 +54,15 @@ class CatalogPipeline(Pipeline):
                 self.last_llm_analysis = self.llm_service.analyze_source(article)
                 return self.last_llm_analysis.result
             except LLMUnavailable:
-                pass
+                llm_attempted = True
         try:
             entry = deterministic_entry(article, self.trusted_path)
         except ClassifierFailure as exc:
             return CatalogResult("NEEDS_EXTRACTION", 0.5, reason=str(exc), analysis_method="deterministic")
         if entry:
             return CatalogResult("PROJECT", entry.confidence, (entry,), analysis_method="deterministic")
-        return CatalogResult("NEEDS_EXTRACTION", 0.5, reason="llm_unavailable", analysis_method="deterministic")
+        return CatalogResult("NEEDS_EXTRACTION", 0.5, reason="llm_unavailable",
+                             analysis_method="llm_failed" if llm_attempted else "deterministic")
 
     def _enrich(self, now, counts, errors):
         if not (self.settings.ai_key and self.classifier) and not (self.llm_service and self.llm_service.available):
@@ -121,6 +123,7 @@ class CatalogPipeline(Pipeline):
         counts = Counter({"sources_checked": 0, "candidates_found": 0, "new_candidates": 0,
                           "raw_discoveries": 0, "pre_filtered": 0, "project_candidates": 0,
                           "recovered_window_rejections": 0,
+                          "provider_circuit_open": 0,
                           "candidates": 0, "auto_published": 0, "review_required": 0,
                           "rejected": 0, "duplicates": 0, "enriched": 0,
                           "source_unavailable": 0, "reanalysis_circuit_open": 0})
@@ -220,8 +223,12 @@ class CatalogPipeline(Pipeline):
                       (((Candidate.analysis_mode == "deterministic") | retry_due) if llm_ready else False))),
                 ))
                 if review_only:
-                    query = select(Candidate).where(Candidate.status.in_(["pending", "review_required"]),
-                                                    Candidate.processing_version < 8)
+                    review_due = (Candidate.processing_version < 8)
+                    if llm_ready:
+                        review_due = review_due | ((Candidate.reason == "llm_unavailable") &
+                                                   ((Candidate.analysis_mode == "deterministic") | retry_due))
+                    query = select(Candidate).where(
+                        Candidate.status.in_(["pending", "review_required"]), review_due)
                 if only_urls:
                     query = select(Candidate)
                 if only_source:
@@ -229,6 +236,7 @@ class CatalogPipeline(Pipeline):
                 if only_urls:
                     query = query.where(Candidate.url.in_([canonical_url(url) for url in only_urls]))
                 source_weight = case(
+                    (RegistrySource.id == "show-hn-rss", 5),
                     (RegistrySource.source_type == "startup_platform", 5),
                     (RegistrySource.source_type.in_(["university", "hackathon", "accelerator", "event"]), 4),
                     (RegistrySource.source_type == "community", 3),
@@ -240,6 +248,12 @@ class CatalogPipeline(Pipeline):
                                         .limit(self.settings.max_candidates)).all() if process else [])
                 work = [(row.url, row.article or {}, row.source_id) for row in rows]
             for url, cached, source_id in work:
+                if (self.llm_service and self.llm_service.available and
+                        not getattr(self.llm_service, "operational", True)):
+                    counts["provider_circuit_open"] += 1
+                    errors.append({"source": "llm", "stage": "classification",
+                                   "code": "provider_circuit_open"})
+                    break
                 raw_id = None
                 self.last_llm_analysis = None
                 counts["candidates"] += 1
@@ -336,11 +350,13 @@ class CatalogPipeline(Pipeline):
                             raw.analyzed_at = now
                         elif self.llm_service and self.llm_service.last_attempt_count:
                             raw.llm_attempt_count += self.llm_service.last_attempt_count
-                            raw.classifier_prompt_version = "catalog_classifier_v1"
+                            raw.classifier_prompt_version = PROMPT_VERSION
                             raw.analyzed_at = now
                     for key, value in outcomes.items():
                         counts[key] += value
                         source_bucket[key] += value
+                    if self.last_llm_analysis and self.settings.llm_batch_delay_seconds:
+                        sleep(self.settings.llm_batch_delay_seconds)
                 except FetchError as exc:
                     with self.factory.begin() as session:
                         candidate = session.get(Candidate, url)

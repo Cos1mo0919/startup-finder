@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     llm_enabled: bool = True
     llm_provider_order: str = "gemini,openrouter,groq,openai"
     gemini_api_key: SecretStr = SecretStr("")
-    gemini_model: str = "gemini-2.5-flash"
+    gemini_model: str = "gemini-3.1-flash-lite"
     openrouter_api_key: SecretStr = SecretStr("")
     openrouter_model: str = "openai/gpt-4.1-mini"
     groq_api_key: SecretStr = SecretStr("")
@@ -44,6 +44,7 @@ class Settings(BaseSettings):
     catalog_neutral_rank: float = Field(default=4.5, ge=0, le=10)
     reanalysis_batch_size: int = Field(default=5, ge=1, le=50)
     reanalysis_delay_seconds: float = Field(default=0.2, ge=0, le=10)
+    llm_batch_delay_seconds: float = Field(default=1.0, ge=0, le=30)
     reanalysis_failure_limit: int = Field(default=3, ge=1, le=20)
     fetch_timeout: float = Field(default=15, ge=1, le=60)
     max_page_bytes: int = Field(default=2_000_000, ge=1000, le=5_000_000)

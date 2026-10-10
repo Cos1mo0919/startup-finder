@@ -9,11 +9,12 @@ from urllib.parse import urlsplit
 
 import httpx
 
-from .catalog import ClassifierFailure, CatalogResult, PROMPT_PATH, parse_classifier_response
+from .catalog import (ClassifierFailure, CatalogResult, PROMPT_PATH,
+                      apply_neutral_score_fallback, parse_classifier_response)
 from .db import ProviderHealth, now_utc
 from .network import FetchError, public_dns, safe_url
 
-PROMPT_VERSION = "catalog_classifier_v1"
+PROMPT_VERSION = "catalog_classifier_v2"
 PROVIDER_NAMES = ("gemini", "openrouter", "groq", "openai")
 
 
@@ -148,6 +149,12 @@ class LLMService:
     def available(self):
         return bool(self.settings.llm_enabled and any(provider.configured for provider in self.providers))
 
+    @property
+    def operational(self):
+        return bool(self.settings.llm_enabled and any(
+            provider.configured and self.failures[provider.name] < self.settings.llm_circuit_breaker_failures
+            for provider in self.providers))
+
     def status(self):
         return [{"name": provider.name, "model": provider.model, "configured": provider.configured,
                  "healthy": self.failures[provider.name] < self.settings.llm_circuit_breaker_failures,
@@ -207,7 +214,7 @@ class LLMService:
                 f"URL: {article.url}\n<article>\n{text}\n</article>")
         system = PROMPT_PATH.read_text()
         return self.analyze_json(system, user, lambda payload: parse_classifier_response(
-            payload, article.title + "\n" + text))
+            apply_neutral_score_fallback(payload), article.title + "\n" + text))
 
     def analyze_json(self, system: str, user: str, validate):
         """Shared fallback path for classification and optional deep enrichment."""
@@ -224,18 +231,17 @@ class LLMService:
                 self.last_attempt_count = attempts
                 try:
                     payload = provider.complete(system, user, self.settings.llm_timeout_seconds)
-                    self._metric(provider.name, "request", round((monotonic() - began) * 1000, 2))
                     result = validate(payload)
                     self._metric(provider.name, "success")
                     return LLMAnalysis(result, provider.name, provider.model, attempts)
                 except ProviderFailure as exc:
-                    self._metric(provider.name, "request", round((monotonic() - began) * 1000, 2))
                     self._metric(provider.name, exc.code)
                     if exc.code in {"rate_limited", "quota_exceeded", "missing_key"}:
                         break
                 except (ClassifierFailure, ValueError) as exc:
-                    self._metric(provider.name, "request", round((monotonic() - began) * 1000, 2))
                     self._metric(provider.name, "business_validation_failed" if str(exc).startswith("invalid_score") else "schema_validation_failed")
+                finally:
+                    self._metric(provider.name, "request", round((monotonic() - began) * 1000, 2))
                 if self.failures[provider.name] >= self.settings.llm_circuit_breaker_failures:
                     break
             self.metrics[provider.name]["fallback_count"] += 1

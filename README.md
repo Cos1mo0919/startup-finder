@@ -645,10 +645,33 @@ StringSession, хранить только в защищённых настро�
 .venv/bin/python -m backend.app.cli --autonomous-audit --report /tmp/izlanish-audit.json
 .venv/bin/python -m backend.app.cli --inspect-raw 123
 .venv/bin/python -m backend.app.cli --llm-live-eval --report /tmp/izlanish-llm-eval.json
+.venv/bin/python -m backend.app.cli --llm-smoke --report /tmp/izlanish-gemini-smoke.json
 ```
 
-Последняя команда вызывает реальный LLM только при наличии ключа. Без ключей
+`--llm-live-eval` вызывает реальный LLM только при наличии ключа. Без ключей
 она сообщает, что качество реального LLM не измерено. Human-labeled offline
 fixtures — `tests/fixtures/catalog_eval.json`; их проверяют backend-тесты.
+`--llm-smoke` выполняет один запрос по сохранённому примеру и возвращает имя
+провайдера, модель, результат проверки JSON/схемы и безопасные счётчики без
+ключа или полного текста запроса. Для него отсутствие ключа — ошибка запуска.
+После живой проверки 10.10.2026 модель по умолчанию —
+`gemini-3.1-flash-lite`: прежняя `gemini-2.5-flash` возвращала 404 для нового
+ключа, а `gemini-3.8-flash` не ответила в заданный таймаут этой среды.
+При необходимости `GEMINI_MODEL` переопределяется в переменных среды.
+Отсутствие доказательств novelty/potential принудительно даёт консервативные
+4 балла и точную причину из правила scoring, после чего схема снова проверяется.
+Текущий benchmark содержит лишь три вручную размеченные страницы, поэтому
+live precision/recall дают диагностический сигнал, а не надёжную оценку качества.
+
+После появления `GEMINI_API_KEY` безопасно повторяйте backlog небольшими
+пакетами; команда выбирает также записи текущей версии с причиной
+`llm_unavailable`, сначала проектные источники. `MAX_CANDIDATES` ограничивает
+пакет, `LLM_BATCH_DELAY_SECONDS` задаёт паузу между успешными LLM вызовами.
+Записи, для которых все провайдеры временно недоступны, повторяются не раньше
+чем через шесть часов. Повторный запуск сохраняет уже обработанные результаты.
+
+```bash
+MAX_CANDIDATES=10 LLM_BATCH_DELAY_SECONDS=1 .venv/bin/python -m backend.app.cli --reprocess-review --report /tmp/izlanish-gemini-batch.json
+```
 Baseline до этой миграции — `reports/pipeline-baseline.json`; точная команда
 восстановления и путь резервной копии — `reports/autonomous-pipeline-restore.md`.

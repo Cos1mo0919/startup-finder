@@ -35,6 +35,8 @@ def test_cheap_filter_rejects_only_obvious_noise_and_records_history(factory):
                                  title="Demo Day teams presented products")
         scholarship_app, _ = ingest_raw(session, source_adapter="spot", source_url="https://news.example/scholarship-app",
                                         title="Scholarship app launched for students")
+        inflected, _ = ingest_raw(session, source_adapter="spot", source_url="https://news.example/stipendiyalari",
+                                 title="Prezident va nomli davlat stipendiyalari uchun imtihonlar")
         unrelated, _ = ingest_raw(session, source_adapter="spot", source_url="https://news.example/nobel",
                                   title="Nobel literature winner announced")
         unrelated_uz, _ = ingest_raw(session, source_adapter="spot", source_url="https://news.example/nobel-uz",
@@ -42,6 +44,7 @@ def test_cheap_filter_rejects_only_obvious_noise_and_records_history(factory):
         assert cheap_decision(session, noise)[:2] == ("reject", "obvious_noise")
         assert cheap_decision(session, possible)[0] == "classify"
         assert cheap_decision(session, scholarship_app)[0] == "classify"
+        assert cheap_decision(session, inflected)[:2] == ("reject", "obvious_noise")
         assert cheap_decision(session, unrelated)[:2] == ("reject", "obvious_noise")
         assert cheap_decision(session, unrelated_uz)[:2] == ("reject", "obvious_noise")
         record_transition(noise, "rejected", "obvious_noise")
@@ -122,12 +125,14 @@ def test_circuit_breaker_skips_failed_provider_within_window(settings):
 
 def test_all_providers_fail_and_project_rows_survive_migration(settings, factory):
     first = FakeProvider("gemini", [ProviderFailure("quota_exceeded")])
-    config = settings.model_copy(update={"llm_provider_order": "gemini", "llm_max_retries_per_provider": 0})
+    config = settings.model_copy(update={"llm_provider_order": "gemini", "llm_max_retries_per_provider": 0,
+                                 "llm_circuit_breaker_failures": 1})
     service = LLMService(config, factory, {"gemini": first})
     try:
         service.analyze_source(sample_article())
         assert False, "expected fallback"
     except LLMUnavailable as exc:
         assert exc.code == "llm_unavailable"
+    assert not service.operational
     with factory() as session:
         assert session.scalars(select(Project)).all() == []

@@ -16,6 +16,9 @@ def settings(tmp_path):
         scheduler_enabled=False,
         ai_api_key="",
         openai_api_key="",
+        gemini_api_key="",
+        openrouter_api_key="",
+        groq_api_key="",
         search_api_key="",
         admin_api_key="test-admin-key",
     )

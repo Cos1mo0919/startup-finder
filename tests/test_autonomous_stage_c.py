@@ -10,7 +10,7 @@ from backend.app.admin_alerts import send_alerts
 from backend.app.autonomous_audit import audit
 from backend.app.catalog import CatalogEntry, CatalogResult
 from backend.app.catalog_pipeline import CatalogPipeline
-from backend.app.catalog_eval import evaluate
+from backend.app.catalog_eval import evaluate, smoke
 from backend.app.catalog_store import save_catalog_result
 from backend.app.db import Candidate, Project, ProjectDeepAnalysis, RawDiscovery, RegistrySource, SourceBlock, now_utc
 from backend.app.deep_analysis import CRITERION_NAMES, deep_analysis_once, validate_criteria, weighted_score
@@ -114,6 +114,13 @@ def test_live_benchmark_without_credentials_reports_quality_unmeasured(settings,
     result = evaluate(settings, factory)
     assert result["status"] == "llm_unavailable" and result["llm_quality_measured"] is False
     assert result["cases"] >= 3
+
+
+def test_smoke_without_credentials_is_explicitly_unavailable(settings, factory):
+    result = smoke(settings, factory)
+    assert result["status"] == "llm_unavailable" and result["configured"] is False
+    assert result["provider_order"][0] == "gemini"
+    assert "key" not in result
 
 
 def test_explicit_source_block_survives_seed_update(settings, factory):

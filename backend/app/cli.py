@@ -78,6 +78,7 @@ def main():
     parser.add_argument("--to-date", type=date.fromisoformat, default=date(2026, 9, 30))
     parser.add_argument("--report", type=Path, help="Write structured results to this JSON file")
     parser.add_argument("--llm-live-eval", action="store_true", help="Explicit live-provider benchmark on saved sources")
+    parser.add_argument("--llm-smoke", action="store_true", help="One explicit live-provider schema check on a saved source")
     parser.add_argument("--autonomous-audit", action="store_true", help="Read-only baseline, yield and sample audit")
     parser.add_argument(
         "--drain", action="store_true", help="Process durable backlog without rediscovering sources"
@@ -103,14 +104,15 @@ def main():
                 args.report.write_text(json.dumps(result, ensure_ascii=False, indent=2))
             print(json.dumps(result, ensure_ascii=False, indent=2))
             return 0
-        if args.llm_live_eval:
-            from .catalog_eval import evaluate
-            result = evaluate(settings, factory)
+        if args.llm_live_eval or args.llm_smoke:
+            from .catalog_eval import evaluate, smoke
+            result = smoke(settings, factory) if args.llm_smoke else evaluate(settings, factory)
             if args.report:
                 args.report.parent.mkdir(parents=True, exist_ok=True)
                 args.report.write_text(json.dumps(result, ensure_ascii=False, indent=2))
             print(json.dumps(result, ensure_ascii=False, indent=2))
-            return 0 if result["status"] in {"completed", "llm_unavailable"} else 1
+            return 0 if result["status"] == "completed" or (
+                args.llm_live_eval and result["status"] == "llm_unavailable") else 1
         if args.debug_report or args.list_candidates or args.inspect_url or args.inspect_raw:
             from .diagnostics import debug_report, list_candidates, inspect_candidate, inspect_raw
 

@@ -1,9 +1,11 @@
+from datetime import timedelta
+
 from sqlalchemy import func, select
 
 from backend.app.catalog import CatalogEntry, CatalogResult
 from backend.app.catalog_pipeline import CatalogPipeline
 from backend.app.catalog_store import save_catalog_result
-from backend.app.db import Candidate, Project, RawDiscovery
+from backend.app.db import Candidate, Project, RawDiscovery, RegistrySource, now_utc
 from backend.app.llm_service import LLMAnalysis, LLMUnavailable
 from backend.app.scheduler import make_scheduler
 from tests.conftest import FakeDiscovery, sample_article
@@ -45,7 +47,7 @@ def test_raw_is_committed_before_provider_and_project_publishes_without_deep_sco
         assert project.publication_status == "PUBLISHED" and project.opportunity_score is None
         assert raw.status == "processed" and raw.canonical_project_id == project.id
         assert raw.llm_provider == "gemini" and raw.llm_attempt_count == 1
-        assert raw.classifier_prompt_version == "catalog_classifier_v1"
+        assert raw.classifier_prompt_version == "catalog_classifier_v2"
     pipeline.close()
 
 
@@ -59,6 +61,8 @@ def test_all_providers_unavailable_uses_safe_keyless_review(settings, factory):
         raw = session.scalar(select(RawDiscovery))
         assert raw.status == "review_required" and raw.failure_reason == "llm_unavailable"
         assert session.scalars(select(Project)).all() == []
+        assert session.get(Candidate, article.url).analysis_mode == "llm_failed"
+    assert pipeline.run(discover=False, reanalyze=False, review_only=True)["counts"]["candidates"] == 0
     pipeline.close()
 
 
@@ -123,6 +127,56 @@ def test_review_reprocessing_uses_cached_article_without_fetch(settings, factory
     with factory() as session:
         row = session.get(Candidate, article.url)
         assert row.processing_version == 8 and row.reason == "llm_unavailable"
+    pipeline.close()
+
+
+def test_live_review_retry_handles_current_version_in_project_first_batches(settings, factory):
+    project = sample_article(name="ProjectTool", url="https://projects.example/tool")
+    news = sample_article(name="NewsItem", url="https://news.example/story")
+    old = now_utc() - timedelta(hours=7)
+    with factory.begin() as session:
+        session.add_all([
+            RegistrySource(id="project", name="Projects", url="https://projects.example/",
+                           source_type="startup_platform", priority=4),
+            RegistrySource(id="news", name="News", url="https://news.example/rss",
+                           source_type="news", priority=5),
+        ])
+        session.flush()
+        session.add_all([
+            Candidate(url=project.url, article=project.model_dump(mode="json"), source_id="project",
+                      status="review_required", reason="llm_unavailable", processing_version=8,
+                      updated_at=old),
+            Candidate(url=news.url, article=news.model_dump(mode="json"), source_id="news",
+                      status="review_required", reason="llm_unavailable", processing_version=8,
+                      updated_at=old),
+        ])
+    service = InspectingService(factory, CatalogResult("NOT_PROJECT", 0.9, reason="not_project"))
+    config = settings.model_copy(update={"max_candidates": 1, "llm_batch_delay_seconds": 0})
+    pipeline = CatalogPipeline(config, factory, FakeDiscovery([]), llm_service=service)
+    first = pipeline.run(discover=False, reanalyze=False, review_only=True)
+    assert first["counts"]["candidates"] == 1 and service.calls == 1
+    with factory() as session:
+        assert session.get(Candidate, project.url).status == "rejected"
+        assert session.get(Candidate, news.url).status == "review_required"
+    second = pipeline.run(discover=False, reanalyze=False, review_only=True)
+    assert second["counts"]["candidates"] == 1 and service.calls == 2
+    pipeline.close()
+
+
+def test_open_provider_circuit_preserves_unattempted_review(settings, factory):
+    article = sample_article()
+    with factory.begin() as session:
+        session.add(Candidate(url=article.url, article=article.model_dump(mode="json"),
+                              status="review_required", reason="llm_unavailable",
+                              analysis_mode="deterministic", processing_version=8))
+    service = InspectingService(factory, AssertionError("provider must not be called"))
+    service.operational = False
+    pipeline = CatalogPipeline(settings, factory, FakeDiscovery([]), llm_service=service)
+    result = pipeline.run(discover=False, reanalyze=False, review_only=True)
+    assert result["status"] == "partial" and result["counts"]["provider_circuit_open"] == 1
+    assert result["counts"]["candidates"] == 0 and service.calls == 0
+    with factory() as session:
+        assert session.get(Candidate, article.url).reason == "llm_unavailable"
     pipeline.close()
 
 

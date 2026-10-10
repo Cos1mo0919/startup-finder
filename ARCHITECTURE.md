@@ -325,3 +325,23 @@ This separate analysis never changes `publication_status`. The public detail
 route includes deep criteria only when populated. `reports/pipeline-baseline.json`
 is the immutable pre-autonomy inventory; the SQLite backup and restore command
 are in `reports/autonomous-pipeline-restore.md`.
+## Live Gemini backlog operation (2026-10-10)
+
+The provider chain defaults to `gemini-3.1-flash-lite` for new Gemini keys;
+`GEMINI_MODEL` can override it. Classifier prompt v2 adds a source-grounding
+instruction for MULTI event entries. The LLM service applies only conservative
+score corrections before strict schema validation: missing novelty/potential
+evidence gets the documented neutral 4, and a MULTI page cannot confer a
+customer-use score above 7 to an individual entry without entry-level proof.
+
+Current-version keyless review records remain eligible for bounded AI
+reprocessing. A failed provider attempt is marked `llm_failed` and backs off
+for six hours. When all configured providers trip their circuit breakers,
+the catalog worker stops the batch, records `provider_circuit_open`, and leaves
+unattempted candidates unchanged. Project-first Show HN pages are prioritized
+over generic news. The live benchmark exercises the same scholarship title
+prefilter as ingestion and reports provider/model results separately.
+
+Exact project-name matches with conflicting creator metadata are marked as
+possible duplicates for review. An operator may use the existing MERGE action
+to retain both source histories under the canonical project ID.

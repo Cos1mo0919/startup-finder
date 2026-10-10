@@ -30,7 +30,7 @@ PROJECT_TYPES = (
 )
 STAGES = ("idea", "prototype", "launched", "growing", "unknown")
 NEUTRAL_REASON = "insufficient evidence; neutral fallback"
-PROMPT_PATH = ROOT / "config/prompts/catalog_classifier_v1.txt"
+PROMPT_PATH = ROOT / "config/prompts/catalog_classifier_v2.txt"
 STOPWORDS = {
     "uz": {"va", "hamda", "uchun", "bilan", "bu", "bir", "shu", "yoki", "ning", "esa"},
     "ru": {"и", "для", "это", "на", "в", "с", "по", "как", "или", "из"},
@@ -120,8 +120,8 @@ def validate_entry(entry: CatalogEntry, source_text: str, method: str = "llm") -
         for reason in entry.score_reasons.values():
             if not reason or len(words(reason)) > 15:
                 raise ClassifierFailure("invalid_score_evidence")
-        usage = re.search(r"\b(users?|customers?|paying|revenue|active|foydalanuvchi|mijoz|ishlat|используют|клиент)\b", source_text, re.I)
-        product = re.search(r"\b(launched|available|working|pilot|prototype|demo|ishga tush|prototip|запущ|прототип)\b", source_text, re.I)
+        usage = re.search(r"\b(users?|customers?|paying|revenue|active|foydalanuvchi|foydalanmoqda|mijoz(?:lar|i|imiz)?|ishlat|используют|клиент)\b|pulli hamkorlik", source_text, re.I)
+        product = re.search(r"\b(launched|available|working|pilot|prototype|demo|ishga tush|prototip|foydalanmoqda|foydalanadi|запущ|прототип)\b", source_text, re.I)
         if entry.scores.real_product >= 8 and not (usage and product):
             raise ClassifierFailure("invalid_score_evidence")
     else:
@@ -153,6 +153,31 @@ def parse_classifier_response(payload: dict, source_text: str) -> CatalogResult:
         return CatalogResult(kind, confidence, entries)
     except (KeyError, TypeError, ValueError, ValidationError) as exc:
         raise ClassifierFailure("invalid_json_schema") from exc
+
+
+def apply_neutral_score_fallback(payload: dict) -> dict:
+    """Apply conservative caps where source-wide scores cannot prove entry-level evidence."""
+    if not isinstance(payload, dict):
+        return payload
+    entries = payload.get("entries") if payload.get("classification") == "MULTI" else [payload]
+    if not isinstance(entries, list):
+        return payload
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        evidence, scores, reasons = (entry.get("score_evidence"), entry.get("scores"),
+                                     entry.get("score_reasons"))
+        if not all(isinstance(value, dict) for value in (evidence, scores, reasons)):
+            continue
+        for factor in ("novelty", "potential"):
+            if evidence.get(factor) is False:
+                scores[factor] = 4
+                reasons[factor] = NEUTRAL_REASON
+        if payload.get("classification") == "MULTI" and isinstance(scores.get("real_product"), int):
+            if scores["real_product"] >= 8:
+                scores["real_product"] = 7
+                reasons["real_product"] = "Entry-level customer use is not independently verified on this page"
+    return payload
 
 
 def decision(result: CatalogResult, entry: CatalogEntry | None = None) -> tuple[str, str]:
@@ -259,6 +284,9 @@ def duplicate_decision(session, entry: CatalogEntry, source_url: str):
         same_name = bool(names & existing or compact & {re.sub(r"\W", "", name) for name in existing})
         same_domain = bool(incoming_domain and project.main_url and urlsplit(project.main_url).hostname == incoming_domain)
         creator_conflict = bool(entry.creator and project.creator and normalize(entry.creator) != normalize(project.creator))
+        if same_name and creator_conflict:
+            uncertain = project
+            continue
         if same_name and not creator_conflict and (same_domain or not entry.official_url or not project.main_url):
             return project, None
         similarity = max(SequenceMatcher(None, a, b).ratio() for a in names for b in existing)

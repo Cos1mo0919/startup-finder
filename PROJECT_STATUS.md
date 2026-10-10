@@ -405,3 +405,42 @@ remain unmeasured. The production Telegram target channel list is empty pending
 operator configuration. Detailed source yield and samples are in
 `reports/autonomous-audit.json`, with first-run and drain reports alongside it.
 Public navigation remains Bosh sahifa / Loyihalar / Arxiv / Manbalar.
+## 2026-10-10 — live Gemini activation and bounded backlog recovery
+
+The cloud worker now sees `GEMINI_API_KEY` (value never printed). The previous
+default `gemini-2.5-flash` returned HTTP 404 for this key; `gemini-3.8-flash`
+timed out here. `gemini-3.1-flash-lite` passed the live JSON/schema smoke test
+using `catalog_classifier_v2`. The three-case human-labeled end-to-end live
+benchmark passed 3/3 (precision/recall 1.0), including one deterministic
+scholarship prefilter and two Gemini responses. This sample is too small to
+establish general accuracy; a raw Gemini-only trial did misclassify that
+scholarship. The production prefilter now recognizes inflected `stipendiyalari`.
+
+Backlog reprocessing uses a bounded, project-first `--reprocess-review` batch
+for current-version `llm_unavailable` records, with configurable delay and
+six-hour retry for attempted provider failures. The circuit breaker leaves
+unattempted rows untouched. An optional live smoke command reports provider,
+model and schema result without secrets. Missing score evidence is capped at
+the documented neutral value; MULTI pages cannot claim entry-level customer
+usage from page-wide text. Exact-name/creator conflicts go to duplicate review.
+
+Pre-run backup: `/tmp/izlanish-before-gemini-2026-10-10.sqlite3` (SQLite backup
+API). The preserved baseline remains 15 projects / 2 published / 473 raw review.
+After bounded live processing and manual source audit: 28 project rows,
+11 published, 14 review, 2 rejected, 1 duplicate; 598 raw observations with
+455 review, 79 rejected, 31 processed, 10 pending and 23 failed. The candidate
+queue still has 111 queued. Nine net new public projects came from previously
+stored sources: five UzHunt profiles and four Show HN product pages. Three
+vaguely described Next Rise entries were hidden for review, and the duplicate
+DMED from that article was merged into the existing 2025 record while retaining
+the new source. A fresh Spot Startups check found 20 known links; Show HN's
+fresh feed returned HTTP 502, but its saved queue continued processing.
+No deterministic published project currently awaits Gemini enrichment. Deep
+Excel weights remain unvalidated and deep analysis stays optional.
+
+The audit with 9 published, 10 review and 10 rejected samples is
+`reports/gemini-live-audit.json`. The currently available international
+country-filter tab shows Screens (United States). Other Show HN products have
+unknown country and appear only under All; no country was invented. Telegram
+credentials remain unconfigured. Stage/user acceptance is not implied by this
+technical validation.

@@ -20,6 +20,7 @@ def audit(factory, baseline_path=ROOT / "reports/pipeline-baseline.json"):
         projects = session.scalars(select(Project)).all()
         raws = session.scalars(select(RawDiscovery)).all()
         candidates = session.scalars(select(Candidate)).all()
+        candidate_by_url = {candidate.url: candidate for candidate in candidates}
         runs = session.scalars(select(Run).order_by(Run.id.desc()).limit(10)).all()
         providers = session.scalars(select(ProviderHealth)).all()
         deep = session.scalars(select(ProjectDeepAnalysis)).all()
@@ -63,12 +64,29 @@ def audit(factory, baseline_path=ROOT / "reports/pipeline-baseline.json"):
             "samples": {
                 "auto_published": [{"name": p.name, "country": p.country,
                                     "source": p.sources[0].url if p.sources else None,
+                                    "classification": (p.classification_history or [{}])[-1].get("value", "PROJECT"),
+                                    "confidence": p.classification_confidence,
                                     "reason": p.publication_reason,
+                                    "assessment": "Named project and concrete description passed catalog validation.",
                                     "evidence": (p.publication_excerpt or "")[:250]} for p in fresh[:25]],
-                "review_required": [{"source": r.source_url, "reason": r.failure_reason,
+                "review_required": [{"name": r.title, "source": r.source_url,
+                                     "source_adapter": r.source_adapter,
+                                     "classification": candidate_by_url[r.source_url].detector_result
+                                     if r.source_url in candidate_by_url else None,
+                                     "confidence": candidate_by_url[r.source_url].classification_confidence
+                                     if r.source_url in candidate_by_url else None,
+                                     "reason": r.failure_reason,
+                                     "assessment": "Publication awaits valid classification or required source details.",
                                      "evidence": (r.raw_text or r.description or r.title)[:250]}
                                     for r in review[:10]],
-                "rejected": [{"source": r.source_url, "reason": r.failure_reason,
+                "rejected": [{"name": r.title, "source": r.source_url,
+                              "source_adapter": r.source_adapter,
+                              "classification": candidate_by_url[r.source_url].detector_result
+                              if r.source_url in candidate_by_url else None,
+                              "confidence": candidate_by_url[r.source_url].classification_confidence
+                              if r.source_url in candidate_by_url else None,
+                              "reason": r.failure_reason,
+                              "assessment": "Source failed the project or publication gate.",
                               "evidence": (r.raw_text or r.description or r.title)[:250]}
                              for r in rejected[:10]],
             },

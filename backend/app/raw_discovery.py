@@ -11,7 +11,7 @@ from .db import Candidate, Project, RawDiscovery, Source, now_utc
 from .network import canonical_url
 
 NOISE_TITLE = re.compile(
-    r"\b(stipendiya|scholarship|стипендия|вакансия|vakansiya|job opening|"
+    r"\b(stipendiya\w*|scholarship|стипендия|вакансия|vakansiya|job opening|"
     r"reklama|advertisement|political appointment|nobel literature|nobel prize in literature|"
     r"adabiyot bo.yicha nobel|tinchlik bo.yicha nobel)\b", re.I,
 )

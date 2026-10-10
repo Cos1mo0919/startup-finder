@@ -8,7 +8,8 @@ from sqlalchemy import select
 
 from backend.app.catalog import (
     CatalogClassifier, CatalogEntry, CatalogResult, ClassifierFailure, catalog_score,
-    decision, deterministic_entry, duplicate_decision, parse_classifier_response,
+    apply_neutral_score_fallback, decision, deterministic_entry, duplicate_decision,
+    parse_classifier_response,
 )
 from backend.app.catalog_store import save_catalog_result
 from backend.app.db import Candidate, Project, Source
@@ -82,6 +83,28 @@ def test_llm_schema_scoring_and_status():
     assert result.entries[0].creator is None
 
 
+def test_missing_score_evidence_is_reduced_to_documented_neutral_fallback():
+    payload = project_payload(scores={"clarity": 8, "real_product": 9, "novelty": 8, "potential": 9},
+                              score_reasons={"clarity": "Clear product", "real_product": "Customers use it",
+                                             "novelty": "Speculative novelty", "potential": "Speculative market"})
+    result = parse_classifier_response(apply_neutral_score_fallback(payload), article().text)
+    assert result.entries[0].scores.novelty == 4
+    assert result.entries[0].scores.potential == 4
+    assert result.entries[0].score_reasons["novelty"] == "insufficient evidence; neutral fallback"
+    assert catalog_score(result.entries[0]) == 6.2
+
+
+def test_multi_page_cannot_claim_entry_level_customer_usage_from_page_wide_text():
+    page = article(2)
+    payload = {"classification": "MULTI", "confidence": 0.9,
+               "entries": [project_payload(name="Tezbor", aliases=[],
+                           description_uz="Tezbor hududlar orasida yetkazib berish xizmatini raqamli platforma orqali tashkil qiladi",
+                           scores={"clarity": 8, "real_product": 9, "novelty": 4, "potential": 4})]}
+    result = parse_classifier_response(apply_neutral_score_fallback(payload), page.text)
+    assert result.entries[0].scores.real_product == 7
+    assert "not independently verified" in result.entries[0].score_reasons["real_product"]
+
+
 @pytest.mark.parametrize("change,reason", [
     ({"scores": {"clarity": 7, "real_product": 7, "novelty": 6, "potential": 4}}, "invalid_score_evidence"),
     ({"score_reasons": {"clarity": "Clear", "real_product": "Launched", "novelty": "No evidence", "potential": "insufficient evidence; neutral fallback"}}, "invalid_score_evidence"),
@@ -90,8 +113,10 @@ def test_llm_schema_scoring_and_status():
     ({"scores": {"clarity": 7, "real_product": 9, "novelty": 4, "potential": 4}}, "invalid_score_evidence"),
 ])
 def test_llm_validation_rejects_invalid_response(change, reason):
+    source = ("KotibAI is a proposed concept with no confirmed users."
+              if change.get("scores", {}).get("real_product") == 9 else article().text)
     with pytest.raises(ClassifierFailure, match=reason):
-        parse_classifier_response(project_payload(**change), article().text)
+        parse_classifier_response(project_payload(**change), source)
 
 
 def test_low_confidence_not_project_goes_to_review():
@@ -241,4 +266,5 @@ def test_similar_names_with_conflicting_creators_not_merged(settings, factory):
         save_catalog_result(session, item, first)
     with factory() as session:
         match, possible = duplicate_decision(session, CatalogEntry(name="KotibAI", creator="Another Creator", confidence=0.9), "https://example.org/other")
-        assert match is None and possible is None
+        assert match is None and possible is not None
+        assert possible.name == "KotibAI"
