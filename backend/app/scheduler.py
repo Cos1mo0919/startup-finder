@@ -22,6 +22,22 @@ def run_once(settings, factory, archive=False):
         pipeline.close()
 
 
+def drain_once(settings, factory):
+    pipeline = CatalogPipeline(settings, factory)
+    try:
+        return pipeline.run(discover=False, reanalyze=False)
+    finally:
+        pipeline.close()
+
+
+def reanalyze_once(settings, factory):
+    pipeline = CatalogPipeline(settings, factory)
+    try:
+        return pipeline.run(discover=False, process=False)
+    finally:
+        pipeline.close()
+
+
 def scan_due(name, checkpoint, now):
     local = aware(now).astimezone(TASHKENT)
     if name == "morning":
@@ -91,6 +107,10 @@ def make_scheduler(settings, factory):
     scheduler = BackgroundScheduler(timezone=TASHKENT)
     scheduler.add_job(run_once, hourly_trigger(), args=[settings, factory], id="discovery",
                       max_instances=1, coalesce=True, misfire_grace_time=300)
+    scheduler.add_job(drain_once, "interval", minutes=15, args=[settings, factory],
+                      id="raw_processing", max_instances=1, coalesce=True)
+    scheduler.add_job(reanalyze_once, "interval", hours=6, args=[settings, factory],
+                      id="catalog_reanalysis", max_instances=1, coalesce=True)
     scheduler.add_job(reconcile_due, "interval", minutes=15, args=[settings, factory],
                       id="reconciliation", max_instances=1, coalesce=True, next_run_time=now_utc())
     return scheduler

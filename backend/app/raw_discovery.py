@@ -14,6 +14,7 @@ NOISE_TITLE = re.compile(
     r"\b(stipendiya|scholarship|стипендия|вакансия|vakansiya|job opening|"
     r"reklama|advertisement|political appointment)\b", re.I,
 )
+PROJECT_HINT = re.compile(r"\b(startup|startap|project|loyiha|platform|app|prototype|prototip|product|ilova)\b", re.I)
 
 
 def ingest_raw(session, *, source_adapter: str, source_url: str, source_name: str = "",
@@ -48,7 +49,7 @@ def cheap_decision(session, row: RawDiscovery) -> tuple[str, str, str | None]:
                              .where(Source.url == row.source_url))
     if project:
         return "duplicate", "known_project_source", project.id
-    if NOISE_TITLE.search(row.title or ""):
+    if NOISE_TITLE.search(row.title or "") and not PROJECT_HINT.search(row.title or ""):
         return "reject", "obvious_noise", None
     return "classify", "", None
 

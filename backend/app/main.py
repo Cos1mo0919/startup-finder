@@ -13,7 +13,9 @@ from .sectors import SECTORS, LEGACY
 from .config import Settings
 from .dates import TASHKENT, today_start
 from .db import (Candidate, EcosystemSignal, Problem, ProblemEvidence, Project,
-                 ProjectProblemLink, RegistrySource, Run, SolutionIdea, aware, make_db, now_utc)
+                 ProjectProblemLink, ProviderHealth, RawDiscovery, RegistrySource, Run,
+                 SolutionIdea, aware, make_db, now_utc)
+from .llm_service import LLMService
 from .scheduler import make_scheduler
 from .schemas import CATEGORIES
 from .intelligence import migrate_existing_problems
@@ -348,6 +350,27 @@ def create_app(settings=None):
             pending = session.scalar(
                 select(func.count()).select_from(Candidate).where(Candidate.status == "pending")
             )
+            raw_counts = {state: amount for state, amount in session.execute(
+                select(RawDiscovery.status, func.count()).group_by(RawDiscovery.status)).all()}
+            provider_rows = {row.name: row for row in session.scalars(select(ProviderHealth))}
+            provider_status = []
+            for configured in LLMService(settings).status():
+                health = provider_rows.get(configured["name"])
+                provider_status.append({"name": configured["name"], "model": configured["model"],
+                                        "configured": configured["configured"],
+                                        "healthy": not health or health.consecutive_failures < settings.llm_circuit_breaker_failures,
+                                        "requests": health.requests if health else 0,
+                                        "successes": health.successes if health else 0,
+                                        "timeouts": health.timeouts if health else 0,
+                                        "rate_limits": health.rate_limits if health else 0,
+                                        "quota_errors": health.quota_errors if health else 0,
+                                        "invalid_json": health.invalid_json if health else 0,
+                                        "schema_failures": health.schema_failures if health else 0,
+                                        "fallback_count": health.fallback_count if health else 0,
+                                        "average_latency_ms": round(health.latency_total_ms / health.requests, 1)
+                                        if health and health.requests else None,
+                                        "last_success_at": iso(health.last_success_at) if health else None,
+                                        "last_error": health.last_error if health else ""})
             radar = radar_status(session, settings.evidence_min_score)
             intelligence = status_extra(session)
         job = scheduler.get_job("discovery")
@@ -361,7 +384,10 @@ def create_app(settings=None):
             "total_projects": total,
             "today_projects": today,
             "pending_candidates": pending,
-            "ai_enabled": bool(settings.ai_key),
+            "ai_enabled": LLMService(settings).available,
+            "llm_provider_order": [item["name"] for item in provider_status],
+            "llm_providers": provider_status,
+            "raw_discoveries": raw_counts,
             "search_enabled": bool(settings.search_api_key.get_secret_value()),
             **radar,
             **intelligence,
@@ -570,6 +596,10 @@ def create_app(settings=None):
                         reasons[c.reason] = reasons.get(c.reason, 0) + 1
                 result.append({"source_id": source.id, "name": source.name, "enabled": source.enabled,
                                "items_fetched": source.candidates_found, "candidate_records": len(rows),
+                               "raw_discoveries": session.scalar(select(func.count()).select_from(RawDiscovery).where(
+                                   RawDiscovery.source_adapter == source.id)) or 0,
+                               "pre_filtered": session.scalar(select(func.count()).select_from(RawDiscovery).where(
+                                   RawDiscovery.source_adapter == source.id, RawDiscovery.failure_reason == "obvious_noise")) or 0,
                                "project_candidates": sum(c.detector_result in ("PROJECT_CANDIDATE", "PROJECT", "MULTI") for c in rows),
                                "verified_projects": sum(projects[pid].visible or projects[pid].publication_status == "PUBLISHED" for pid in linked),
                                "published_projects": sum(projects[pid].publication_status == "PUBLISHED" for pid in linked),

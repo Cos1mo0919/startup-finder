@@ -10,12 +10,14 @@ from uuid import uuid4
 
 from sqlalchemy import func, or_, select, update
 
-from .catalog import (CatalogClassifier, CatalogResult, ClassifierFailure,
+from .catalog import (CatalogResult, ClassifierFailure,
                       deterministic_entry)
 from .catalog_store import save_catalog_result
+from .llm_service import LLMService, LLMUnavailable
+from .raw_discovery import cheap_decision, ingest_raw, record_transition
 from .dates import parse_date
 from .dates import TASHKENT
-from .db import Candidate, Lease, Project, Run, aware, now_utc
+from .db import Candidate, Lease, Project, RawDiscovery, RegistrySource, Run, aware, now_utc
 from .network import FetchError, canonical_url
 from .pipeline import Pipeline
 from .schemas import Article
@@ -28,16 +30,28 @@ OBVIOUS_NOISE = re.compile(
 
 
 class CatalogPipeline(Pipeline):
-    def __init__(self, settings, factory, discovery=None, classifier=None):
+    def __init__(self, settings, factory, discovery=None, classifier=None, llm_service=None):
         super().__init__(settings, factory, discovery=discovery)
-        self.classifier = classifier or CatalogClassifier(settings)
+        self.classifier = classifier
+        self.llm_service = llm_service if llm_service is not None else (None if classifier else LLMService(settings, factory))
+        self.last_llm_analysis = None
         self.trusted_path = settings.trusted_catalog_file
 
     def _classify(self, article):
-        if OBVIOUS_NOISE.search(article.title):
+        self.last_llm_analysis = None
+        if OBVIOUS_NOISE.search(article.title) and not re.search(
+            r"\b(startup|startap|project|loyiha|platform|app|prototype|prototip|product|ilova)\b",
+            article.title, re.I,
+        ):
             return CatalogResult("NOT_PROJECT", 0.95, reason="obvious_noise", analysis_method="deterministic")
-        if self.settings.ai_key:
+        if self.classifier and self.settings.ai_key:
             return self.classifier.classify(article)
+        if self.llm_service and self.llm_service.available:
+            try:
+                self.last_llm_analysis = self.llm_service.analyze_source(article)
+                return self.last_llm_analysis.result
+            except LLMUnavailable:
+                pass
         try:
             entry = deterministic_entry(article, self.trusted_path)
         except ClassifierFailure as exc:
@@ -47,7 +61,7 @@ class CatalogPipeline(Pipeline):
         return CatalogResult("NEEDS_EXTRACTION", 0.5, reason="llm_unavailable", analysis_method="deterministic")
 
     def _enrich(self, now, counts, errors):
-        if not self.settings.ai_key:
+        if not (self.settings.ai_key and self.classifier) and not (self.llm_service and self.llm_service.available):
             return
         with self.factory() as session:
             projects = session.scalars(select(Project).where(
@@ -62,7 +76,7 @@ class CatalogPipeline(Pipeline):
                 break
             try:
                 article = self.discovery.article(url)
-                result = self.classifier.classify(article)
+                result = self.classifier.classify(article) if self.classifier else self.llm_service.analyze_source(article).result
                 with self.factory.begin() as session:
                     project = session.get(Project, project_id)
                     project.reanalysis_attempts += 1
@@ -86,7 +100,7 @@ class CatalogPipeline(Pipeline):
                 counts["source_unavailable"] += 1
                 errors.append({"source": url, "stage": "reanalysis", "code": str(exc)})
                 failures += 1
-            except (ClassifierFailure, ValueError) as exc:
+            except (ClassifierFailure, LLMUnavailable, ValueError) as exc:
                 with self.factory.begin() as session:
                     project = session.get(Project, project_id)
                     project.reanalysis_state = "error"
@@ -97,11 +111,13 @@ class CatalogPipeline(Pipeline):
             if self.settings.reanalysis_delay_seconds:
                 sleep(self.settings.reanalysis_delay_seconds)
 
-    def run(self, archive=False, discover=True, only_source=None, only_urls=None, force_sources=False, reanalyze=True):
+    def run(self, archive=False, discover=True, only_source=None, only_urls=None,
+            force_sources=False, reanalyze=True, process=True):
         owner, now, began = str(uuid4()), now_utc(), monotonic()
         if not self.acquire(owner, now):
             return {"status": "busy"}
         counts = Counter({"sources_checked": 0, "candidates_found": 0, "new_candidates": 0,
+                          "raw_discoveries": 0, "pre_filtered": 0, "project_candidates": 0,
                           "candidates": 0, "auto_published": 0, "review_required": 0,
                           "rejected": 0, "duplicates": 0, "enriched": 0,
                           "source_unavailable": 0, "reanalysis_circuit_open": 0})
@@ -128,6 +144,21 @@ class CatalogPipeline(Pipeline):
             with self.factory.begin() as session:
                 for item in links:
                     url = canonical_url(item["url"])
+                    source_id = item.get("source_id") or "event_discovery"
+                    source = session.get(RegistrySource, item.get("source_id")) if item.get("source_id") else None
+                    raw, created = ingest_raw(session, source_adapter=source_id, source_url=url,
+                                              source_name=source.name if source else source_id,
+                                              source_type=source.source_type if source else "event",
+                                              page_type=(source.options or {}).get("page_type", "") if source else "",
+                                              title=item.get("title", ""), publication_date=item.get("published_at"),
+                                              raw_payload={"discovery_url": item.get("discovery_url"),
+                                                           "query": item.get("query"), "origin": item.get("origin")})
+                    if created:
+                        counts["raw_discoveries"] += 1
+                        yield_by_source[source_id]["raw_discoveries"] += 1
+                    if raw.source_url != url:
+                        counts["duplicates"] += 1
+                        continue
                     row = session.get(Candidate, url)
                     if row is None:
                         row = Candidate(url=url, article={"_queued": True, "_fetch_url": item["url"],
@@ -137,18 +168,40 @@ class CatalogPipeline(Pipeline):
                                         status="queued", source_id=item.get("source_id"), origin=item.get("origin", "other"))
                         session.add(row)
                         counts["new_candidates"] += 1
+                    elif created and row.status in {"published", "rejected"}:
+                        record_transition(raw, "processed" if row.status == "published" else "rejected",
+                                          row.reason or "previously_processed", (row.project_ids or [None])[0], now)
                     elif item.get("discovery_url") and not (row.article or {}).get("discovery_url"):
                         row.article = {**(row.article or {}), "discovery_url": item["discovery_url"],
                                        "discovery_title": item.get("title", "")}
                     yield_by_source[item.get("source_id") or "unknown"]["fetched"] += 1
+                # Telegram and future adapters may insert raw rows independently
+                # of web discovery. Materialize a Candidate without losing payload.
+                pending_raw = select(RawDiscovery).where(RawDiscovery.status == "pending")
+                if only_source:
+                    pending_raw = pending_raw.where(RawDiscovery.source_adapter == only_source)
+                if not process:
+                    pending_raw = pending_raw.where(RawDiscovery.id == -1)
+                for raw in session.scalars(pending_raw.order_by(RawDiscovery.discovered_at)
+                                           .limit(self.settings.max_candidates)):
+                    if session.get(Candidate, raw.source_url) is None:
+                        session.add(Candidate(url=raw.source_url,
+                                              article={"_queued": True, "_fetch_url": raw.source_url,
+                                                       "_feed_date": raw.publication_date.isoformat() if raw.publication_date else None,
+                                                       "_raw_id": raw.id}, status="queued",
+                                              source_id=raw.source_adapter if session.get(RegistrySource, raw.source_adapter) else None,
+                                              origin=raw.source_type or "other"))
+                        counts["new_candidates"] += 1
             with self.factory() as session:
                 retry_due = Candidate.updated_at <= now - timedelta(hours=6)
+                llm_ready = bool((self.classifier and self.settings.ai_key) or
+                                 (self.llm_service and self.llm_service.available))
                 query = select(Candidate).where(or_(
                     Candidate.status == "queued",
                     (Candidate.status.in_(["pending", "review_required", "error"]) &
-                     ((Candidate.processing_version < 7) |
+                     ((Candidate.processing_version < 8) |
                       ((Candidate.status == "error") & retry_due) |
-                      (((Candidate.analysis_mode == "deterministic") | retry_due) if self.settings.ai_key else False))),
+                      (((Candidate.analysis_mode == "deterministic") | retry_due) if llm_ready else False))),
                 ))
                 if only_urls:
                     query = select(Candidate)
@@ -156,13 +209,46 @@ class CatalogPipeline(Pipeline):
                     query = query.where(Candidate.source_id == only_source)
                 if only_urls:
                     query = query.where(Candidate.url.in_([canonical_url(url) for url in only_urls]))
-                rows = session.scalars(query.order_by(Candidate.updated_at.desc()).limit(self.settings.max_candidates)).all()
+                rows = (session.scalars(query.order_by(Candidate.updated_at.desc())
+                                        .limit(self.settings.max_candidates)).all() if process else [])
                 work = [(row.url, row.article or {}, row.source_id) for row in rows]
             for url, cached, source_id in work:
+                raw_id = None
+                self.last_llm_analysis = None
                 counts["candidates"] += 1
                 source_bucket = yield_by_source[source_id or "unknown"]
                 source_bucket["processed"] += 1
                 try:
+                    with self.factory.begin() as session:
+                        adapter = source_id or "event_discovery"
+                        raw = session.get(RawDiscovery, cached.get("_raw_id")) if cached.get("_raw_id") else None
+                        raw = raw or session.scalar(select(RawDiscovery).where(
+                            RawDiscovery.source_adapter == adapter, RawDiscovery.source_url == url))
+                        if raw is None:
+                            raw, _ = ingest_raw(session, source_adapter=adapter, source_url=url,
+                                                source_name=adapter, title=cached.get("title", ""),
+                                                source_type="legacy_candidate", raw_payload={"candidate_url": url})
+                            counts["raw_discoveries"] += 1
+                        action, reason, known_project_id = cheap_decision(session, raw)
+                        raw_id = raw.id
+                        if action != "classify":
+                            record_transition(raw, "rejected" if action == "reject" else "processed", reason,
+                                              known_project_id, now)
+                            candidate = session.get(Candidate, url)
+                            candidate.status = "rejected" if action == "reject" else "published"
+                            candidate.reason = reason
+                            candidate.processing_version = 8
+                            candidate.updated_at = now
+                            if known_project_id:
+                                candidate.project_ids = list(dict.fromkeys([*(candidate.project_ids or []), known_project_id]))
+                        else:
+                            raw.status = "processing"
+                            raw.processing_started_at = now
+                    if action != "classify":
+                        bucket = "pre_filtered" if action == "reject" else "duplicates"
+                        counts[bucket] += 1
+                        source_bucket[bucket] += 1
+                        continue
                     if not cached.get("_queued") and cached.get("text"):
                         article = Article.model_validate(cached)
                     else:
@@ -170,12 +256,24 @@ class CatalogPipeline(Pipeline):
                     article.discovery_url = article.discovery_url or cached.get("_discovery_url")
                     article.discovery_title = article.discovery_title or cached.get("_discovery_title", "")
                     article.source_id = source_id or article.source_id
+                    with self.factory.begin() as session:
+                        raw = session.get(RawDiscovery, raw_id)
+                        raw.title = article.title
+                        raw.description = article.text[:500]
+                        raw.raw_text = article.text
+                        raw.publication_date = article.published_at
+                        raw.page_type = article.page_type or raw.page_type
+                        raw.raw_payload = {**(raw.raw_payload or {}), "publisher": article.publisher,
+                                           "language": article.language, "discovery_url": article.discovery_url}
                     window = getattr(self.discovery, "window", None)
                     if window and article.published_at and not window[0] <= aware(article.published_at).astimezone(TASHKENT).date() <= window[1]:
                         result = CatalogResult("NOT_PROJECT", 0.95, reason="outside_archive_window",
                                                analysis_method="deterministic")
                     else:
                         result = self._classify(article)
+                    if result.entries:
+                        counts["project_candidates"] += len(result.entries)
+                        source_bucket["project_candidates"] += len(result.entries)
                     with self.factory.begin() as session:
                         candidate = session.get(Candidate, url)
                         candidate.article = {**article.model_dump(mode="json"),
@@ -183,9 +281,21 @@ class CatalogPipeline(Pipeline):
                         candidate.attempts += 1
                         candidate.updated_at = now
                         candidate.last_run_id = run_id
-                        candidate.processing_version = 7
+                        candidate.processing_version = 8
                         candidate.analysis_mode = result.analysis_method
                         outcomes = save_catalog_result(session, article, result, now)
+                        raw = session.get(RawDiscovery, raw_id)
+                        record_transition(raw, "processed" if candidate.status == "published" else
+                                          "rejected" if candidate.status == "rejected" else "review_required",
+                                          candidate.reason, (candidate.project_ids or [None])[0], now)
+                        raw.candidate_url = url
+                        raw.raw_payload = {**(raw.raw_payload or {}), "project_ids": candidate.project_ids or []}
+                        if self.last_llm_analysis:
+                            raw.llm_provider = self.last_llm_analysis.provider
+                            raw.llm_model = self.last_llm_analysis.model
+                            raw.llm_attempt_count += self.last_llm_analysis.attempt_count
+                            raw.classifier_prompt_version = self.last_llm_analysis.prompt_version
+                            raw.analyzed_at = now
                     for key, value in outcomes.items():
                         counts[key] += value
                         source_bucket[key] += value
@@ -194,8 +304,10 @@ class CatalogPipeline(Pipeline):
                         candidate = session.get(Candidate, url)
                         candidate.status, candidate.reason = "error", str(exc)
                         candidate.attempts += 1
-                        candidate.processing_version = 7
+                        candidate.processing_version = 8
                         candidate.updated_at = now
+                        if raw_id is not None:
+                            record_transition(session.get(RawDiscovery, raw_id), "failed", str(exc), when=now)
                     errors.append({"source": url, "stage": "fetch", "code": str(exc)})
                     source_bucket["errors"] += 1
                 except (ClassifierFailure, ValueError) as exc:
@@ -204,9 +316,11 @@ class CatalogPipeline(Pipeline):
                         candidate = session.get(Candidate, url)
                         candidate.status, candidate.reason = "review_required", reason
                         candidate.analysis_mode = "llm" if self.settings.ai_key else "deterministic"
-                        candidate.processing_version = 7
+                        candidate.processing_version = 8
                         candidate.attempts += 1
                         candidate.updated_at = now
+                        if raw_id is not None:
+                            record_transition(session.get(RawDiscovery, raw_id), "review_required", reason, when=now)
                     counts["review_required"] += 1
                     source_bucket["review_required"] += 1
             if reanalyze:
@@ -228,6 +342,7 @@ class CatalogPipeline(Pipeline):
                                "limits": {"max_candidates": self.settings.max_candidates,
                                           "archive_pages": self.settings.archive_pages},
                                "source_yield": {key: dict(value) for key, value in yield_by_source.items()},
+                               "llm_providers": self.llm_service.status() if self.llm_service else [],
                                "remaining_queue": session.scalar(select(func.count()).select_from(Candidate).where(Candidate.status.in_(["queued", "pending", "review_required"])))}
                 run.duration_seconds = round(monotonic() - began, 2)
                 session.execute(update(Lease).where(Lease.name == "pipeline", Lease.owner == owner)

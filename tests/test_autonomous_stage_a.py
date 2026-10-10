@@ -31,8 +31,11 @@ def test_cheap_filter_rejects_only_obvious_noise_and_records_history(factory):
                               title="Student scholarship applications")
         possible, _ = ingest_raw(session, source_adapter="spot", source_url="https://news.example/demo-day",
                                  title="Demo Day teams presented products")
+        scholarship_app, _ = ingest_raw(session, source_adapter="spot", source_url="https://news.example/scholarship-app",
+                                        title="Scholarship app launched for students")
         assert cheap_decision(session, noise)[:2] == ("reject", "obvious_noise")
         assert cheap_decision(session, possible)[0] == "classify"
+        assert cheap_decision(session, scholarship_app)[0] == "classify"
         record_transition(noise, "rejected", "obvious_noise")
     with factory() as session:
         row = session.get(RawDiscovery, noise.id)

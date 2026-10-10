@@ -5,11 +5,13 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from time import monotonic
+from urllib.parse import urlsplit
 
 import httpx
 
 from .catalog import ClassifierFailure, CatalogResult, PROMPT_PATH, parse_classifier_response
 from .db import ProviderHealth, now_utc
+from .network import FetchError, public_dns, safe_url
 
 PROMPT_VERSION = "catalog_classifier_v1"
 PROVIDER_NAMES = ("gemini", "openrouter", "groq", "openai")
@@ -44,9 +46,10 @@ def _http_error(response):
 
 
 class OpenAICompatibleProvider:
-    def __init__(self, name, key, model, base_url, client=None):
-        self.name, self.key, self.model, self.base_url = name, key, model, base_url.rstrip("/")
+    def __init__(self, name, key, model, base_url, client=None, trusted_egress_proxy=False):
+        self.name, self.key, self.model, self.base_url = name, key, model, safe_url(base_url).rstrip("/")
         self.client = client
+        self.trusted_egress_proxy = trusted_egress_proxy
 
     @property
     def configured(self):
@@ -58,6 +61,7 @@ class OpenAICompatibleProvider:
         body = {"model": self.model, "temperature": 0.1, "response_format": {"type": "json_object"},
                 "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]}
         try:
+            public_dns(self.base_url, {urlsplit(self.base_url).hostname} if self.trusted_egress_proxy else ())
             client = self.client or httpx
             response = client.post(self.base_url + "/chat/completions", json=body,
                                    headers={"Authorization": "Bearer " + self.key}, timeout=timeout)
@@ -66,6 +70,8 @@ class OpenAICompatibleProvider:
         except httpx.TimeoutException as exc:
             raise ProviderFailure("timeout") from exc
         except httpx.HTTPError as exc:
+            raise ProviderFailure("provider_error") from exc
+        except FetchError as exc:
             raise ProviderFailure("provider_error") from exc
         except (ValueError, KeyError, TypeError, IndexError) as exc:
             raise ProviderFailure("invalid_json") from exc
@@ -114,8 +120,9 @@ class GroqProvider(OpenAICompatibleProvider):
 
 
 class OpenAIProvider(OpenAICompatibleProvider):
-    def __init__(self, key, model, base_url="https://api.openai.com/v1", client=None):
-        super().__init__("openai", key, model, base_url, client)
+    def __init__(self, key, model, base_url="https://api.openai.com/v1", client=None,
+                 trusted_egress_proxy=False):
+        super().__init__("openai", key, model, base_url, client, trusted_egress_proxy)
 
 
 class LLMService:
@@ -126,7 +133,7 @@ class LLMService:
             "openrouter": OpenRouterProvider(settings.openrouter_api_key.get_secret_value(), settings.openrouter_model),
             "groq": GroqProvider(settings.groq_api_key.get_secret_value(), settings.groq_model),
             "openai": OpenAIProvider(settings.ai_key, settings.openai_model or settings.ai_model,
-                                     settings.ai_base_url),
+                                     settings.ai_base_url, trusted_egress_proxy=settings.trusted_egress_proxy),
         }
         names = [name.strip().lower() for name in settings.llm_provider_order.split(",")]
         self.providers = [available[name] for name in names if name in available]
