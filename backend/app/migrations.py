@@ -181,3 +181,6 @@ def migrate(engine, metadata):
         if conn.scalar(text("SELECT version FROM schema_migrations WHERE version=7")) is None:
             conn.execute(text("INSERT INTO schema_migrations(version,applied_at) VALUES(7,:at)"),
                          {"at": datetime.now(timezone.utc).isoformat()})
+        if conn.scalar(text("SELECT version FROM schema_migrations WHERE version=8")) is None:
+            conn.execute(text("INSERT INTO schema_migrations(version,applied_at) VALUES(8,:at)"),
+                         {"at": datetime.now(timezone.utc).isoformat()})

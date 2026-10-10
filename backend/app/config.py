@@ -14,6 +14,18 @@ class Settings(BaseSettings):
     openai_api_key: SecretStr = SecretStr("")
     ai_base_url: str = "https://api.openai.com/v1"
     ai_model: str = "gpt-4.1-mini"
+    llm_enabled: bool = True
+    llm_provider_order: str = "gemini,openrouter,groq,openai"
+    gemini_api_key: SecretStr = SecretStr("")
+    gemini_model: str = "gemini-2.5-flash"
+    openrouter_api_key: SecretStr = SecretStr("")
+    openrouter_model: str = "openai/gpt-4.1-mini"
+    groq_api_key: SecretStr = SecretStr("")
+    groq_model: str = "llama-3.3-70b-versatile"
+    openai_model: str = ""
+    llm_timeout_seconds: float = Field(default=30, ge=1, le=120)
+    llm_max_retries_per_provider: int = Field(default=1, ge=0, le=3)
+    llm_circuit_breaker_failures: int = Field(default=3, ge=1, le=20)
     search_api_key: SecretStr = SecretStr("")
     admin_api_key: SecretStr = SecretStr("")
     trusted_egress_proxy: bool = False

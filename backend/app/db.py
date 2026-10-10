@@ -146,6 +146,56 @@ class Candidate(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
 
 
+class RawDiscovery(Base):
+    """Source observation persisted before any classifier or page enrichment."""
+
+    __tablename__ = "raw_discoveries"
+    __table_args__ = (UniqueConstraint("source_adapter", "source_url"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    source_name: Mapped[str] = mapped_column(String(300), default="")
+    source_adapter: Mapped[str] = mapped_column(String(100), index=True)
+    source_type: Mapped[str] = mapped_column(String(60), default="")
+    page_type: Mapped[str] = mapped_column(String(60), default="")
+    source_url: Mapped[str] = mapped_column(Text)
+    external_id: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    title: Mapped[str] = mapped_column(Text, default="")
+    description: Mapped[str] = mapped_column(Text, default="")
+    raw_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    raw_payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    publication_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    discovered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    status: Mapped[str] = mapped_column(String(30), default="pending", index=True)
+    failure_reason: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    retry_count: Mapped[int] = mapped_column(Integer, default=0)
+    processing_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    canonical_project_id: Mapped[str | None] = mapped_column(ForeignKey("projects.id"), nullable=True)
+    candidate_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    llm_provider: Mapped[str] = mapped_column(String(40), default="")
+    llm_model: Mapped[str] = mapped_column(String(100), default="")
+    llm_attempt_count: Mapped[int] = mapped_column(Integer, default=0)
+    classifier_prompt_version: Mapped[str] = mapped_column(String(40), default="")
+    analyzed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    processing_history: Mapped[list] = mapped_column(JSON, default=list)
+
+
+class ProviderHealth(Base):
+    __tablename__ = "llm_provider_health"
+    name: Mapped[str] = mapped_column(String(40), primary_key=True)
+    requests: Mapped[int] = mapped_column(Integer, default=0)
+    successes: Mapped[int] = mapped_column(Integer, default=0)
+    timeouts: Mapped[int] = mapped_column(Integer, default=0)
+    rate_limits: Mapped[int] = mapped_column(Integer, default=0)
+    quota_errors: Mapped[int] = mapped_column(Integer, default=0)
+    invalid_json: Mapped[int] = mapped_column(Integer, default=0)
+    schema_failures: Mapped[int] = mapped_column(Integer, default=0)
+    fallback_count: Mapped[int] = mapped_column(Integer, default=0)
+    consecutive_failures: Mapped[int] = mapped_column(Integer, default=0)
+    last_success_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_error: Mapped[str] = mapped_column(String(100), default="")
+    latency_total_ms: Mapped[float] = mapped_column(Float, default=0)
+
+
 class Run(Base):
     details: Mapped[dict] = mapped_column(JSON, default=dict)
     __tablename__ = "runs"
