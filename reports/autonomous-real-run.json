@@ -1,0 +1,96 @@
+{
+  "id": 69,
+  "status": "partial",
+  "counts": {
+    "sources_checked": 12,
+    "candidates_found": 177,
+    "new_candidates": 84,
+    "raw_discoveries": 177,
+    "pre_filtered": 0,
+    "project_candidates": 0,
+    "candidates": 30,
+    "auto_published": 0,
+    "review_required": 29,
+    "rejected": 0,
+    "duplicates": 0,
+    "enriched": 0,
+    "source_unavailable": 0,
+    "reanalysis_circuit_open": 0
+  },
+  "errors": [
+    {
+      "source": "https://twitter.com/reversedoofz/status/2108668397148094910",
+      "stage": "fetch",
+      "code": "robots_disallowed"
+    }
+  ],
+  "details": {
+    "source_yield": {
+      "ictweek": {
+        "raw_discoveries": 3,
+        "fetched": 3
+      },
+      "itpark": {
+        "raw_discoveries": 13,
+        "fetched": 13
+      },
+      "spot-startups": {
+        "raw_discoveries": 21,
+        "fetched": 21
+      },
+      "uzhunt": {
+        "raw_discoveries": 7,
+        "fetched": 7
+      },
+      "adu": {
+        "raw_discoveries": 9,
+        "fetched": 9
+      },
+      "bsu": {
+        "raw_discoveries": 21,
+        "fetched": 21
+      },
+      "gazeta": {
+        "raw_discoveries": 20,
+        "fetched": 20,
+        "processed": 7,
+        "auto_published": 0,
+        "review_required": 7,
+        "rejected": 0,
+        "duplicates": 0
+      },
+      "qarshidu": {
+        "raw_discoveries": 24,
+        "fetched": 24
+      },
+      "spot-ru": {
+        "raw_discoveries": 20,
+        "fetched": 20,
+        "processed": 8,
+        "auto_published": 0,
+        "review_required": 8,
+        "rejected": 0,
+        "duplicates": 0
+      },
+      "spot-uz": {
+        "raw_discoveries": 20,
+        "fetched": 20,
+        "processed": 8,
+        "auto_published": 0,
+        "review_required": 8,
+        "rejected": 0,
+        "duplicates": 0
+      },
+      "show-hn-rss": {
+        "raw_discoveries": 19,
+        "fetched": 19,
+        "processed": 7,
+        "auto_published": 0,
+        "review_required": 6,
+        "rejected": 0,
+        "duplicates": 0,
+        "errors": 1
+      }
+    }
+  }
+}

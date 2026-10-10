@@ -7,13 +7,16 @@ from pydantic import SecretStr
 from sqlalchemy import select
 
 from backend.app.admin_alerts import send_alerts
+from backend.app.autonomous_audit import audit
 from backend.app.catalog import CatalogEntry, CatalogResult
 from backend.app.catalog_pipeline import CatalogPipeline
+from backend.app.catalog_eval import evaluate
 from backend.app.catalog_store import save_catalog_result
-from backend.app.db import Candidate, Project, ProjectDeepAnalysis, RawDiscovery, RegistrySource, now_utc
-from backend.app.deep_analysis import deep_analysis_once, validate_criteria, weighted_score
+from backend.app.db import Candidate, Project, ProjectDeepAnalysis, RawDiscovery, RegistrySource, SourceBlock, now_utc
+from backend.app.deep_analysis import CRITERION_NAMES, deep_analysis_once, validate_criteria, weighted_score
 from backend.app.scheduler import make_scheduler
 from backend.app.telegram_ingest import configured_channels, ingest_post, poll_channels
+from backend.app.registry import seed_registry
 from tests.conftest import FakeDiscovery, sample_article
 
 
@@ -69,6 +72,11 @@ def test_deep_weights_need_validation_and_evidence_refs(settings, factory, tmp_p
     path = tmp_path / "weights.json"
     path.write_text(json.dumps({"version": "unverified", "validated": False, "weights": {}}))
     assert weighted_score({}, path) == (None, "unverified")
+    path.write_text(json.dumps({"version": "test-only", "validated": True,
+                                "weights": {name: 1 / 15 for name in CRITERION_NAMES}}))
+    criteria = {name: {"score": 4, "reason": "Test fixture", "evidence_refs": ["https://source.example"]}
+                for name in CRITERION_NAMES}
+    assert weighted_score(criteria, path) == (80.0, "test-only")
     try:
         validate_criteria({"criteria": {"pain_strength": {"score": 5, "reason": "Unverified",
             "evidence_refs": ["https://invented.example"]}}}, {"https://source.example"})
@@ -86,7 +94,7 @@ def test_admin_alerts_only_exceptional_with_cooldown(settings, factory):
             self.calls = []
         def post(self, url, json, timeout):
             self.calls.append(json)
-            return SimpleNamespace(raise_for_status=lambda: None)
+            return SimpleNamespace(raise_for_status=lambda: None, json=lambda: {"ok": True})
     sender = Sender()
     config = settings.model_copy(update={"telegram_bot_token": SecretStr("test-token"),
                                          "admin_telegram_chat_id": "123"})
@@ -100,3 +108,29 @@ def test_admin_alerts_only_exceptional_with_cooldown(settings, factory):
 def test_scheduler_registers_optional_workers(settings, factory):
     scheduler = make_scheduler(settings, factory)
     assert {job.id for job in scheduler.get_jobs()} >= {"telegram_ingestion", "admin_alerts", "deep_analysis"}
+
+
+def test_live_benchmark_without_credentials_reports_quality_unmeasured(settings, factory):
+    result = evaluate(settings, factory)
+    assert result["status"] == "llm_unavailable" and result["llm_quality_measured"] is False
+    assert result["cases"] >= 3
+
+
+def test_explicit_source_block_survives_seed_update(settings, factory):
+    settings.sources_file.write_text(json.dumps([{"id": "single-feed", "name": "Single feed",
+                                                  "url": "https://feed.example/rss", "enabled": True}]))
+    seed_registry(factory, settings.sources_file)
+    with factory.begin() as session:
+        session.get(RegistrySource, "single-feed").enabled = False
+        session.add(SourceBlock(source_id="single-feed", action="BLOCK", actor="cli_admin",
+                                reason="Repeated parser errors"))
+    seed_registry(factory, settings.sources_file, update=True)
+    with factory() as session:
+        assert session.get(RegistrySource, "single-feed").enabled is False
+
+
+def test_read_only_autonomous_audit_uses_immutable_baseline(factory):
+    report = audit(factory)
+    assert report["baseline"]["total_projects"] == 15
+    assert report["final"]["total_projects"] == 0
+    assert report["samples"]["auto_published"] == []

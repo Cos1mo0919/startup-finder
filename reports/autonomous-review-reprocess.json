@@ -1,0 +1,39 @@
+{
+  "id": 74,
+  "status": "completed",
+  "counts": {
+    "sources_checked": 0,
+    "candidates_found": 0,
+    "new_candidates": 0,
+    "raw_discoveries": 200,
+    "pre_filtered": 0,
+    "project_candidates": 0,
+    "candidates": 200,
+    "auto_published": 0,
+    "review_required": 191,
+    "rejected": 2,
+    "duplicates": 7,
+    "enriched": 0,
+    "source_unavailable": 0,
+    "reanalysis_circuit_open": 0
+  },
+  "errors": [],
+  "details": {
+    "source_yield": {
+      "spot-uz": {
+        "processed": 97,
+        "auto_published": 0,
+        "review_required": 88,
+        "rejected": 2,
+        "duplicates": 7
+      },
+      "spot-ru": {
+        "processed": 103,
+        "auto_published": 0,
+        "review_required": 103,
+        "rejected": 0,
+        "duplicates": 0
+      }
+    }
+  }
+}

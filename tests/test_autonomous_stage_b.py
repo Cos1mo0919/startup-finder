@@ -86,3 +86,87 @@ def test_scheduler_has_independent_discovery_processing_and_reanalysis(settings,
     scheduler = make_scheduler(settings, factory)
     assert {job.id for job in scheduler.get_jobs()} >= {
         "discovery", "raw_processing", "catalog_reanalysis", "reconciliation"}
+
+
+def test_project_first_source_uses_bounded_processing_budget(settings, factory):
+    from backend.app.db import RegistrySource
+    news = sample_article(name="NewsItem", url="https://news.example/story")
+    project = sample_article(name="RealTool", url="https://projects.example/tool")
+    with factory.begin() as session:
+        session.add_all([
+            RegistrySource(id="news", name="News", url="https://news.example/rss",
+                           source_type="news", priority=5),
+            RegistrySource(id="project", name="Projects", url="https://projects.example/",
+                           source_type="startup_platform", priority=4),
+        ])
+    class Discovery(FakeDiscovery):
+        def discover(self, now, archive=False):
+            return [{"url": news.url, "source_id": "news", "title": news.title},
+                    {"url": project.url, "source_id": "project", "title": project.title}], [], 2
+    config = settings.model_copy(update={"max_candidates": 1})
+    pipeline = CatalogPipeline(config, factory, Discovery([news, project]))
+    assert pipeline.run(reanalyze=False)["counts"]["candidates"] == 1
+    with factory() as session:
+        assert session.get(Candidate, project.url).status == "review_required"
+        assert session.get(Candidate, news.url).status == "queued"
+    pipeline.close()
+
+
+def test_review_reprocessing_uses_cached_article_without_fetch(settings, factory):
+    article = sample_article()
+    with factory.begin() as session:
+        session.add(Candidate(url=article.url, article=article.model_dump(mode="json"),
+                              status="review_required", reason="legacy_review", processing_version=7))
+    pipeline = CatalogPipeline(settings, factory, FakeDiscovery([]))
+    result = pipeline.run(discover=False, reanalyze=False, review_only=True)
+    assert result["counts"]["review_required"] == 1
+    with factory() as session:
+        row = session.get(Candidate, article.url)
+        assert row.processing_version == 8 and row.reason == "llm_unavailable"
+    pipeline.close()
+
+
+def test_legacy_event_candidate_does_not_leave_raw_pending(settings, factory):
+    from backend.app.raw_discovery import ingest_raw
+    article = sample_article()
+    with factory.begin() as session:
+        raw, _ = ingest_raw(session, source_adapter="event_discovery", source_url=article.url,
+                            title=article.title)
+        session.add(Candidate(url=article.url, article=article.model_dump(mode="json"),
+                              status="event", reason="event_only", processing_version=7))
+        raw_id = raw.id
+    pipeline = CatalogPipeline(settings, factory, FakeDiscovery([]))
+    pipeline.run(discover=False, reanalyze=False)
+    with factory() as session:
+        raw = session.get(RawDiscovery, raw_id)
+        assert raw.status == "processed" and raw.failure_reason == "legacy_event"
+        assert session.get(Candidate, article.url).status == "event"
+    pipeline.close()
+
+
+def test_fresh_run_recovers_recent_item_rejected_only_by_archive_window(settings, factory):
+    article = sample_article(name="Sovereign", url="https://uzhunt.example/p/sovereign")
+    with factory.begin() as session:
+        session.add(Candidate(url=article.url, article=article.model_dump(mode="json"),
+                              status="rejected", reason="outside_archive_window", processing_version=6))
+    pipeline = CatalogPipeline(settings, factory, FakeDiscovery([]))
+    result = pipeline.run(reanalyze=False)
+    assert result["counts"]["recovered_window_rejections"] == 1
+    with factory() as session:
+        row = session.get(Candidate, article.url)
+        assert row.status == "review_required" and row.reason == "llm_unavailable"
+    pipeline.close()
+
+
+def test_fresh_run_does_not_requeue_old_archive_window_rejection(settings, factory):
+    article = sample_article(name="OldTool", url="https://example.org/old-tool")
+    article.published_at = article.published_at.replace(year=2023)
+    with factory.begin() as session:
+        session.add(Candidate(url=article.url, article=article.model_dump(mode="json"),
+                              status="rejected", reason="outside_archive_window", processing_version=6))
+    pipeline = CatalogPipeline(settings, factory, FakeDiscovery([]))
+    result = pipeline.run(reanalyze=False)
+    assert result["counts"]["recovered_window_rejections"] == 0
+    with factory() as session:
+        assert session.get(Candidate, article.url).status == "rejected"
+    pipeline.close()

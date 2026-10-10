@@ -1,0 +1,761 @@
+{
+  "baseline": {
+    "captured_at": "2026-10-10T04:43:25.758928+00:00",
+    "database": "data/finder.sqlite3 (read-only snapshot query)",
+    "total_projects": 15,
+    "published": 2,
+    "review_required": 11,
+    "rejected": 2,
+    "raw_discoveries": 0,
+    "raw_discoveries_table_exists": false,
+    "candidate_status_counts": {
+      "ecosystem": 6,
+      "error": 18,
+      "event": 19,
+      "pending": 262,
+      "problem": 1,
+      "published": 2,
+      "queued": 206,
+      "rejected": 609,
+      "review_required": 33
+    },
+    "per_source_counts": [
+      {
+        "id": "adu",
+        "name": "Andijon davlat universiteti",
+        "enabled": 1,
+        "raw_candidates": 9,
+        "linked_projects": 0
+      },
+      {
+        "id": "arxiv-ai",
+        "name": "arXiv cs.AI",
+        "enabled": 0,
+        "raw_candidates": 0,
+        "linked_projects": 0
+      },
+      {
+        "id": "astana-hub",
+        "name": "Astana Hub",
+        "enabled": 0,
+        "raw_candidates": 0,
+        "linked_projects": 0
+      },
+      {
+        "id": "awards-gov-uz",
+        "name": "President Tech / AI Award",
+        "enabled": 0,
+        "raw_candidates": 0,
+        "linked_projects": 0
+      },
+      {
+        "id": "betalist",
+        "name": "BetaList",
+        "enabled": 0,
+        "raw_candidates": 0,
+        "linked_projects": 0
+      },
+      {
+        "id": "bsu",
+        "name": "Buxoro davlat universiteti",
+        "enabled": 1,
+        "raw_candidates": 33,
+        "linked_projects": 0
+      },
+      {
+        "id": "buxgalter-uz",
+        "name": "Buxgalter.uz",
+        "enabled": 0,
+        "raw_candidates": 0,
+        "linked_projects": 0
+      },
+      {
+        "id": "capterra",
+        "name": "Capterra",
+        "enabled": 0,
+        "raw_candidates": 0,
+        "linked_projects": 0
+      },
+      {
+        "id": "daryo-uz",
+        "name": "Daryo.uz",
+        "enabled": 0,
+        "raw_candidates": 0,
+        "linked_projects": 0
+      },
+      {
+        "id": "digital-business-kz",
+        "name": "Digital Business",
+        "enabled": 0,
+        "raw_candidates": 0,
+        "linked_projects": 0
+      },
+      {
+        "id": "digital-gov-uz",
+        "name": "Digital Government Uzbekistan",
+        "enabled": 0,
+        "raw_candidates": 0,
+        "linked_projects": 0
+      },
+      {
+        "id": "eu-startups",
+        "name": "EU-Startups",
+        "enabled": 0,
+        "raw_candidates": 0,
+        "linked_projects": 0
+      },
+      {
+        "id": "fdu",
+        "name": "Farg‘ona davlat universiteti",
+        "enabled": 0,
+        "raw_candidates": 0,
+        "linked_projects": 0
+      },
+      {
+        "id": "g2",
+        "name": "G2",
+        "enabled": 0,
+        "raw_candidates": 0,
+        "linked_projects": 0
+      },
+      {
+        "id": "gazeta",
+        "name": "Gazeta.uz",
+        "enabled": 1,
+        "raw_candidates": 52,
+        "linked_projects": 0
+      },
+      {
+        "id": "github-trending",
+        "name": "GitHub Trending",
+        "enabled": 0,
+        "raw_candidates": 0,
+        "linked_projects": 0
+      },
+      {
+        "id": "guldu",
+        "name": "Guliston davlat universiteti",
+        "enabled": 0,
+        "raw_candidates": 0,
+        "linked_projects": 0
+      },
+      {
+        "id": "hackathons-uz",
+        "name": "Hackathons.uz",
+        "enabled": 0,
+        "raw_candidates": 0,
+        "linked_projects": 0
+      },
+      {
+        "id": "hh-uz",
+        "name": "hh.uz",
+        "enabled": 0,
+        "raw_candidates": 0,
+        "linked_projects": 0
+      },
+      {
+        "id": "huggingface-spaces",
+        "name": "Hugging Face Spaces",
+        "enabled": 0,
+        "raw_candidates": 0,
+        "linked_projects": 0
+      },
+      {
+        "id": "ictweek",
+        "name": "ICT Week Uzbekistan",
+        "enabled": 1,
+        "raw_candidates": 4,
+        "linked_projects": 0
+      },
+      {
+        "id": "indie-hackers",
+        "name": "Indie Hackers",
+        "enabled": 0,
+        "raw_candidates": 0,
+        "linked_projects": 0
+      },
+      {
+        "id": "itpark",
+        "name": "IT Park Uzbekistan",
+        "enabled": 1,
+        "raw_candidates": 40,
+        "linked_projects": 0
+      },
+      {
+        "id": "itpark-telegram",
+        "name": "IT Park Telegram",
+        "enabled": 0,
+        "raw_candidates": 0,
+        "linked_projects": 0
+      },
+      {
+        "id": "itpark-ventures",
+        "name": "IT Park Ventures",
+        "enabled": 0,
+        "raw_candidates": 0,
+        "linked_projects": 0
+      },
+      {
+        "id": "jizpi",
+        "name": "Jizzax politexnika instituti",
+        "enabled": 0,
+        "raw_candidates": 0,
+        "linked_projects": 0
+      },
+      {
+        "id": "karsu",
+        "name": "Qoraqalpoq davlat universiteti",
+        "enabled": 0,
+        "raw_candidates": 0,
+        "linked_projects": 0
+      },
+      {
+        "id": "kun-uz",
+        "name": "Kun.uz",
+        "enabled": 0,
+        "raw_candidates": 0,
+        "linked_projects": 0
+      },
+      {
+        "id": "kursiv-kz",
+        "name": "Kursiv",
+        "enabled": 0,
+        "raw_candidates": 0,
+        "linked_projects": 0
+      },
+      {
+        "id": "lex-uz",
+        "name": "Lex.uz",
+        "enabled": 0,
+        "raw_candidates": 0,
+        "linked_projects": 0
+      },
+      {
+        "id": "namdu",
+        "name": "Namangan davlat universiteti",
+        "enabled": 1,
+        "raw_candidates": 124,
+        "linked_projects": 0
+      },
+      {
+        "id": "navdu",
+        "name": "Navoiy davlat universiteti",
+        "enabled": 0,
+        "raw_candidates": 0,
+        "linked_projects": 0
+      },
+      {
+        "id": "olx-uz",
+        "name": "OLX.uz",
+        "enabled": 0,
+        "raw_candidates": 0,
+        "linked_projects": 0
+      },
+      {
+        "id": "outsource-gov-uz",
+        "name": "Outsource.gov.uz",
+        "enabled": 0,
+        "raw_candidates": 0,
+        "linked_projects": 0
+      },
+      {
+        "id": "pivot-uz",
+        "name": "Pivot.uz",
+        "enabled": 0,
+        "raw_candidates": 0,
+        "linked_projects": 0
+      },
+      {
+        "id": "product-hunt",
+        "name": "Product Hunt",
+        "enabled": 0,
+        "raw_candidates": 0,
+        "linked_projects": 0
+      },
+      {
+        "id": "qarshidu",
+        "name": "Qarshi davlat universiteti",
+        "enabled": 1,
+        "raw_candidates": 34,
+        "linked_projects": 0
+      },
+      {
+        "id": "reddit-startups",
+        "name": "Reddit startups",
+        "enabled": 0,
+        "raw_candidates": 0,
+        "linked_projects": 0
+      },
+      {
+        "id": "samdu",
+        "name": "Samarqand davlat universiteti",
+        "enabled": 0,
+        "raw_candidates": 0,
+        "linked_projects": 0
+      },
+      {
+        "id": "search-government",
+        "name": "Davlat texnologik tashabbuslari",
+        "enabled": 0,
+        "raw_candidates": 0,
+        "linked_projects": 0
+      },
+      {
+        "id": "search-hackathons",
+        "name": "Hakaton va tanlovlar",
+        "enabled": 0,
+        "raw_candidates": 0,
+        "linked_projects": 0
+      },
+      {
+        "id": "search-itpark-regions",
+        "name": "IT Park hududiy bo‘limlari",
+        "enabled": 0,
+        "raw_candidates": 0,
+        "linked_projects": 0
+      },
+      {
+        "id": "search-regional",
+        "name": "Hududiy loyihalar qidiruvi",
+        "enabled": 0,
+        "raw_candidates": 0,
+        "linked_projects": 0
+      },
+      {
+        "id": "show-hn",
+        "name": "Hacker News Show HN",
+        "enabled": 0,
+        "raw_candidates": 0,
+        "linked_projects": 0
+      },
+      {
+        "id": "show-hn-rss",
+        "name": "Hacker News — Show HN (public RSS mirror)",
+        "enabled": 1,
+        "raw_candidates": 40,
+        "linked_projects": 0
+      },
+      {
+        "id": "sifted",
+        "name": "Sifted",
+        "enabled": 0,
+        "raw_candidates": 0,
+        "linked_projects": 0
+      },
+      {
+        "id": "spot-ru",
+        "name": "Spot (Ruscha)",
+        "enabled": 1,
+        "raw_candidates": 350,
+        "linked_projects": 0
+      },
+      {
+        "id": "spot-startups",
+        "name": "Spot — startaplar",
+        "enabled": 1,
+        "raw_candidates": 21,
+        "linked_projects": 0
+      },
+      {
+        "id": "spot-uz",
+        "name": "Spot (O‘zbekcha)",
+        "enabled": 1,
+        "raw_candidates": 443,
+        "linked_projects": 15
+      },
+      {
+        "id": "startup-uzbekistan",
+        "name": "Startup Uzbekistan",
+        "enabled": 0,
+        "raw_candidates": 0,
+        "linked_projects": 0
+      },
+      {
+        "id": "tech-garden-kz",
+        "name": "Tech Garden",
+        "enabled": 0,
+        "raw_candidates": 0,
+        "linked_projects": 0
+      },
+      {
+        "id": "tech-in-asia",
+        "name": "Tech in Asia",
+        "enabled": 0,
+        "raw_candidates": 0,
+        "linked_projects": 0
+      },
+      {
+        "id": "techcabal",
+        "name": "TechCabal",
+        "enabled": 0,
+        "raw_candidates": 0,
+        "linked_projects": 0
+      },
+      {
+        "id": "tersu",
+        "name": "Termiz davlat universiteti",
+        "enabled": 0,
+        "raw_candidates": 0,
+        "linked_projects": 0
+      },
+      {
+        "id": "the-tech-kz",
+        "name": "The Tech",
+        "enabled": 0,
+        "raw_candidates": 0,
+        "linked_projects": 0
+      },
+      {
+        "id": "tuit",
+        "name": "Toshkent axborot texnologiyalari universiteti",
+        "enabled": 0,
+        "raw_candidates": 0,
+        "linked_projects": 0
+      },
+      {
+        "id": "urdu",
+        "name": "Urganch davlat universiteti",
+        "enabled": 0,
+        "raw_candidates": 0,
+        "linked_projects": 0
+      },
+      {
+        "id": "uza",
+        "name": "UzA",
+        "enabled": 0,
+        "raw_candidates": 0,
+        "linked_projects": 0
+      },
+      {
+        "id": "uzcombinator",
+        "name": "UzCombinator",
+        "enabled": 0,
+        "raw_candidates": 0,
+        "linked_projects": 0
+      },
+      {
+        "id": "uzdaily",
+        "name": "UzDaily",
+        "enabled": 0,
+        "raw_candidates": 0,
+        "linked_projects": 0
+      },
+      {
+        "id": "uzhunt",
+        "name": "UzHunt",
+        "enabled": 1,
+        "raw_candidates": 6,
+        "linked_projects": 0
+      },
+      {
+        "id": "uzhunt-telegram",
+        "name": "UzHunt Telegram",
+        "enabled": 0,
+        "raw_candidates": 0,
+        "linked_projects": 0
+      },
+      {
+        "id": "uzvc",
+        "name": "UzVC",
+        "enabled": 0,
+        "raw_candidates": 0,
+        "linked_projects": 0
+      },
+      {
+        "id": "yc-companies",
+        "name": "Y Combinator companies",
+        "enabled": 0,
+        "raw_candidates": 0,
+        "linked_projects": 0
+      }
+    ],
+    "per_analysis_method_counts": {
+      "legacy": 15
+    }
+  },
+  "final": {
+    "total_projects": 15,
+    "published": 2,
+    "review_required": 11,
+    "rejected": 2,
+    "raw_discoveries": 598,
+    "raw_status": {
+      "rejected": 71,
+      "review_required": 473,
+      "processed": 21,
+      "pending": 10,
+      "failed": 23
+    },
+    "candidate_status": {
+      "rejected": 595,
+      "review_required": 473,
+      "event": 19,
+      "published": 12,
+      "error": 23,
+      "problem": 1,
+      "ecosystem": 6,
+      "queued": 111
+    },
+    "deep_analysis": {}
+  },
+  "provider_metrics": [],
+  "source_yield": {
+    "adu": {
+      "raw_discoveries": 9,
+      "rejected": 9,
+      "run_raw_discoveries": 9,
+      "run_fetched": 9
+    },
+    "bsu": {
+      "raw_discoveries": 26,
+      "rejected": 9,
+      "review_required": 7,
+      "failed": 9,
+      "processed": 1,
+      "run_processed": 16,
+      "run_auto_published": 0,
+      "run_review_required": 7,
+      "run_rejected": 0,
+      "run_duplicates": 0,
+      "run_errors": 9,
+      "run_raw_discoveries": 21,
+      "run_fetched": 21
+    },
+    "gazeta": {
+      "raw_discoveries": 46,
+      "review_required": 44,
+      "rejected": 2,
+      "run_processed": 46,
+      "run_auto_published": 0,
+      "run_review_required": 46,
+      "run_rejected": 0,
+      "run_duplicates": 0,
+      "run_raw_discoveries": 20,
+      "run_fetched": 20
+    },
+    "ictweek": {
+      "raw_discoveries": 4,
+      "rejected": 3,
+      "review_required": 1,
+      "run_processed": 1,
+      "run_auto_published": 0,
+      "run_review_required": 1,
+      "run_rejected": 0,
+      "run_duplicates": 0,
+      "run_raw_discoveries": 3,
+      "run_fetched": 3
+    },
+    "itpark": {
+      "raw_discoveries": 26,
+      "review_required": 15,
+      "processed": 2,
+      "rejected": 3,
+      "failed": 6,
+      "run_fetched": 16,
+      "run_raw_discoveries": 14,
+      "run_processed": 21,
+      "run_auto_published": 0,
+      "run_review_required": 15,
+      "run_rejected": 0,
+      "run_duplicates": 0,
+      "run_errors": 6
+    },
+    "namdu": {
+      "raw_discoveries": 37,
+      "review_required": 36,
+      "failed": 1,
+      "run_processed": 37,
+      "run_auto_published": 0,
+      "run_review_required": 36,
+      "run_rejected": 0,
+      "run_duplicates": 0,
+      "run_errors": 1
+    },
+    "qarshidu": {
+      "raw_discoveries": 34,
+      "rejected": 30,
+      "processed": 2,
+      "review_required": 2,
+      "run_raw_discoveries": 34,
+      "run_fetched": 34,
+      "run_processed": 2,
+      "run_auto_published": 0,
+      "run_review_required": 2,
+      "run_rejected": 0,
+      "run_duplicates": 0
+    },
+    "show-hn-rss": {
+      "raw_discoveries": 49,
+      "review_required": 42,
+      "failed": 7,
+      "run_processed": 49,
+      "run_errors": 7,
+      "run_auto_published": 0,
+      "run_review_required": 42,
+      "run_rejected": 0,
+      "run_duplicates": 0,
+      "run_raw_discoveries": 19,
+      "run_fetched": 19
+    },
+    "spot-ru": {
+      "raw_discoveries": 175,
+      "pending": 5,
+      "review_required": 170,
+      "run_processed": 170,
+      "run_auto_published": 0,
+      "run_review_required": 170,
+      "run_rejected": 0,
+      "run_duplicates": 0,
+      "run_raw_discoveries": 20,
+      "run_fetched": 20
+    },
+    "spot-startups": {
+      "raw_discoveries": 21,
+      "processed": 7,
+      "rejected": 12,
+      "project_links": 2,
+      "review_required": 2,
+      "run_processed": 3,
+      "run_duplicates": 1,
+      "run_auto_published": 0,
+      "run_review_required": 2,
+      "run_rejected": 0,
+      "run_raw_discoveries": 21,
+      "run_fetched": 21
+    },
+    "spot-uz": {
+      "raw_discoveries": 164,
+      "pending": 5,
+      "review_required": 147,
+      "processed": 9,
+      "project_links": 9,
+      "rejected": 3,
+      "run_processed": 159,
+      "run_auto_published": 0,
+      "run_review_required": 147,
+      "run_rejected": 3,
+      "run_duplicates": 9,
+      "run_raw_discoveries": 20,
+      "run_fetched": 20
+    },
+    "uzhunt": {
+      "raw_discoveries": 7,
+      "review_required": 7,
+      "run_processed": 7,
+      "run_auto_published": 0,
+      "run_review_required": 7,
+      "run_rejected": 0,
+      "run_duplicates": 0,
+      "run_raw_discoveries": 7,
+      "run_fetched": 7
+    }
+  },
+  "new_projects": [],
+  "samples": {
+    "auto_published": [],
+    "review_required": [
+      {
+        "source": "https://github.com/brianlzhou/arc-browser-use",
+        "reason": "llm_unavailable",
+        "evidence": "Arc Browser Use Make Codex's browser use work in Arc . Codex controls browsers through the Chrome plugin in the ChatGPT desktop app. In Arc, that connection stalls on the first tab Codex opens. This project fixes that by building a lightly patched co"
+      },
+      {
+        "source": "https://www.spot.uz/oz/2024/04/09/jizzakh-projects",
+        "reason": "llm_unavailable",
+        "evidence": "8-aprel kuni Shavkat Mirziyoyevning Jizzax viloyatiga tashrifi doirasida sanoat va energetika loyihalarining boshlanishiga bag‘ishlangan marosim o‘tkazildi . 2023-yilda mamlakatda 4 600ta sanoat korxonalari ishga tushirildi. Sanoat 6%ga o‘sib, 656 tr"
+      },
+      {
+        "source": "https://www.spot.uz/oz/2026/08/20/tourism-startups",
+        "reason": "llm_unavailable",
+        "evidence": "Hukumat qarori bilan turistik startaplarga subsidiya ajratish bo‘yicha davlat xizmatini ko‘rsatishning ma‘muriy reglamenti tasdiqlandi. Bu haqda Adliya vazirligining Huquqiy axborot kanali xabar berdi . Reglamentga ko‘ra, xarajatlarni qoplash Turizm "
+      },
+      {
+        "source": "https://www.spot.uz/oz/2026/10/09/samsung",
+        "reason": "llm_unavailable",
+        "evidence": "Samsung 2026-yilning uchinchi choragida $80 mlrd miqdorida rekord operatsion foyda olishini kutmoqda, deb yozdi Reuters. Qayd etilishicha, bu texnologiya sanoati tarixidagi eng yuqori choraklik foyda ko‘rsatkichi ham bo‘lishi mumkin. Foydaning asosiy"
+      },
+      {
+        "source": "https://www.spot.uz/ru/2024/06/03/startup-grants",
+        "reason": "llm_unavailable",
+        "evidence": "IT Park будет проводить ежегодный конкурс для стартапов на оказание грантовой поддержки. Соответствующее постановление 29 мая издал Кабинет министров. Конкурс охватит проекты в сферах разработки программ, технологического образования и экспорта цифро"
+      },
+      {
+        "source": "https://www.ictweek.uz/eng/news/2026/09/14/texnologiyalar-musiqa-bilan-uchrashadigan-joy",
+        "reason": "llm_unavailable",
+        "evidence": "🎶 WHERE TECH MEETS MUSIC 14.09.2026 Share Telegram Facebook Instagram Twitter 🎶 WHERE TECH MEETS MUSIC ICT Week Uzbekistan invites you to experience a different side of the festival. On September 25, IT Music Fest will bring together tech enthusiasts"
+      },
+      {
+        "source": "https://namdu.uz/axborot-xizmati/yangiliklar/1414-namangan-davlat-universitetiga-germaniyaning-asiin-xalqaro-akkreditatsiya-agentligi-ekspertlari-tashrif-buyurdi",
+        "reason": "llm_unavailable",
+        "evidence": "Prev Next Bugun, 7-iyul kuni Germaniyaning muhandislik, tabiiy fanlar va matematika yo‘nalishlari bo‘yicha ta’lim dasturlarini xalqaro akkreditatsiyadan o‘tkazuvchi nufuzli ASIIN xalqaro akkreditatsiya agentligi ekspertlar guruhi Namangan davlat univ"
+      },
+      {
+        "source": "https://www.spot.uz/ru/2026/10/09/restaurant-subsidy",
+        "reason": "llm_unavailable",
+        "evidence": "На Едином портале интерактивных госуслуг заработал прием заявок для выплаты субсидий за продвижение узбекской кухни в других странах. Об этом сообщила пресс-служба портала. Услуга доступна в разделе «Субсидии». Получить деньги смогут узбекистанские п"
+      },
+      {
+        "source": "https://www.spot.uz/oz/2022/08/18/startap",
+        "reason": "llm_unavailable",
+        "evidence": "Prezidentining tadbirkorlar bilan Ochiq muloqotiga tayyorgarlik ko‘rish doirasida joriy yilning 17−18-avgust kunlari “Tadbirkorlar bilan ochiq muloqot haftaligi” o‘tkazilmoqda. Unda innovatsion rivojlanish vaziri o‘rinbosari Shahlo Turdiqulova “Bizne"
+      },
+      {
+        "source": "https://www.gazeta.uz/oz/2026/10/09/privatization",
+        "reason": "llm_unavailable",
+        "evidence": "Davlat aktivlarini boshqarish agentligi direktori Sohibjon Murodov Toshkent shahridagi “O‘zekspomarkaz” hamda Xalqaro hamkorlik markazidagi davlat ulushlari nima uchun Prezident administratsiyasi bilan kelishilgan holda xususiylashtirilishiga aniqlik"
+      }
+    ],
+    "rejected": [
+      {
+        "source": "https://www.spot.uz/oz/2023/07/21/digital-technology-scholarship",
+        "reason": "obvious_noise",
+        "evidence": "Joriy yilning mart oyida “Raqamli texnologiyalar vazirligi stipendiyasi” tanlovi o‘tkazilishi ma’lum qilingandi . Raqamli texnologiyalar vazirligi stipendiya uchun hujjatlar qabuli boshlanganini ma’lum qildi . Unda vazirlik tizimidagi quyidagi OTMlar"
+      },
+      {
+        "source": "https://qarshidu.uz/oz/news/3202-tyutor-va-talabalar-ortasida-ochiq-muloqot-tashkil-etildi",
+        "reason": "not_project",
+        "evidence": "Tyutor va talabalar o‘rtasida ochiq muloqot tashkil etildi"
+      },
+      {
+        "source": "https://qarshidu.uz/oz/news/3204-qardu-talabalari-qashqadaryo-startap-ligasi-viloyat-bosqichida-1-orinni-egalladi",
+        "reason": "not_project",
+        "evidence": "QarDU talabalari “Qashqadaryo startap ligasi” viloyat bosqichida 1-o‘rinni egalladi!"
+      },
+      {
+        "source": "https://qarshidu.uz/oz/page/2025-2026-oquv-yilida-oqishni-xorijiy-va-nodavlat-otmlardan-qarshi-davlat-universitetiga-kochirib-kelayotgan-talabgorlar-uchun-12082025-yil-kuni-otkazilgan-kasbiy-ijodiy-imtihon-natijasi",
+        "reason": "unknown_publication_date",
+        "evidence": "2025-2026 o‘quv yilida o‘qishni xorijiy va nodavlat OTMlardan Qarshi davlat universitetiga ko‘chirib kelayotgan talabgorlar uchun 12.08.2025-yil kuni o'tkazilgan kasbiy (ijodiy) imtihon natijasi"
+      },
+      {
+        "source": "https://www.it-park.uz/uz/itpark/news/it-park-uzbekistan-va-hkstp-startaplar-sun-iy-intellekt-va-r-d-sohalaridagi-hamkorlikni-kengaytirishni-muhokama-qildi",
+        "reason": "noise_topic",
+        "evidence": "IT Park Uzbekistan va HKSTP startaplar, sun’iy intellekt va R&D s... 2026-09-29"
+      },
+      {
+        "source": "https://qarshidu.uz/oz/news/2931-latipov-bobur-bahrom-oglining-filologiya-fanlari-boyicha-falsafa-doktori-phd-dissertatsiya-ishi-himoyasi-togrisida",
+        "reason": "not_project",
+        "evidence": "Latipov Bobur Bahrom o‘g‘lining 10.00.06 – Qiyosiy adabiyotshunoslik, chog‘ishtirma tilshunoslik va tarjimashunoslik ixtisosligi bo‘yicha “O’zbek va ingliz tillarida kinoyaning vazifalari, o’zaro tarjimasi va leksikografik talqini” mavzusidagi filolo"
+      },
+      {
+        "source": "https://buxdu.uz/yangiliklar/9045/9045-som-nega-mustahkamlanmoqda-20242026-yillar-makroiqtisodiy-tahlili",
+        "reason": "not_project",
+        "evidence": "Soʻm nega mustahkamlanmoqda? 2024–2026-yillar mak… 775 09.09.2026"
+      },
+      {
+        "source": "https://qarshidu.uz/oz/news/2935-xidoyatova-nigora-shorakibovnaning-iqtisodiyot-fanlari-boyicha-falsafa-doktori-phd-dissertatsiya-ishining-ilmiy-seminari-togrisida",
+        "reason": "not_project",
+        "evidence": "Xidoyatova Nigora Shorakibovnaning 08.00.12-Mintaqaviy iqtisodiyoti ixtisosligi bo‘yicha “Mintaqa aholisi aglomeratsiyasini strategik rejalashtirish va optimal joylashtirishning innovatsion usullari (Qashqadaryo viloyati misolida)” mavzusidagi iqtiso"
+      },
+      {
+        "source": "https://qarshidu.uz/oz/page/ilmiy-loyihalar",
+        "reason": "unknown_publication_date",
+        "evidence": "Ilmiy loyihalar"
+      },
+      {
+        "source": "https://www.ictweek.uz/eng/news/2026/09/08/inverson-tech-kompaniyasini-ict-week-uzbekistan-2026-korgazmasi-ishtirokchisi-sifatida-mamnuniyat-bilan-kutib-olamiz",
+        "reason": "unknown_publication_date",
+        "evidence": "News 08 September 2026 Share 🎉 We are pleased to welcome Inverson Tech as an exhibitor at ICT Week Uzbekistan 2026!"
+      }
+    ]
+  }
+}

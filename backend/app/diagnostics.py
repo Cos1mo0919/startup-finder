@@ -6,6 +6,33 @@ def candidate_id(url):
     return "sha256:" + hashlib.sha256(url.encode()).hexdigest()
 
 
+def inspect_raw(session, reference):
+    """Read-only, secret-free processing trace by raw ID or source URL."""
+    from sqlalchemy import select
+    from .db import RawDiscovery
+    from .network import canonical_url
+
+    if str(reference).isdigit():
+        row = session.get(RawDiscovery, int(reference))
+    else:
+        url = canonical_url(reference)
+        row = session.scalar(select(RawDiscovery).where(RawDiscovery.source_url == url)
+                             .order_by(RawDiscovery.id.desc()))
+    if row is None:
+        return {"status": "not_found", "reference": reference}
+    return {"id": row.id, "source_adapter": row.source_adapter, "source_name": row.source_name,
+            "source_url": row.source_url, "external_id": row.external_id, "title": row.title,
+            "status": row.status, "reason": row.failure_reason,
+            "discovered_at": row.discovered_at.isoformat(),
+            "publication_date": row.publication_date.isoformat() if row.publication_date else None,
+            "processed_at": row.processed_at.isoformat() if row.processed_at else None,
+            "candidate_url": row.candidate_url, "canonical_project_id": row.canonical_project_id,
+            "llm_provider": row.llm_provider, "llm_model": row.llm_model,
+            "llm_attempt_count": row.llm_attempt_count,
+            "classifier_prompt_version": row.classifier_prompt_version,
+            "processing_history": row.processing_history or []}
+
+
 def inspect_candidate(session, url):
     """Distinguish never discovered, queued, pending, rejected and stored visibility."""
     from sqlalchemy import select

@@ -14,6 +14,7 @@ from .config import Settings
 from .dates import TASHKENT, today_start
 from .db import (Candidate, EcosystemSignal, Problem, ProblemEvidence, Project,
                  ProjectDeepAnalysis, ProjectProblemLink, ProviderHealth, RawDiscovery, RegistrySource, Run,
+                 SchedulerCheckpoint, SourceBlock,
                  SolutionIdea, aware, make_db, now_utc)
 from .llm_service import LLMService
 from .scheduler import make_scheduler
@@ -359,6 +360,17 @@ def create_app(settings=None):
                 select(RawDiscovery.status, func.count()).group_by(RawDiscovery.status)).all()}
             deep_counts = {state: amount for state, amount in session.execute(
                 select(ProjectDeepAnalysis.status, func.count()).group_by(ProjectDeepAnalysis.status)).all()}
+            telegram_checkpoints = [{"channel": row.name.removeprefix("telegram:"),
+                                     "last_success_at": iso(row.last_success_at),
+                                     "last_message_id": (row.cursor or {}).get("last_id")}
+                                    for row in session.scalars(select(SchedulerCheckpoint).where(
+                                        SchedulerCheckpoint.name.startswith("telegram:")))]
+            blocked_sources = []
+            for source_id in session.scalars(select(SourceBlock.source_id).distinct()):
+                last = session.scalar(select(SourceBlock).where(SourceBlock.source_id == source_id)
+                                      .order_by(SourceBlock.id.desc()))
+                if last and last.action == "BLOCK":
+                    blocked_sources.append({"source_id": source_id, "at": iso(last.at), "reason": last.reason})
             provider_rows = {row.name: row for row in session.scalars(select(ProviderHealth))}
             provider_status = []
             for configured in LLMService(settings).status():
@@ -396,6 +408,8 @@ def create_app(settings=None):
             "llm_providers": provider_status,
             "raw_discoveries": raw_counts,
             "deep_analysis": deep_counts,
+            "telegram_channels": telegram_checkpoints,
+            "blocked_sources": blocked_sources,
             "telegram_ingestion_configured": bool(settings.telegram_api_id and
                                                    settings.telegram_api_hash.get_secret_value() and
                                                    settings.telegram_session.get_secret_value()),

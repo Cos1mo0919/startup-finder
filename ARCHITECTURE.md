@@ -291,3 +291,37 @@ The owner catalog actions are implemented in `catalog_admin.py` and protected
 API routes. Weekly Uzbekistan and monthly Global deep intelligence scans still
 run through the older `Pipeline`; their internal entities stay out of public
 navigation. `reports/pipeline-baseline.json` is the pre-migration inventory.
+
+## Autonomous discovery engine (schema v8–v9)
+
+The active flow is `source fetch → RawDiscovery → cheap filter → exact-source
+dedup → LLM/structured fallback → CatalogStore → optional reanalysis → optional
+ProjectDeepAnalysis`. `RawDiscovery` is committed before page enrichment and
+AI calls, with source adapter, external ID, source text, processing history,
+provider attempt metadata, outcome and canonical project link. Existing
+`Candidate` rows remain the processing/review queue; project IDs and source
+relationships are preserved. The scheduler isolates hourly fetching,
+15-minute queue processing, six-hour reanalysis, four-hour deep analysis,
+Telegram polling, exceptional alerts and reconciliation jobs. The pipeline
+lease prevents overlapping project runs.
+
+`LLMService` owns Gemini, OpenRouter, Groq and OpenAI adapters, bounded retries,
+provider fallback, a per-processing-window circuit breaker and persistent
+aggregate health metrics. Provider responses pass the same validated catalog
+schema. Missing keys lead to deterministic evaluation only for explicitly
+approved `(adapter, page_type)` pairs, otherwise review. Catalog score is the
+code-calculated mean of four validated criteria and never gates publication.
+
+Telethon ingestion uses `config/telegram_channels.json` and stores public post
+metadata in `RawDiscovery`; the normal queue performs later classification.
+The admin alert bot is separate, sends only exceptional notifications and uses
+durable cooldown checkpoints. `SourceBlock` records explicit per-source block
+and restore events; seed updates cannot re-enable a blocked source.
+
+`ProjectDeepAnalysis` stores independently cited 1–5 criteria after publication.
+Only a validated 15-weight configuration can produce a final weighted score.
+Current `config/deep_score_weights.json` is unvalidated, so that score is null.
+This separate analysis never changes `publication_status`. The public detail
+route includes deep criteria only when populated. `reports/pipeline-baseline.json`
+is the immutable pre-autonomy inventory; the SQLite backup and restore command
+are in `reports/autonomous-pipeline-restore.md`.

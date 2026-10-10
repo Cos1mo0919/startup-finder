@@ -362,3 +362,46 @@ published legacy cards (DMED, KotibAI), 11 review-required and 2 rejected.
 No real LLM classifier precision was measured because AI_API_KEY is absent.
 Detailed run IDs, source yield and audit samples: `reports/stage-c.md`.
 The immutable baseline and database restore instructions are in `reports/`.
+
+## 2026-10-10 — autonomous discovery engine (feature branch)
+
+The immutable pre-change inventory is `reports/pipeline-baseline.json`:
+15 projects (2 published, 11 review, 2 rejected), zero raw discoveries.
+The consistent SQLite backup is at `/tmp/izlanish-autonomous-2026-10-10.sqlite3`;
+`reports/autonomous-pipeline-restore.md` has the exact restore command. Existing
+project IDs, first-seen/publication dates and source links were preserved.
+
+Stages A–C add the durable `raw_discoveries` queue, provider-independent
+Gemini/OpenRouter/Groq/OpenAI fallback, conservative prefilter, project-first
+processing priority, separate queue/reanalysis jobs, optional Telethon channel
+ingestion, exception-only Telegram admin alerts, source block history and
+post-publication 15-criterion deep analysis. The public project gate remains
+identity + meaningful description + valid source + dedup, independent of deep
+score. Generic RSS without an LLM remains in owner review. No positive
+deterministic trust pair was added without validation. Deep Excel weights were
+not found in validated form, so final weighted score remains unset.
+
+Real keyless run (run 69) checked 12 sources, found and stored 177 raw links,
+processed 30 candidates (29 review, one robots-disallowed fetch error) and
+published zero new projects. Bounded drains and cached review reprocessing
+continued; 201 legacy pending/review candidates were re-evaluated. Final
+read-only audit after a fresh recovery pass: 15 projects unchanged (2 published),
+598 raw observations including legacy candidates, 473 review, 71 rejected,
+21 processed, 23 failed and 10 raw pending; 111 candidates remain queued.
+The recovery pass returned 19 recently published October items from a prior
+archive-window-only rejection to normal keyless review. The large review backlog
+reflects absent LLM keys and no approved structured trust pair. Neither
+Uzbekistan nor Global gained a verified new public card in this keyless run.
+Review samples include potentially relevant project articles mixed with broad
+news; reject samples mainly show unrelated university updates, dates outside
+archive windows and explicit noise. Two obvious Nobel news rows were moved
+from review to rejected after a narrow title-filter correction. One source
+failure does not stop other sources; parser/robots failures remain visible.
+
+No LLM provider, Telegram user session or admin bot credential was configured
+in this environment. The fixed saved-page live benchmark reports
+`llm_quality_measured=false`; live precision/recall and bot delivery therefore
+remain unmeasured. The production Telegram target channel list is empty pending
+operator configuration. Detailed source yield and samples are in
+`reports/autonomous-audit.json`, with first-run and drain reports alongside it.
+Public navigation remains Bosh sahifa / Loyihalar / Arxiv / Manbalar.

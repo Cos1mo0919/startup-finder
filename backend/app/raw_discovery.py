@@ -7,12 +7,13 @@ from datetime import datetime
 
 from sqlalchemy import select
 
-from .db import Project, RawDiscovery, Source, now_utc
+from .db import Candidate, Project, RawDiscovery, Source, now_utc
 from .network import canonical_url
 
 NOISE_TITLE = re.compile(
     r"\b(stipendiya|scholarship|стипендия|вакансия|vakansiya|job opening|"
-    r"reklama|advertisement|political appointment)\b", re.I,
+    r"reklama|advertisement|political appointment|nobel literature|nobel prize in literature|"
+    r"adabiyot bo.yicha nobel|tinchlik bo.yicha nobel)\b", re.I,
 )
 PROJECT_HINT = re.compile(r"\b(startup|startap|project|loyiha|platform|app|prototype|prototip|product|ilova)\b", re.I)
 
@@ -64,3 +65,21 @@ def record_transition(row: RawDiscovery, status: str, reason: str = "", project_
     row.processing_history = [*(row.processing_history or []),
                               {"at": when.isoformat(), "status": status, "reason": reason,
                                "project_id": row.canonical_project_id}]
+
+
+def recheck_obvious_noise(factory, limit=500):
+    """Bounded, conservative repair for earlier keyless review entries."""
+    changed = 0
+    with factory.begin() as session:
+        rows = session.scalars(select(RawDiscovery).where(RawDiscovery.status == "review_required")
+                               .order_by(RawDiscovery.id).limit(limit)).all()
+        for row in rows:
+            action, reason, _ = cheap_decision(session, row)
+            if action != "reject":
+                continue
+            record_transition(row, "rejected", reason)
+            candidate = session.get(Candidate, row.source_url)
+            if candidate and candidate.status == "review_required" and not candidate.project_ids:
+                candidate.status, candidate.reason = "rejected", reason
+            changed += 1
+    return {"checked": len(rows), "rejected_obvious_noise": changed}

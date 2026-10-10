@@ -25,6 +25,7 @@ def main():
         "--inspect-candidate",
         help="Read candidate/project status by URL or sha256: ID without discovery",
     )
+    parser.add_argument("--inspect-raw", help="Inspect raw discovery by numeric ID or URL")
     parser.add_argument(
         "--list-candidates", action="store_true", help="List candidates with exact reasons (default: pending)"
     )
@@ -76,15 +77,42 @@ def main():
     parser.add_argument("--from-date", type=date.fromisoformat, default=date(2022, 1, 1))
     parser.add_argument("--to-date", type=date.fromisoformat, default=date(2026, 9, 30))
     parser.add_argument("--report", type=Path, help="Write structured results to this JSON file")
+    parser.add_argument("--llm-live-eval", action="store_true", help="Explicit live-provider benchmark on saved sources")
+    parser.add_argument("--autonomous-audit", action="store_true", help="Read-only baseline, yield and sample audit")
     parser.add_argument(
         "--drain", action="store_true", help="Process durable backlog without rediscovering sources"
     )
+    parser.add_argument("--reprocess-review", action="store_true",
+                        help="Bounded recheck of legacy pending/review candidates from cached text")
+    parser.add_argument("--recheck-noise", action="store_true",
+                        help="Bounded conservative noise recheck for existing review rows")
     args = parser.parse_args()
     settings = Settings()
     engine, factory = make_db(settings.database_url)
     try:
-        if args.debug_report or args.list_candidates or args.inspect_url:
-            from .diagnostics import debug_report, list_candidates, inspect_candidate
+        if args.recheck_noise:
+            from .raw_discovery import recheck_obvious_noise
+            result = recheck_obvious_noise(factory, limit=max(500, settings.max_candidates))
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 0
+        if args.autonomous_audit:
+            from .autonomous_audit import audit
+            result = audit(factory)
+            if args.report:
+                args.report.parent.mkdir(parents=True, exist_ok=True)
+                args.report.write_text(json.dumps(result, ensure_ascii=False, indent=2))
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 0
+        if args.llm_live_eval:
+            from .catalog_eval import evaluate
+            result = evaluate(settings, factory)
+            if args.report:
+                args.report.parent.mkdir(parents=True, exist_ok=True)
+                args.report.write_text(json.dumps(result, ensure_ascii=False, indent=2))
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 0 if result["status"] in {"completed", "llm_unavailable"} else 1
+        if args.debug_report or args.list_candidates or args.inspect_url or args.inspect_raw:
+            from .diagnostics import debug_report, list_candidates, inspect_candidate, inspect_raw
 
             with factory() as session:
                 result = (
@@ -92,6 +120,8 @@ def main():
                     if args.debug_report
                     else list_candidates(session, args.candidate_status)
                     if args.list_candidates
+                    else inspect_raw(session, args.inspect_raw)
+                    if args.inspect_raw
                     else inspect_candidate(session, args.inspect_url)
                 )
                 output = json.dumps(result, ensure_ascii=False, indent=2)
@@ -245,7 +275,9 @@ def main():
                     parser.error("--only-source requires an enabled registered source ID")
             pipeline.discovery.allowed_source_ids = {args.only_source}
         try:
-            if args.backfill:
+            if args.reprocess_review:
+                result = pipeline.run(archive=True, discover=False, reanalyze=False, review_only=True)
+            elif args.backfill:
                 from .queries import archive_windows
 
                 results = []

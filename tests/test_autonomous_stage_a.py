@@ -1,10 +1,12 @@
 """Offline contract checks for durable ingestion and provider fallback."""
 
+import pytest
 from sqlalchemy import select
 
 from backend.app.db import Project, ProviderHealth, RawDiscovery
 from backend.app.llm_service import LLMService, LLMUnavailable, ProviderFailure
-from backend.app.raw_discovery import cheap_decision, ingest_raw, record_transition
+from backend.app.raw_discovery import cheap_decision, ingest_raw, record_transition, recheck_obvious_noise
+from backend.app.diagnostics import inspect_raw
 from tests.conftest import sample_article
 
 
@@ -33,13 +35,38 @@ def test_cheap_filter_rejects_only_obvious_noise_and_records_history(factory):
                                  title="Demo Day teams presented products")
         scholarship_app, _ = ingest_raw(session, source_adapter="spot", source_url="https://news.example/scholarship-app",
                                         title="Scholarship app launched for students")
+        unrelated, _ = ingest_raw(session, source_adapter="spot", source_url="https://news.example/nobel",
+                                  title="Nobel literature winner announced")
+        unrelated_uz, _ = ingest_raw(session, source_adapter="spot", source_url="https://news.example/nobel-uz",
+                                     title="Adabiyot bo‘yicha Nobel mukofoti e’lon qilindi")
         assert cheap_decision(session, noise)[:2] == ("reject", "obvious_noise")
         assert cheap_decision(session, possible)[0] == "classify"
         assert cheap_decision(session, scholarship_app)[0] == "classify"
+        assert cheap_decision(session, unrelated)[:2] == ("reject", "obvious_noise")
+        assert cheap_decision(session, unrelated_uz)[:2] == ("reject", "obvious_noise")
         record_transition(noise, "rejected", "obvious_noise")
     with factory() as session:
         row = session.get(RawDiscovery, noise.id)
         assert row.status == "rejected" and row.processed_at and row.processing_history[-1]["reason"] == "obvious_noise"
+        trace = inspect_raw(session, row.id)
+        assert trace["reason"] == "obvious_noise" and trace["llm_attempt_count"] == 0
+
+
+def test_recheck_noise_removes_only_obvious_review_without_project(factory):
+    from backend.app.db import Candidate
+    with factory.begin() as session:
+        noise, _ = ingest_raw(session, source_adapter="news", source_url="https://news.example/nobel",
+                              title="Nobel literature winner announced")
+        possible, _ = ingest_raw(session, source_adapter="news", source_url="https://news.example/app",
+                                 title="Scholarship app launched")
+        record_transition(noise, "review_required", "llm_unavailable")
+        record_transition(possible, "review_required", "llm_unavailable")
+        session.add(Candidate(url=noise.source_url, article={}, status="review_required"))
+        session.add(Candidate(url=possible.source_url, article={}, status="review_required"))
+    assert recheck_obvious_noise(factory)["rejected_obvious_noise"] == 1
+    with factory() as session:
+        assert session.get(Candidate, noise.source_url).status == "rejected"
+        assert session.get(Candidate, possible.source_url).status == "review_required"
 
 
 class FakeProvider:
@@ -53,6 +80,15 @@ class FakeProvider:
         if isinstance(outcome, Exception):
             raise outcome
         return outcome
+
+
+@pytest.mark.parametrize("provider_name", ["gemini", "openrouter", "groq"])
+def test_each_provider_can_supply_validated_classification(settings, provider_name):
+    provider = FakeProvider(provider_name, [{"classification": "NOT_PROJECT", "confidence": 0.91,
+                                            "reason": "Saved source has no project"}])
+    config = settings.model_copy(update={"llm_provider_order": provider_name})
+    result = LLMService(config, providers={provider_name: provider}).analyze_source(sample_article())
+    assert result.provider == provider_name and result.result.classification == "NOT_PROJECT"
 
 
 def test_provider_chain_retries_and_falls_back_without_leaking_keys(settings, factory):

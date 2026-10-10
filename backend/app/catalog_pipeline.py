@@ -8,7 +8,7 @@ from datetime import timedelta
 from time import monotonic, sleep
 from uuid import uuid4
 
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import case, func, or_, select, update
 
 from .catalog import (CatalogResult, ClassifierFailure,
                       deterministic_entry)
@@ -114,12 +114,13 @@ class CatalogPipeline(Pipeline):
                 sleep(self.settings.reanalysis_delay_seconds)
 
     def run(self, archive=False, discover=True, only_source=None, only_urls=None,
-            force_sources=False, reanalyze=True, process=True):
+            force_sources=False, reanalyze=True, process=True, review_only=False):
         owner, now, began = str(uuid4()), now_utc(), monotonic()
         if not self.acquire(owner, now):
             return {"status": "busy"}
         counts = Counter({"sources_checked": 0, "candidates_found": 0, "new_candidates": 0,
                           "raw_discoveries": 0, "pre_filtered": 0, "project_candidates": 0,
+                          "recovered_window_rejections": 0,
                           "candidates": 0, "auto_published": 0, "review_required": 0,
                           "rejected": 0, "duplicates": 0, "enriched": 0,
                           "source_unavailable": 0, "reanalysis_circuit_open": 0})
@@ -144,6 +145,15 @@ class CatalogPipeline(Pipeline):
             counts["sources_checked"] = checked
             counts["candidates_found"] = len({canonical_url(item["url"]) for item in links})
             with self.factory.begin() as session:
+                if discover and not archive:
+                    old_window = session.scalars(select(Candidate).where(
+                        Candidate.status == "rejected", Candidate.reason == "outside_archive_window")
+                        .order_by(Candidate.updated_at).limit(self.settings.max_candidates)).all()
+                    for row in old_window:
+                        published = parse_date((row.article or {}).get("published_at"))
+                        if published and now - timedelta(days=30) <= aware(published) <= now:
+                            row.status, row.reason, row.updated_at = "queued", "", now
+                            counts["recovered_window_rejections"] += 1
                 for item in links:
                     url = canonical_url(item["url"])
                     source_id = item.get("source_id") or "event_discovery"
@@ -186,7 +196,11 @@ class CatalogPipeline(Pipeline):
                     pending_raw = pending_raw.where(RawDiscovery.id == -1)
                 for raw in session.scalars(pending_raw.order_by(RawDiscovery.discovered_at)
                                            .limit(self.settings.max_candidates)):
-                    if session.get(Candidate, raw.source_url) is None:
+                    existing = session.get(Candidate, raw.source_url)
+                    if existing and existing.status in {"event", "ecosystem", "problem", "rejected", "published"}:
+                        record_transition(raw, "rejected" if existing.status == "rejected" else "processed",
+                                          f"legacy_{existing.status}", (existing.project_ids or [None])[0], now)
+                    elif existing is None:
                         session.add(Candidate(url=raw.source_url,
                                               article={"_queued": True, "_fetch_url": raw.source_url,
                                                        "_feed_date": raw.publication_date.isoformat() if raw.publication_date else None,
@@ -205,13 +219,24 @@ class CatalogPipeline(Pipeline):
                       ((Candidate.status == "error") & retry_due) |
                       (((Candidate.analysis_mode == "deterministic") | retry_due) if llm_ready else False))),
                 ))
+                if review_only:
+                    query = select(Candidate).where(Candidate.status.in_(["pending", "review_required"]),
+                                                    Candidate.processing_version < 8)
                 if only_urls:
                     query = select(Candidate)
                 if only_source:
                     query = query.where(Candidate.source_id == only_source)
                 if only_urls:
                     query = query.where(Candidate.url.in_([canonical_url(url) for url in only_urls]))
-                rows = (session.scalars(query.order_by(Candidate.updated_at.desc())
+                source_weight = case(
+                    (RegistrySource.source_type == "startup_platform", 5),
+                    (RegistrySource.source_type.in_(["university", "hackathon", "accelerator", "event"]), 4),
+                    (RegistrySource.source_type == "community", 3),
+                    else_=1,
+                )
+                rows = (session.scalars(query.outerjoin(RegistrySource, Candidate.source_id == RegistrySource.id)
+                                        .order_by(source_weight.desc(), RegistrySource.priority.desc(),
+                                                  Candidate.updated_at.asc())
                                         .limit(self.settings.max_candidates)).all() if process else [])
                 work = [(row.url, row.article or {}, row.source_id) for row in rows]
             for url, cached, source_id in work:

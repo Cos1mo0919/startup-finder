@@ -53,6 +53,9 @@ def send_alerts(settings, factory, client=None):
             response = sender.post(f"https://api.telegram.org/bot{token}/sendMessage",
                                    json={"chat_id": chat_id, "text": f"izlanish: {message}"}, timeout=15)
             response.raise_for_status()
+            if response.json().get("ok") is not True:
+                failed += 1
+                continue
             with factory.begin() as session:
                 checkpoint = session.get(SchedulerCheckpoint, checkpoint_name)
                 if checkpoint is None:
@@ -61,6 +64,6 @@ def send_alerts(settings, factory, client=None):
                 checkpoint.last_success_at = now
                 checkpoint.cursor = {"event": key}
             sent += 1
-        except httpx.HTTPError:
+        except (httpx.HTTPError, ValueError, AttributeError):
             failed += 1
     return {"status": "partial" if failed else "completed", "sent": sent, "failed": failed}
