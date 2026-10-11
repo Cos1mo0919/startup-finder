@@ -470,9 +470,65 @@ fresh feed returned HTTP 502, but its saved queue continued processing.
 No deterministic published project currently awaits Gemini enrichment. Deep
 Excel weights remain unvalidated and deep analysis stays optional.
 
+## 2026-10-11 — Global catalog routing and 2026 archive audit
+
+The public Global tab had a real routing bug: `Project.country == ""` was excluded
+by `/api/projects?country=global` and `/api/catalog/home`, even when the source
+was Show HN. `project_scope` now uses explicit country first and source provenance
+when country is unknown. Two manually checked international products mentioned
+by Spot use their official product domain to avoid a false Uzbekistan assignment.
+The API and homepage share the same scope rule; homepage counters use complete
+section counts rather than the four-card previews. No country was invented for
+unknown-country projects. A pre-run database copy verified the repair: 11
+published records split into 7 Uzbekistan and 4 Global in both home and catalog
+filters; `/api/health` returned 200.
+
+Backup before discovery: `/tmp/izlanish-before-2026-archive-20261011T095229Z.sqlite3`.
+Restore only after stopping all backend/worker processes: copy the backup to
+`data/finder.sqlite3` and remove the old `data/finder.sqlite3-wal` and
+`data/finder.sqlite3-shm` sidecars. The backup was created with SQLite's backup
+API; the current database was not cleared.
+
+The 2026-01-01 through 2026-10-10 (inclusive, Asia/Tashkent) Uzbekistan pass
+checked 12 enabled sources, found 858 links and stored 691 new raw observations.
+Spot's Uzbek/Russian sitemaps each had 40 maps; IT Park, ADU and NamDU archive
+pages were also traversed. The separate Show HN Global archive scanned 283 daily
+slices and 530 public API pages, examined 38,949 hits and found 33,993 distinct
+external URLs; the API reported zero unscanned pages or capped daily slices.
+These numbers describe accessible configured sources, not all websites. The
+large raw archive is durable. It is ingested in 250-item transactions, and the
+processing queue rotates across sources so Global volume does not starve local
+coverage. The `--backfill --only-source` queue restriction now matches its fetch
+restriction. Coverage and source yield are returned in CLI reports.
+
+The Cloud baseline was 28 project records / 11 published / 598 raw discoveries.
+After source-backed review: 42 project records / 21 published (12 Uzbekistan,
+9 Global), 18 review, 2 rejected, 1 duplicate; 35,233 raw observations,
+including 34,409 still pending, and 34,503 queued candidates. Twenty public
+projects have a 2026 source publication date. The ten net new public cards are
+Tezbor, Tezride, Robosell, Virtual Accelerate, Turan Security, PodcastDelay,
+Cerberus, Scribe, xcrashlytics and MemoryKit. Four proposed cards were moved
+to review after inspecting their source text: Reclip (insufficient project
+description), Robotis O‘zbekistonda (factory announcement), Tashkent Medical
+Smart City (planned infrastructure) and Kelajak texnologiyalari markazi
+(planned center). Their evidence and review reasons remain stored. Tezbor's
+incorrect Kyrgyzstan country label was corrected from the Spot text and its
+official `.uz` URL, with the previous value in `attribute_history`.
+
+Gemini analyzed live sources; Groq was added as a working fallback after its
+old default model returned HTTP 404. `openai/gpt-oss-20b` passed a live JSON/schema
+smoke. A three-case Groq benchmark was partial because of rate limiting; it
+does not establish general precision. Both providers encountered validation or
+rate-limit failures, so the archive runs were partial and most raw items remain
+unclassified. The 15-minute scheduled drain can continue from the saved queue
+while the service runs; this task does not claim that all 2026 links have been
+analyzed or that the user's separate Codespace database was changed. The full
+Cloud audit is `reports/2026-10-11-archive-audit.json`.
+
 The audit with 9 published, 10 review and 10 rejected samples is
-`reports/gemini-live-audit.json`. The currently available international
-country-filter tab shows Screens (United States). Other Show HN products have
-unknown country and appear only under All; no country was invented. Telegram
+`reports/gemini-live-audit.json`. At the time of the 2026-10-10 audit, the
+international country-filter tab showed only Screens (United States). The
+2026-10-11 scope fix above now routes other validated Show HN products to
+Global without inventing a country. Telegram
 credentials remain unconfigured. Stage/user acceptance is not implied by this
 technical validation.

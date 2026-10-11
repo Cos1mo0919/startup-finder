@@ -160,6 +160,9 @@ null
 
 Only if clearly stated.
 
+Operating in or expanding into a country does not prove that the project originates there.
+If the article names several markets but not the project's home country, use null or the source country hint only when the surrounding text supports it.
+
 If not stated but input field:
 
 Source country hint

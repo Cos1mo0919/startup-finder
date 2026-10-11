@@ -15,6 +15,10 @@ export function cardExcerpt(value: string, maxWords = 20): string {
   const words = value.trim().split(/\s+/).filter(Boolean);
   return words.length > maxWords ? `${words.slice(0, maxWords).join(" ")}…` : words.join(" ");
 }
+export function projectGeographyLabel(project: Project): string {
+  if (project.country === "Uzbekistan" || project.scope === "Uzbekistan") return "O‘zbekiston";
+  return project.country || (project.scope === "Global" ? "Global" : "Davlat noma’lum");
+}
 export function External({
   href,
   children,
@@ -118,7 +122,7 @@ export function Card({
           <Leaf size={13} />
           {categories[p.primary_sector] || p.primary_sector || categories[p.category] || "Boshqa"}
         </span>
-        <span className="card-date">{p.country === "Uzbekistan" ? "O‘zbekiston" : p.country || "Davlat noma’lum"} · {date(p.published_at)}{p.date_estimated ? " (taxminiy)" : ""}</span>
+        <span className="card-date">{projectGeographyLabel(p)} · {date(p.published_at)}{p.date_estimated ? " (taxminiy)" : ""}</span>
       </div>
       <div className="card-body">
         <div className="card-copy">

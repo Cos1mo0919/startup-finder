@@ -286,7 +286,7 @@ def main():
                 for window in archive_windows(args.from_date, args.to_date):
                     pipeline.discovery.window = window
                     result = pipeline.run(archive=True, discover=not args.drain,
-                                          force_sources=args.force_sources)
+                                          force_sources=args.force_sources, only_source=args.only_source)
                     results.append(result)
                     print(json.dumps({"year": window[0].year, **result}, ensure_ascii=False), flush=True)
                 result = {

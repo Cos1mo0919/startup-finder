@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     openrouter_api_key: SecretStr = SecretStr("")
     openrouter_model: str = "openai/gpt-4.1-mini"
     groq_api_key: SecretStr = SecretStr("")
-    groq_model: str = "llama-3.3-70b-versatile"
+    groq_model: str = "openai/gpt-oss-20b"
     openai_model: str = ""
     llm_timeout_seconds: float = Field(default=30, ge=1, le=120)
     llm_max_retries_per_provider: int = Field(default=1, ge=0, le=3)
@@ -37,7 +37,7 @@ class Settings(BaseSettings):
     trusted_egress_proxy: bool = False
     scheduler_enabled: bool = True
     evidence_min_score: float = Field(default=5.0, ge=0, le=10)
-    archive_pages: int = Field(default=20, ge=1, le=100)
+    archive_pages: int = Field(default=20, ge=1, le=600)
     search_queries_per_source: int = Field(default=3, ge=1, le=30)
     max_event_followups: int = Field(default=3, ge=0, le=20)
     max_candidates: int = Field(default=30, ge=1, le=200)

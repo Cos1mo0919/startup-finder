@@ -18,12 +18,71 @@ def test_keyless_news_is_review_not_published(settings, factory):
     result = pipeline.run()
     assert result["counts"]["auto_published"] == 0
     assert result["counts"]["review_required"] == 1
+    assert result["details"]["limits"]["archive_pages"] == settings.archive_pages
+    assert "coverage" in result["details"] and "remaining_queue" in result["details"]
     with factory() as session:
         candidate = session.get(Candidate, page.url)
         assert candidate.reason == "llm_unavailable"
         assert session.scalars(select(Project)).all() == []
     # A second drain does not revisit an unchanged keyless review record.
     assert pipeline.run(discover=False)["counts"]["candidates"] == 0
+    pipeline.close()
+
+
+def test_large_global_queue_does_not_starve_local_source(settings, factory):
+    from backend.app.db import RegistrySource
+
+    global_pages = [sample_article(name=f"Global{i}", url=f"https://global.example/tool-{i}")
+                    for i in range(3)]
+    local = sample_article(name="LocalTool", url="https://local.example/tool")
+    with factory.begin() as session:
+        session.add_all([
+            RegistrySource(id="show-hn-rss", name="Global", url="https://hnrss.org/show",
+                           source_type="community", priority=2),
+            RegistrySource(id="local", name="Local", url="https://local.example/",
+                           source_type="startup_platform", priority=5),
+        ])
+
+    class Discovery(FakeDiscovery):
+        def discover(self, now, archive=False):
+            return ([{"url": page.url, "source_id": "show-hn-rss"} for page in global_pages] +
+                    [{"url": local.url, "source_id": "local"}]), [], 2
+
+    pipeline = CatalogPipeline(settings.model_copy(update={"max_candidates": 2}), factory,
+                               Discovery([*global_pages, local]))
+    pipeline.run(reanalyze=False)
+    with factory() as session:
+        assert session.get(Candidate, local.url).status == "review_required"
+        assert sum(session.get(Candidate, page.url).status == "review_required"
+                   for page in global_pages) == 1
+    pipeline.close()
+
+
+def test_show_hn_page_with_only_short_listing_stays_in_review(settings, factory):
+    page = sample_article(name="Reclip", url="https://example.org/listing")
+    page.source_id = "show-hn-rss"
+    page.title = "Video prompts | Reclip"
+    page.text = "One short video prompt and a link to another page."
+    pipeline = CatalogPipeline(settings, factory, FakeDiscovery([page]))
+    result = pipeline.run(reanalyze=False)
+    assert result["counts"]["auto_published"] == 0
+    with factory() as session:
+        candidate = session.get(Candidate, page.url)
+        assert candidate.status == "review_required"
+        assert candidate.reason == "source_excerpt_insufficient"
+    pipeline.close()
+
+
+def test_large_archive_ingestion_commits_idempotent_chunks(settings, factory):
+    articles = [sample_article(name=f"Tool{i}", url=f"https://news.example/tool-{i}")
+                for i in range(255)]
+    pipeline = CatalogPipeline(settings, factory, FakeDiscovery(articles))
+    first = pipeline.run(archive=True, process=False, reanalyze=False)
+    assert first["counts"]["raw_discoveries"] == 255
+    second = pipeline.run(archive=True, process=False, reanalyze=False)
+    assert second["counts"]["raw_discoveries"] == 0
+    with factory() as session:
+        assert len(session.scalars(select(Candidate)).all()) == 255
     pipeline.close()
 
 

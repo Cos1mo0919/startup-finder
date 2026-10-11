@@ -20,6 +20,7 @@ export type Project = {
   city: string;
   event: string;
   country: string;
+  scope?: "Uzbekistan" | "Global" | "Unknown";
   category: string;
   primary_sector: string;
   sectors: string[];

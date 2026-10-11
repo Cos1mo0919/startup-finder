@@ -122,6 +122,53 @@ def test_process_url_queues_only_enabled_registered_sources(settings, factory, m
         cli.main()
 
 
+def test_backfill_only_source_restricts_queue_processing(settings, factory, monkeypatch):
+    from backend.app import cli
+
+    with factory.begin() as session:
+        session.add(RegistrySource(id="show-hn-rss", name="Show HN", url="https://hnrss.org/show",
+                                   enabled=True, collection_method="RSS"))
+
+    class FakePipeline:
+        def __init__(self, *_):
+            self.discovery = type("DiscoveryState", (), {"force": False, "allowed_source_ids": None,
+                                                        "window": None})()
+
+        def run(self, **kwargs):
+            assert kwargs["only_source"] == "show-hn-rss"
+            assert self.discovery.allowed_source_ids == {"show-hn-rss"}
+            return {"status": "completed", "counts": {}, "errors": []}
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(cli, "Settings", lambda: settings)
+    monkeypatch.setattr(cli, "CatalogPipeline", FakePipeline)
+    monkeypatch.setattr("sys.argv", ["cli", "--backfill", "--from-date", "2026-01-01",
+                                       "--to-date", "2026-10-10", "--only-source", "show-hn-rss"])
+    assert cli.main() == 0
+
+
+def test_debug_report_shows_effective_show_hn_archive_adapter(settings, factory):
+    import json
+    from backend.app.diagnostics import debug_report
+
+    settings.sources_file.write_text(json.dumps([{
+        "id": "show-hn-rss", "name": "Show HN", "url": "https://hnrss.org/show",
+        "enabled": True, "collection_method": "RSS", "source_type": "community",
+        "options": {"archive": {"hn_algolia": True}},
+    }]))
+    with factory.begin() as session:
+        session.add(RegistrySource(id="show-hn-rss", name="Show HN", url="https://hnrss.org/show",
+                                   enabled=True, collection_method="RSS", options={}))
+    with factory() as session:
+        source = next(item for item in debug_report(session, settings)["sources"]
+                      if item["id"] == "show-hn-rss")
+    assert source["archive_configured"] is True
+    assert source["archive_adapter"] == "hn_algolia"
+    assert source["archive_matches_seed"] is False
+
+
 def test_pending_list_and_stable_id_do_not_reprocess(factory):
     from backend.app.diagnostics import list_candidates
 

@@ -1,7 +1,11 @@
 """Bounded, robots-aware public archive traversal. Dates here select URLs only."""
 
 import re
-from datetime import date
+import json
+from math import ceil
+from datetime import date, datetime, time, timedelta, timezone
+from urllib.parse import urlencode
+from zoneinfo import ZoneInfo
 from xml.etree import ElementTree as ET
 from ..network import canonical_url, FetchError
 
@@ -16,6 +20,8 @@ def url_day(url):
 
 def archive_links(discovery, source, window):
     config = source.options.get("archive", {})
+    if config.get("hn_algolia"):
+        return show_hn_archive_links(discovery, source, window)
     if not config:
         # The current listing is useful only if it actually links old material.
         return discovery.collect(source, discovery.clock, False)
@@ -63,6 +69,75 @@ def archive_links(discovery, source, window):
         }
     )
     return list(result.values())
+
+
+def show_hn_archive_links(discovery, source, window):
+    """Spread a bounded Show HN search across every date in the requested range."""
+    tashkent = ZoneInfo("Asia/Tashkent")
+    page_budget = discovery.settings.archive_pages
+    total_days = (window[1] - window[0]).days + 1
+    days_per_slice = ceil(total_days / page_budget)
+    slices = []
+    cursor = window[0]
+    while cursor <= window[1]:
+        end = min(cursor + timedelta(days=days_per_slice - 1), window[1])
+        slices.append((cursor, end))
+        cursor = end + timedelta(days=1)
+    links = {}
+    pages_used = 0
+    reported_hits = 0
+    next_pages = [0] * len(slices)
+    available_pages = [1] * len(slices)
+    api_capped_slices = set()
+    page_failures = 0
+    while pages_used < page_budget and any(next_pages[i] < available_pages[i] for i in range(len(slices))):
+        for index, (start, end) in enumerate(slices):
+            if pages_used >= page_budget:
+                break
+            page = next_pages[index]
+            if page >= available_pages[index]:
+                continue
+            start_ts = int(datetime.combine(start, time.min, tashkent).astimezone(timezone.utc).timestamp())
+            end_ts = int(datetime.combine(end + timedelta(days=1), time.min, tashkent).astimezone(timezone.utc).timestamp()) - 1
+            params = urlencode({"query": "Show HN", "tags": "show_hn", "hitsPerPage": 100,
+                                "page": page, "numericFilters": f"created_at_i>={start_ts},created_at_i<={end_ts}"})
+            pages_used += 1
+            try:
+                raw, _ = discovery.web.get("https://hn.algolia.com/api/v1/search_by_date?" + params)
+                payload = json.loads(raw)
+                hits = payload["hits"]
+            except (FetchError, ValueError, KeyError, TypeError):
+                page_failures += 1
+                available_pages[index] = page
+                continue
+            available_pages[index] = payload.get("nbPages", 0)
+            next_pages[index] += 1
+            if payload.get("nbHits", 0) > available_pages[index] * 100:
+                api_capped_slices.add(index)
+            reported_hits += len(hits)
+            for hit in hits:
+                title = hit.get("title") or ""
+                if not title.casefold().startswith("show hn:") or not hit.get("url"):
+                    continue
+                try:
+                    link = canonical_url(hit["url"])
+                    published_at = datetime.fromtimestamp(int(hit["created_at_i"]), timezone.utc)
+                    if not start <= published_at.astimezone(tashkent).date() <= end:
+                        continue
+                except (FetchError, ValueError, KeyError, TypeError, OverflowError):
+                    continue
+                if link not in links or published_at < links[link]["published_at"]:
+                    links[link] = {"url": link, "title": title, "published_at": published_at,
+                                   "discovery_url": "https://news.ycombinator.com/item?id=" + str(hit["objectID"])}
+    pages_not_scanned = sum(max(0, available_pages[i] - next_pages[i]) for i in range(len(slices)))
+    discovery.archive_coverage.append({"source_id": source.id, "year": window[0].year,
+        "date_slices": len(slices), "days_per_slice": days_per_slice,
+        "pages": pages_used, "page_limit": page_budget,
+        "api_hits_examined": reported_hits, "candidates": len(links),
+        "pages_not_scanned_estimate": pages_not_scanned, "api_capped_slices": len(api_capped_slices),
+        "page_failures": page_failures,
+        "bounded": pages_not_scanned > 0 or bool(api_capped_slices) or page_failures > 0})
+    return list(links.values())
 
 
 def sitemap_links(discovery, source, window, config):

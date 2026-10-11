@@ -392,6 +392,48 @@ def test_unscored_project_is_public_without_problem_or_numeric_score(settings, f
         assert client.get("/api/projects?year=2026").json()["total"] == 1
 
 
+def test_unknown_country_show_hn_project_appears_in_global_catalog(settings, factory):
+    from fastapi.testclient import TestClient
+    from backend.app.main import create_app
+
+    item = article()
+    entry = CatalogEntry(name="KotibAI", confidence=0.9, country=None,
+                         description_uz="KotibAI o‘zbek tilidagi ovozli xabarlarni matnga o‘giradi va murakkab biznes jarayonlarini avtomatlashtirish imkonini beradi")
+    with factory.begin() as session:
+        save_catalog_result(session, item, CatalogResult("PROJECT", 0.9, (entry,), analysis_method="deterministic"))
+        project = session.scalar(select(Project))
+        project.discovery_source_url = "https://news.ycombinator.com/item?id=123"
+    with TestClient(create_app(settings)) as client:
+        home = client.get("/api/catalog/home").json()
+        assert home["total"] == home["global_total"] == 1
+        assert home["uzbekistan_total"] == 0
+        assert home["global"][0]["country"] == ""
+        assert home["global"][0]["scope"] == "Global"
+        assert client.get("/api/projects?country=global").json()["total"] == 1
+        assert client.get("/api/projects?country=Uzbekistan").json()["total"] == 0
+
+
+def test_scope_hint_never_overrides_explicit_project_country():
+    from types import SimpleNamespace
+    from backend.app.geography import project_scope
+
+    source = SimpleNamespace(source_id="show-hn-rss", url="https://news.ycombinator.com/item?id=1")
+    project = SimpleNamespace(country="Uzbekistan", sources=[source], discovery_source_url=source.url)
+    assert project_scope(project) == "Uzbekistan"
+    project.country = ""
+    assert project_scope(project) == "Global"
+    project.sources = [SimpleNamespace(source_id="uzhunt", url="https://uzhunt.uz/p/example")]
+    assert project_scope(project) == "Uzbekistan"
+    project.sources = [SimpleNamespace(source_id=None, url="https://github.com/example/product")]
+    project.discovery_source_url = ""
+    assert project_scope(project) == "Unknown"
+    project.sources = [SimpleNamespace(source_id="spot-uz", url="https://www.spot.uz/oz/story")]
+    project.main_url = "https://www.flowtica.ai/products/flowtica-scribe"
+    assert project_scope(project) == "Global"
+    project.country = "Uzbekistan"
+    assert project_scope(project) == "Uzbekistan"
+
+
 def test_bad_source_images_use_fallback():
     from backend.app.main import usable_images
 

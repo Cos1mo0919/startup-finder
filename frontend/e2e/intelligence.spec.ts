@@ -21,3 +21,20 @@ test("public navigation stays focused on projects", async ({ page }) => {
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   expect(errors).toEqual([]);
 });
+
+test("unknown country with Global scope appears on homepage and Global tab", async ({ page, request }) => {
+  const listing = await (await request.get("/api/projects?period=all")).json();
+  const globalProject = { ...listing.items[0], country: "", scope: "Global" };
+  await page.route("**/api/catalog/home", route => route.fulfill({ json: {
+    total: 1, uzbekistan_total: 0, global_total: 1, top: [globalProject],
+    uzbekistan: [], global: [globalProject], sectors: [],
+  } }));
+  await page.route("**/api/projects?*", route => route.fulfill({ json: {
+    ...listing, total: 1, items: [globalProject],
+  } }));
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "Global loyihalar" })).toBeVisible();
+  await expect(page.getByText("Global ·", { exact: false }).first()).toBeVisible();
+  await page.goto("/loyihalar?country=global");
+  await expect(page.getByRole("link", { name: globalProject.name }).first()).toBeVisible();
+});

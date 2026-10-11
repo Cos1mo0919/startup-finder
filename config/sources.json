@@ -1370,7 +1370,7 @@
     "provides_market_signals": true,
     "purpose": "Creator project pages as global discovery leads; publication still requires verified problem and evidence",
     "parser_type": "RSS",
-    "options": {},
+    "options": {"archive": {"hn_algolia": true}},
     "notes": "Public hnrss.org feed checked with robots; creator URLs are discovery leads, not automatically verified projects. Mirror is an independent provider."
   }
 ]

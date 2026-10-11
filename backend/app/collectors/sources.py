@@ -8,7 +8,7 @@ from bs4 import BeautifulSoup
 from sqlalchemy import select
 from ..dates import priority
 from ..queries import targeted_queries, freshness
-from .archive import archive_links
+from .archive import archive_links, show_hn_archive_links
 from ..db import Event, RegistrySource, Candidate
 from ..events import event_queries, followup_due
 from ..network import FetchError, safe_url, canonical_url
@@ -156,6 +156,9 @@ class Discovery:
     def collect(self, source, now, archive):
         if archive and self.window and source.collection_method != "search":
             seed = self.seed_configs.get(source.id)
+            if (source.id == "show-hn-rss" and seed and
+                    seed.options.get("archive", {}).get("hn_algolia")):
+                return show_hn_archive_links(self, source, self.window)
             if (
                 seed
                 and seed.options.get("archive")
@@ -230,6 +233,12 @@ class Discovery:
                 links.sort(key=lambda item: priority(item.get("published_at"), now))
                 batches.append(links)
                 record_check(self.factory, source.id, now, len(links))
+                coverage = next((item for item in reversed(self.archive_coverage)
+                                 if item.get("source_id") == source.id), {})
+                if coverage.get("page_failures"):
+                    errors.append({"source": source.name, "source_id": source.id,
+                                   "stage": "archive", "code": "archive_pages_failed",
+                                   "count": coverage["page_failures"]})
             except FetchError as exc:
                 record_check(self.factory, source.id, now, error=str(exc))
                 errors.append(

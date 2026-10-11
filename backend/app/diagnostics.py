@@ -269,19 +269,23 @@ def debug_report(session, settings):
     for source in session.scalars(select(RegistrySource).order_by(RegistrySource.id)):
         archive = source.options.get("archive", {})
         seed_archive = seeds[source.id].options.get("archive", {}) if source.id in seeds else None
+        effective_archive = (seed_archive if source.id == "show-hn-rss" and
+                             (seed_archive or {}).get("hn_algolia") else archive)
         sources.append(
             {
                 "id": source.id,
                 "name": source.name,
                 "enabled": source.enabled,
                 "method": source.collection_method,
-                "archive_configured": bool(archive),
+                "archive_configured": bool(effective_archive),
                 "seed_archive_configured": bool(seed_archive),
                 "archive_matches_seed": archive == seed_archive if seed_archive is not None else None,
-                "archive_adapter": "sitemap"
-                if archive.get("sitemap_index")
+                "archive_adapter": "hn_algolia"
+                if effective_archive.get("hn_algolia")
+                else "sitemap"
+                if effective_archive.get("sitemap_index")
                 else "pagination"
-                if archive.get("page_url")
+                if effective_archive.get("page_url")
                 else "current_listings",
                 "last_error": source.last_error,
                 "consecutive_errors": source.consecutive_errors,

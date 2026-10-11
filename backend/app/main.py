@@ -24,6 +24,7 @@ from .intelligence_api import dashboard, idea_json, problem_json, sector_intelli
 from .signal_quality import audit_signals
 from .publication import lifecycle_stage, synchronize_candidate_publication
 from .catalog_ranking import rank as catalog_rank
+from .geography import project_scope
 
 
 def usable_images(images):
@@ -66,6 +67,7 @@ def serialize_project(project, detail=False):
         )
     }
     result.update(
+        scope=project_scope(project),
         summary_uz=content.get("summary_uz", ""),
         short_description=project.short_description or content.get("summary_uz", ""),
         catalog_score=project.catalog_score,
@@ -228,9 +230,8 @@ def create_app(settings=None):
                     cast(Project.sectors, String).contains('"' + sector + '"', autoescape=True),
                 )
             )
-        if country == "global":
-            query = query.where(Project.country != "Uzbekistan", Project.country != "")
-        elif country:
+        scope_filter = country in {"global", "Uzbekistan"}
+        if country and not scope_filter:
             query = query.where(Project.country == country)
         if city:
             query = query.where(Project.city.icontains(city, autoescape=True))
@@ -268,11 +269,20 @@ def create_app(settings=None):
         }[sort]
         with factory() as session:
             total = session.scalar(select(func.count()).select_from(query.subquery()))
-            if sort == "catalog":
+            if sort == "catalog" or scope_filter:
                 all_items = session.scalars(query).all()
+                if scope_filter:
+                    wanted = "Global" if country == "global" else "Uzbekistan"
+                    all_items = [project for project in all_items if project_scope(project) == wanted]
+                    total = len(all_items)
+            if sort == "catalog":
                 items = sorted(all_items, key=lambda project: (
                     catalog_rank(project, neutral=settings.catalog_neutral_rank),
                     aware(project.published_at), project.id), reverse=True)[(page - 1) * page_size:page * page_size]
+            elif scope_filter:
+                items = sorted(all_items, key=lambda project: (
+                    aware(project.published_at) if sort == "date" else getattr(project, order.key),
+                    project.id), reverse=True)[(page - 1) * page_size:page * page_size]
             else:
                 items = session.scalars(
                     query.order_by(order.desc(), Project.id).offset((page - 1) * page_size).limit(page_size)
@@ -291,8 +301,8 @@ def create_app(settings=None):
             ordered = sorted(all_items, key=lambda project: (
                 catalog_rank(project, neutral=settings.catalog_neutral_rank),
                 aware(project.published_at)), reverse=True)
-            local = [project for project in ordered if project.country == "Uzbekistan"]
-            global_items = [project for project in ordered if project.country and project.country != "Uzbekistan"]
+            local = [project for project in ordered if project_scope(project) == "Uzbekistan"]
+            global_items = [project for project in ordered if project_scope(project) == "Global"]
             sectors = {}
             for project in all_items:
                 key = project.primary_sector or "Other"
@@ -303,6 +313,8 @@ def create_app(settings=None):
                     bucket["sum_score"] += project.catalog_score
             return {
                 "total": len(all_items),
+                "uzbekistan_total": len(local),
+                "global_total": len(global_items),
                 "top": [serialize_project(project) for project in ordered[:6]],
                 "uzbekistan": [serialize_project(project) for project in local[:4]],
                 "global": [serialize_project(project) for project in global_items[:4]],

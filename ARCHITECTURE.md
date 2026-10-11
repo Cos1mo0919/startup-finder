@@ -20,7 +20,11 @@ evidence survive. Exact-URL manual reviews from
 `config/publication_review.json` take precedence and retain audit history.
 
 ## Scope and stack
-This is a web application for evidenced projects connected with Uzbekistan. The UI and generated descriptions use Uzbek Latin. Global and a separate GitHub/tools section are explicitly out of scope until user approval.
+This is a web application for evidenced projects from Uzbekistan and international sources. The UI and generated descriptions use Uzbek Latin. Global discovery is authorized by the subsequent user request; Uzbekistan coverage remains active.
+
+Public geography is derived by `backend.app.geography.project_scope`. Explicit project country takes precedence. When country is unknown, a manually verified international official domain may override a local news source; otherwise registered source provenance places the project into O‘zbekiston or Global without writing an invented country to the project record. Both `/api/catalog/home` and `/api/projects?country=...` use this rule. The homepage returns full section counts separately from limited card samples.
+
+The 2026 Show HN archive adapter queries the public Algolia API across date slices in Asia/Tashkent, stores external project URLs and original HN submission URLs, and reports date-slice, page-budget, API-cap and page-failure coverage. Source candidates are persisted before classification. Archive/queue processing interleaves sources by round so a large Global backlog cannot starve smaller Uzbekistan feeds. Gemini and Groq use the existing provider fallback; Groq's validated default model is `openai/gpt-oss-20b` as of 2026-10-11.
 
 - Frontend: React + TypeScript + Vite, responsive vertical feed and project detail pages.
 - Backend: Python 3.12+, FastAPI, Pydantic, SQLAlchemy 2.

@@ -47,6 +47,9 @@ class CatalogPipeline(Pipeline):
             article.title, re.I,
         ):
             return CatalogResult("NOT_PROJECT", 0.95, reason="obvious_noise", analysis_method="deterministic")
+        if article.source_id == "show-hn-rss" and len(re.findall(r"\b[\w-]+\b", article.text)) < 50:
+            return CatalogResult("NEEDS_EXTRACTION", 0.5, reason="source_excerpt_insufficient",
+                                 analysis_method="deterministic")
         if self.classifier and self.settings.ai_key:
             return self.classifier.classify(article)
         if self.llm_service and self.llm_service.available:
@@ -147,7 +150,7 @@ class CatalogPipeline(Pipeline):
             errors.extend(source_errors)
             counts["sources_checked"] = checked
             counts["candidates_found"] = len({canonical_url(item["url"]) for item in links})
-            with self.factory.begin() as session:
+            with self.factory() as session:
                 if discover and not archive:
                     old_window = session.scalars(select(Candidate).where(
                         Candidate.status == "rejected", Candidate.reason == "outside_archive_window")
@@ -157,7 +160,11 @@ class CatalogPipeline(Pipeline):
                         if published and now - timedelta(days=30) <= aware(published) <= now:
                             row.status, row.reason, row.updated_at = "queued", "", now
                             counts["recovered_window_rejections"] += 1
-                for item in links:
+                for index, item in enumerate(links):
+                    if index and index % 250 == 0:
+                        # Release SQLite's writer lock during large archive imports.
+                        # Committed chunks remain safe to revisit after interruption.
+                        session.commit()
                     url = canonical_url(item["url"])
                     source_id = item.get("source_id") or "event_discovery"
                     source = session.get(RegistrySource, item.get("source_id")) if item.get("source_id") else None
@@ -190,6 +197,7 @@ class CatalogPipeline(Pipeline):
                         row.article = {**(row.article or {}), "discovery_url": item["discovery_url"],
                                        "discovery_title": item.get("title", "")}
                     yield_by_source[item.get("source_id") or "unknown"]["fetched"] += 1
+                session.commit()
                 # Telegram and future adapters may insert raw rows independently
                 # of web discovery. Materialize a Candidate without losing payload.
                 pending_raw = select(RawDiscovery).where(RawDiscovery.status == "pending")
@@ -211,6 +219,7 @@ class CatalogPipeline(Pipeline):
                                               source_id=raw.source_adapter if session.get(RegistrySource, raw.source_adapter) else None,
                                               origin=raw.source_type or "other"))
                         counts["new_candidates"] += 1
+                session.commit()
             with self.factory() as session:
                 retry_due = Candidate.updated_at <= now - timedelta(hours=6)
                 llm_ready = bool((self.classifier and self.settings.ai_key) or
@@ -242,10 +251,25 @@ class CatalogPipeline(Pipeline):
                     (RegistrySource.source_type == "community", 3),
                     else_=1,
                 )
-                rows = (session.scalars(query.outerjoin(RegistrySource, Candidate.source_id == RegistrySource.id)
-                                        .order_by(source_weight.desc(), RegistrySource.priority.desc(),
-                                                  Candidate.updated_at.asc())
-                                        .limit(self.settings.max_candidates)).all() if process else [])
+                if process:
+                    # One candidate per source each round prevents a large Global archive
+                    # from starving smaller Uzbekistan feeds during hourly processing.
+                    ranked = select(
+                        Candidate.url.label("url"),
+                        func.row_number().over(partition_by=Candidate.source_id,
+                                               order_by=(Candidate.updated_at, Candidate.url)).label("source_position"),
+                        source_weight.label("source_weight"),
+                        RegistrySource.priority.label("source_priority"),
+                    ).outerjoin(RegistrySource, Candidate.source_id == RegistrySource.id).where(query.whereclause).subquery()
+                    urls = session.scalars(select(ranked.c.url).order_by(
+                        ranked.c.source_position,
+                        ranked.c.source_weight.desc(), ranked.c.source_priority.desc(), ranked.c.url,
+                    ).limit(self.settings.max_candidates)).all()
+                    by_url = {row.url: row for row in session.scalars(
+                        select(Candidate).where(Candidate.url.in_(urls))).all()} if urls else {}
+                    rows = [by_url[url] for url in urls]
+                else:
+                    rows = []
                 work = [(row.url, row.article or {}, row.source_id) for row in rows]
             for url, cached, source_id in work:
                 if (self.llm_service and self.llm_service.available and
@@ -406,8 +430,9 @@ class CatalogPipeline(Pipeline):
                                "source_yield": {key: dict(value) for key, value in yield_by_source.items()},
                                "llm_providers": self.llm_service.status() if self.llm_service else [],
                                "remaining_queue": session.scalar(select(func.count()).select_from(Candidate).where(Candidate.status.in_(["queued", "pending", "review_required"])))}
+                report_details = run.details
                 run.duration_seconds = round(monotonic() - began, 2)
                 session.execute(update(Lease).where(Lease.name == "pipeline", Lease.owner == owner)
                                 .values(owner="", expires_at=now_utc()))
         return {"id": run_id, "status": status, "counts": dict(counts), "errors": errors[:100],
-                "details": {"source_yield": {key: dict(value) for key, value in yield_by_source.items()}}}
+                "details": report_details}

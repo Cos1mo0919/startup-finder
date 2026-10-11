@@ -184,6 +184,8 @@ def decision(result: CatalogResult, entry: CatalogEntry | None = None) -> tuple[
     confidence = entry.confidence if entry is not None else result.confidence
     if result.reason == "llm_unavailable":
         return "REVIEW_REQUIRED", "llm_unavailable"
+    if result.classification == "NEEDS_EXTRACTION":
+        return "REVIEW_REQUIRED", result.reason or "insufficient_evidence"
     if result.classification == "NOT_PROJECT":
         return (("REJECTED", result.reason) if confidence >= 0.7 else
                 ("REVIEW_REQUIRED", result.reason if result.analysis_method == "deterministic" else "uncertain_not_project"))
