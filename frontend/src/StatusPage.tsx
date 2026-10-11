@@ -7,6 +7,15 @@ import { ErrorBox, External, Loading } from "./components";
 import { countLabels, errorLabels, statusLabels } from "./labels";
 import { useApi } from "./useApi";
 import { date } from "./utils";
+const stopReasonLabels: Record<string,string> = {
+  daily_publish_limit_reached: "Kunlik 100 ta nashr chegarasiga yetildi",
+  local_reservation_active: "O‘zbekiston loyihalari uchun joy saqlanmoqda",
+  queue_empty: "Ishlanadigan navbat tugadi",
+  ai_provider_limit: "AI xizmatlari hozircha mavjud emas yoki limitga yetdi",
+  source_error: "Manba xatosi",
+  batch_budget_reached: "Bir ishga tushirish limiti tugadi",
+  processing_disabled: "Ushbu ishga tushirishda qayta ishlash o‘chirilgan",
+};
 export function StatusPage({adminKey}:{adminKey:string}) {
   const [refresh, setRefresh] = useState(0);
   useEffect(() => {
@@ -53,7 +62,11 @@ export function StatusPage({adminKey}:{adminKey:string}) {
             "Keyingi qidiruv",
             s.scheduler_enabled ? date(s.next_run, true) : "Jadval o‘chirilgan",
           ],
+          ["Keyingi kunlik ishlov", s.scheduler_enabled ? date(s.next_daily_processing||null, true) : "Jadval o‘chirilgan"],
           ["Jami loyihalar", String(s.total_projects)],
+          ["Bugun nashr etildi", `${s.daily_publication?.published??0}/${s.daily_publication?.limit??100}`],
+          ["7 kunda", String(s.daily_publication?.week??0)],
+          ["Oy davomida", String(s.daily_publication?.month??0)],
           ["Tahlil kutilmoqda", String(s.pending_candidates)],
         ].map(([label, value]) => (
           <div key={label}>
@@ -62,6 +75,8 @@ export function StatusPage({adminKey}:{adminKey:string}) {
           </div>
         ))}
       </div>
+      <div className="notice"><p>Bo‘limlar: O‘zbekiston {s.public_sections?.Uzbekistan??0} · Global {s.public_sections?.Global??0} · GitHub {s.public_sections?.GitHub??0}. Oxirgi to‘xtash sababi: {stopReasonLabels[s.last_stop_reason||""]||"Hali aniqlanmagan"}.</p></div>
+      <p className="status-database-id">Baza ID: {s.database_instance_id||"—"} · {s.database_driver||"—"}</p>
       <div className="notice">
         <Clock3 size={18} />
         <p>

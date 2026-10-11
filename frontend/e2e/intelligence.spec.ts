@@ -26,8 +26,8 @@ test("unknown country with Global scope appears on homepage and Global tab", asy
   const listing = await (await request.get("/api/projects?period=all")).json();
   const globalProject = { ...listing.items[0], country: "", scope: "Global" };
   await page.route("**/api/catalog/home", route => route.fulfill({ json: {
-    total: 1, uzbekistan_total: 0, global_total: 1, top: [globalProject],
-    uzbekistan: [], global: [globalProject], sectors: [],
+    total: 1, uzbekistan_total: 0, global_total: 1, github_total: 0, top: [globalProject],
+    uzbekistan: [], global: [globalProject], github: [], sectors: [],
   } }));
   await page.route("**/api/projects?*", route => route.fulfill({ json: {
     ...listing, total: 1, items: [globalProject],
@@ -37,4 +37,21 @@ test("unknown country with Global scope appears on homepage and Global tab", asy
   await expect(page.getByText("Global ·", { exact: false }).first()).toBeVisible();
   await page.goto("/loyihalar?country=global");
   await expect(page.getByRole("link", { name: globalProject.name }).first()).toBeVisible();
+});
+
+test("GitHub source has its own catalog tab and home counter", async ({ page, request }) => {
+  const listing = await (await request.get("/api/projects?period=all")).json();
+  const project = { ...listing.items[0], country: "Uzbekistan", scope: "GitHub" };
+  await page.route("**/api/catalog/home", route => route.fulfill({ json: {
+    total: 1, uzbekistan_total: 0, global_total: 0, github_total: 1,
+    top: [project], uzbekistan: [], global: [], github: [project], sectors: [],
+  } }));
+  await page.route("**/api/projects?*", route => route.fulfill({ json: {
+    ...listing, total: 1, items: [project],
+  } }));
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "GitHub loyihalari" })).toBeVisible();
+  await page.goto("/loyihalar?country=github");
+  await expect(page.getByRole("button", { name: "GitHub" })).toHaveClass(/selected/);
+  await expect(page.getByRole("link", { name: project.name }).first()).toBeVisible();
 });

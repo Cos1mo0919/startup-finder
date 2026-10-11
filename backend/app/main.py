@@ -12,7 +12,7 @@ from .radar_api import radar_status, sector_stats, evidence_json
 from .sectors import SECTORS, LEGACY
 from .config import Settings
 from .dates import TASHKENT, today_start
-from .db import (Candidate, EcosystemSignal, Problem, ProblemEvidence, Project,
+from .db import (Candidate, DatabaseIdentity, EcosystemSignal, Problem, ProblemEvidence, Project,
                  ProjectDeepAnalysis, ProjectProblemLink, ProviderHealth, RawDiscovery, RegistrySource, Run,
                  SchedulerCheckpoint, SourceBlock,
                  SolutionIdea, aware, make_db, now_utc)
@@ -25,6 +25,7 @@ from .signal_quality import audit_signals
 from .publication import lifecycle_stage, synchronize_candidate_publication
 from .catalog_ranking import rank as catalog_rank
 from .geography import project_scope
+from .daily import publication_summary
 
 
 def usable_images(images):
@@ -143,7 +144,7 @@ def create_app(settings=None):
     audit_existing(factory, settings.evidence_min_score)
     audit_signals(factory)
     migrate_existing_problems(factory)
-    synchronize_candidate_publication(factory)
+    synchronize_candidate_publication(factory, settings)
     scheduler = make_scheduler(settings, factory)
 
     @asynccontextmanager
@@ -230,7 +231,7 @@ def create_app(settings=None):
                     cast(Project.sectors, String).contains('"' + sector + '"', autoescape=True),
                 )
             )
-        scope_filter = country in {"global", "Uzbekistan"}
+        scope_filter = country in {"global", "Uzbekistan", "github"}
         if country and not scope_filter:
             query = query.where(Project.country == country)
         if city:
@@ -272,7 +273,7 @@ def create_app(settings=None):
             if sort == "catalog" or scope_filter:
                 all_items = session.scalars(query).all()
                 if scope_filter:
-                    wanted = "Global" if country == "global" else "Uzbekistan"
+                    wanted = {"global": "Global", "github": "GitHub", "Uzbekistan": "Uzbekistan"}[country]
                     all_items = [project for project in all_items if project_scope(project) == wanted]
                     total = len(all_items)
             if sort == "catalog":
@@ -303,6 +304,7 @@ def create_app(settings=None):
                 aware(project.published_at)), reverse=True)
             local = [project for project in ordered if project_scope(project) == "Uzbekistan"]
             global_items = [project for project in ordered if project_scope(project) == "Global"]
+            github_items = [project for project in ordered if project_scope(project) == "GitHub"]
             sectors = {}
             for project in all_items:
                 key = project.primary_sector or "Other"
@@ -315,9 +317,11 @@ def create_app(settings=None):
                 "total": len(all_items),
                 "uzbekistan_total": len(local),
                 "global_total": len(global_items),
+                "github_total": len(github_items),
                 "top": [serialize_project(project) for project in ordered[:6]],
                 "uzbekistan": [serialize_project(project) for project in local[:4]],
                 "global": [serialize_project(project) for project in global_items[:4]],
+                "github": [serialize_project(project) for project in github_items[:4]],
                 "sectors": [{"sector": value["sector"], "projects": value["projects"],
                              "average_catalog_score": round(value["sum_score"] / value["scored"], 1)
                              if value["scored"] else None}
@@ -384,6 +388,10 @@ def create_app(settings=None):
                 if last and last.action == "BLOCK":
                     blocked_sources.append({"source_id": source_id, "at": iso(last.at), "reason": last.reason})
             provider_rows = {row.name: row for row in session.scalars(select(ProviderHealth))}
+            daily_publication = publication_summary(session, settings)
+            public_sections = {"Uzbekistan": 0, "Global": 0, "GitHub": 0}
+            for project in session.scalars(select(Project).where(Project.publication_status == "PUBLISHED")):
+                public_sections[project_scope(project)] += 1
             provider_status = []
             for configured in LLMService(settings).status():
                 health = provider_rows.get(configured["name"])
@@ -406,14 +414,22 @@ def create_app(settings=None):
             intelligence = status_extra(session)
         job = scheduler.get_job("discovery")
         next_run = getattr(job, "next_run_time", None) if settings.scheduler_enabled else None
+        daily_job = scheduler.get_job("daily_processing")
+        next_daily_processing = getattr(daily_job, "next_run_time", None) if settings.scheduler_enabled else None
         return {
             "timezone": "Asia/Tashkent",
             "scheduler_enabled": settings.scheduler_enabled,
             "next_run": iso(next_run),
+            "next_daily_processing": iso(next_daily_processing),
             "last_run": serialized[0] if serialized else None,
             "runs": serialized,
             "total_projects": total,
             "today_projects": today,
+            "daily_publication": daily_publication,
+            "database_instance_id": session.get(DatabaseIdentity, "primary").instance_uuid,
+            "database_driver": engine.dialect.name,
+            "public_sections": public_sections,
+            "last_stop_reason": (serialized[0]["details"] or {}).get("stop_reason", "") if serialized else "",
             "pending_candidates": pending,
             "ai_enabled": LLMService(settings).available,
             "llm_provider_order": [item["name"] for item in provider_status],
@@ -507,7 +523,7 @@ def create_app(settings=None):
         from .catalog_admin import catalog_action
         with factory.begin() as session:
             try:
-                return catalog_action(session, project_id, action, reason, target_id)
+                return catalog_action(session, project_id, action, reason, target_id, settings)
             except ValueError as exc:
                 raise HTTPException(404 if str(exc) == "project_not_found" else 422, str(exc)) from exc
 

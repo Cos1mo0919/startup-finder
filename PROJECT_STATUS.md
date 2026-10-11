@@ -1,5 +1,53 @@
 # Project status
 
+## 2026-10-11 — daily processing, GitHub section, source verification
+
+The Cloud SQLite database was backed up before migration at
+`/tmp/izlanish-before-daily-cycle-20261011.sqlite3`. The pre-change state was
+42 project records, 21 canonically published projects and 34,409 pending raw
+discoveries. The user's site showed 15 cards, but the separate site/Codespace
+database is unavailable here; its exact count and identity are unverified.
+`--db-stats` and admin status now expose a persistent database UUID so the two
+instances can be compared without printing secrets.
+
+Publication transitions now reserve a `daily_stats` slot, limited to 100 per
+Asia/Tashkent day. Local candidates are processed before international sources;
+30 places are reserved while actionable local items remain. Global and GitHub
+share the remaining 70, and may fill unused places once the local queue is
+empty. A new daily 09:00 processing job complements hourly discovery and the
+15-minute queue worker. Last stop reason, processed/published/remaining counts,
+daily/weekly/monthly totals and three section counts appear in admin diagnostics.
+Legacy publication dates and project IDs were not changed. Existing publication
+history populated the new counters once; old `first_seen` was used only where
+the legacy record lacked a publication transition timestamp.
+
+GitHub is now a separate public catalog section. Source-provenance routing is
+exclusive and preserves the factual country field. The Cloud API smoke check
+after routing gave 21 public projects: 14 Uzbekistan-source, 1 Global-source,
+6 GitHub-source. This changes section membership, not the public project total.
+
+Source check: BetaList, Product Hunt, Indie Hackers, Uneed, GitHub Trending and
+GitHub Search were reachable and yielded project URLs; existing IT Park,
+UzHunt, ICT Week and Spot were reachable and yielded 12, 7, 3 and 20+20 links,
+respectively. Stanbase returned 503. StartupBase,
+startup.ilmiy.uz, loyiha.ilmiy.uz, Debocha and YC Directory currently lack
+server-rendered project links; Microlaunch exceeds the configured page limit.
+These remain disabled. Active source checks and limitations are in
+`reports/source-probe-2026-10-11.json`. Previously dormant verified sources
+were activated explicitly in the Cloud DB without resetting blocked sources.
+
+The Codespace/site database has not been copied or synchronized. No claim of
+100 actual publications, source quality yield over time, or site-side count
+reconciliation is made until those runs and the second DB can be observed.
+One bounded live BetaList run checked 54 directory links, saved 54 raw rows and
+processed two. Both became real project cards (Pixfy and Clerk.AI) after LLM
+classification. Their official homepages were independently fetched and linked
+with verbatim metadata; BetaList `/visit` redirects are no longer stored as an
+official site. The run ended at its two-candidate batch budget, with 35,026
+candidates remaining. Cloud public catalog now totals 23: 14 Uzbekistan-source,
+3 Global-source and 6 GitHub-source. This small sample does not establish source
+precision or imply that the whole backlog was processed.
+
 ## 2026-10-10 — catalog publication consistency
 
 The current checkout had 12 candidate URLs marked published but 11 canonical

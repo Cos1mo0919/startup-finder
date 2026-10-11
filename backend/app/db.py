@@ -234,6 +234,25 @@ class Run(Base):
     duration_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
 
 
+class DailyStats(Base):
+    """Publication transitions by Tashkent calendar day; never decremented by hiding."""
+
+    __tablename__ = "daily_stats"
+    day: Mapped[str] = mapped_column(String(10), primary_key=True)
+    published_count: Mapped[int] = mapped_column(Integer, default=0)
+    uzbekistan_count: Mapped[int] = mapped_column(Integer, default=0)
+    global_count: Mapped[int] = mapped_column(Integer, default=0)
+    github_count: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class DatabaseIdentity(Base):
+    """Stable, non-secret identity for comparing separate deployments."""
+
+    __tablename__ = "database_identity"
+    id: Mapped[str] = mapped_column(String(20), primary_key=True)
+    instance_uuid: Mapped[str] = mapped_column(String(36), default=lambda: str(uuid4()))
+
+
 class Lease(Base):
     __tablename__ = "leases"
     name: Mapped[str] = mapped_column(String(50), primary_key=True)
@@ -436,4 +455,6 @@ def make_db(url):
     with factory.begin() as session:
         if session.get(Lease, "pipeline") is None:
             session.add(Lease(name="pipeline", expires_at=datetime(2000, 1, 1, tzinfo=timezone.utc)))
+        if session.get(DatabaseIdentity, "primary") is None:
+            session.add(DatabaseIdentity(id="primary"))
     return engine, factory

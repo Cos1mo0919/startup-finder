@@ -33,7 +33,7 @@ class SourceConfig(BaseModel):
     check_frequency: int | None = Field(default=None, ge=60, le=525600)
     reliability_score: float = Field(default=5, ge=0, le=10)
     enabled: bool = True
-    collection_method: Literal["search", "RSS", "direct_page", "API", "browser", "manual_config"] = "RSS"
+    collection_method: Literal["search", "RSS", "direct_page", "github_search", "API", "browser", "manual_config"] = "RSS"
     kind: Literal["official", "university", "event", "news", "unknown"] = "news"
     options: dict = Field(default_factory=dict)
     notes: str = ""
@@ -89,6 +89,39 @@ def seed_registry(factory, path, update=False):
             source.trust_kind = config.kind
             source.updated_at = now_utc()
     return added
+
+
+def activate_validated_sources(factory, path):
+    """Opt in previously dormant seeds without resetting operator edits or health."""
+    eligible = {"product-hunt", "betalist", "indie-hackers", "github-trending"}
+    old_urls = {"product-hunt": "https://www.producthunt.com/",
+                "betalist": "https://betalist.com/",
+                "indie-hackers": "https://www.indiehackers.com/",
+                "github-trending": "https://github.com/trending"}
+    configs = {item.id: item for item in load_sources(path) if item.id in eligible and item.enabled}
+    activated = []
+    with factory.begin() as session:
+        for source_id, config in configs.items():
+            source = session.get(RegistrySource, source_id)
+            if not source or source.enabled or source.collection_method != "manual_config" or source.last_checked_at:
+                continue
+            blocked = session.scalar(select(SourceBlock).where(SourceBlock.source_id == source_id)
+                                     .order_by(SourceBlock.id.desc()))
+            if blocked and blocked.action == "BLOCK":
+                continue
+            if source.url != canonical_url(old_urls[source_id]):
+                continue
+            source.url = config.url
+            source.options = config.options
+            source.collection_method = config.collection_method
+            source.parser_type = config.parser_type
+            source.priority = config.priority
+            source.check_frequency = config.check_frequency
+            source.enabled = True
+            source.notes = config.notes
+            source.updated_at = now_utc()
+            activated.append(source_id)
+    return activated
 
 
 def due(source, now, force=False):

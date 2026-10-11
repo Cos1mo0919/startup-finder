@@ -89,14 +89,14 @@ class CatalogPipeline(Pipeline):
                     project.reanalysis_attempts += 1
                     project.reanalysis_next_at = now + timedelta(days=1)
                     if result.classification in ("PROJECT", "MULTI"):
-                        save_catalog_result(session, article, result, now)
+                        save_catalog_result(session, article, result, now, self.settings)
                         if project.analysis_method == "hybrid":
                             project.reanalysis_state = "completed"
                             counts["enriched"] += 1
                         else:
                             project.reanalysis_state = "review_required"
                     else:
-                        save_catalog_result(session, article, result, now)
+                        save_catalog_result(session, article, result, now, self.settings)
                         project.reanalysis_state = "review_required" if result.confidence >= 0.7 else "llm_disagrees"
             except FetchError as exc:
                 with self.factory.begin() as session:
@@ -120,6 +120,7 @@ class CatalogPipeline(Pipeline):
 
     def run(self, archive=False, discover=True, only_source=None, only_urls=None,
             force_sources=False, reanalyze=True, process=True, review_only=False):
+        from .daily import DailyLimitReached, today_stats
         owner, now, began = str(uuid4()), now_utc(), monotonic()
         if not self.acquire(owner, now):
             return {"status": "busy"}
@@ -137,7 +138,7 @@ class CatalogPipeline(Pipeline):
             session.add(run)
             session.flush()
             run_id = run.id
-        status = "failed"
+        status, stop_reason = "failed", ""
         try:
             if only_source:
                 self.discovery.allowed_source_ids = {only_source}
@@ -221,6 +222,12 @@ class CatalogPipeline(Pipeline):
                         counts["new_candidates"] += 1
                 session.commit()
             with self.factory() as session:
+                daily = today_stats(session, self.settings, now)
+                if daily["published"] >= daily["limit"]:
+                    process = False
+                    stop_reason = "daily_publish_limit_reached"
+                elif not process:
+                    stop_reason = "processing_disabled"
                 retry_due = Candidate.updated_at <= now - timedelta(hours=6)
                 llm_ready = bool((self.classifier and self.settings.ai_key) or
                                  (self.llm_service and self.llm_service.available))
@@ -260,8 +267,10 @@ class CatalogPipeline(Pipeline):
                                                order_by=(Candidate.updated_at, Candidate.url)).label("source_position"),
                         source_weight.label("source_weight"),
                         RegistrySource.priority.label("source_priority"),
+                        case((RegistrySource.country == "Uzbekistan", 1), else_=0).label("local_source"),
                     ).outerjoin(RegistrySource, Candidate.source_id == RegistrySource.id).where(query.whereclause).subquery()
                     urls = session.scalars(select(ranked.c.url).order_by(
+                        ranked.c.local_source.desc(),
                         ranked.c.source_position,
                         ranked.c.source_weight.desc(), ranked.c.source_priority.desc(), ranked.c.url,
                     ).limit(self.settings.max_candidates)).all()
@@ -271,12 +280,15 @@ class CatalogPipeline(Pipeline):
                 else:
                     rows = []
                 work = [(row.url, row.article or {}, row.source_id) for row in rows]
+                if process and not work:
+                    stop_reason = "queue_empty"
             for url, cached, source_id in work:
                 if (self.llm_service and self.llm_service.available and
                         not getattr(self.llm_service, "operational", True)):
                     counts["provider_circuit_open"] += 1
                     errors.append({"source": "llm", "stage": "classification",
                                    "code": "provider_circuit_open"})
+                    stop_reason = "ai_provider_limit"
                     break
                 raw_id = None
                 self.last_llm_analysis = None
@@ -363,7 +375,7 @@ class CatalogPipeline(Pipeline):
                         candidate.last_run_id = run_id
                         candidate.processing_version = 8
                         candidate.analysis_mode = result.analysis_method
-                        outcomes = save_catalog_result(session, article, result, now)
+                        outcomes = save_catalog_result(session, article, result, now, self.settings)
                         raw = session.get(RawDiscovery, raw_id)
                         record_transition(raw, "processed" if candidate.status == "published" else
                                           "rejected" if candidate.status == "rejected" else "review_required",
@@ -383,8 +395,16 @@ class CatalogPipeline(Pipeline):
                     for key, value in outcomes.items():
                         counts[key] += value
                         source_bucket[key] += value
+                    with self.factory() as session:
+                        daily = today_stats(session, self.settings)
+                    if daily["published"] >= daily["limit"]:
+                        stop_reason = "daily_publish_limit_reached"
+                        break
                     if self.last_llm_analysis and self.settings.llm_batch_delay_seconds:
                         sleep(self.settings.llm_batch_delay_seconds)
+                except DailyLimitReached as exc:
+                    stop_reason = exc.reason
+                    break
                 except FetchError as exc:
                     with self.factory.begin() as session:
                         candidate = session.get(Candidate, url)
@@ -409,8 +429,10 @@ class CatalogPipeline(Pipeline):
                             record_transition(session.get(RawDiscovery, raw_id), "review_required", reason, when=now)
                     counts["review_required"] += 1
                     source_bucket["review_required"] += 1
-            if reanalyze:
+            if reanalyze and stop_reason != "daily_publish_limit_reached":
                 self._enrich(now, counts, errors)
+            if not stop_reason:
+                stop_reason = "source_error" if source_errors else "batch_budget_reached" if work else "queue_empty"
             status = "partial" if errors else "completed"
         except Exception:
             status = "failed"
@@ -428,6 +450,10 @@ class CatalogPipeline(Pipeline):
                                "limits": {"max_candidates": self.settings.max_candidates,
                                           "archive_pages": self.settings.archive_pages},
                                "source_yield": {key: dict(value) for key, value in yield_by_source.items()},
+                               "stop_reason": stop_reason,
+                               "processed": counts["candidates"],
+                               "published": counts["auto_published"],
+                               "daily_publication": today_stats(session, self.settings),
                                "llm_providers": self.llm_service.status() if self.llm_service else [],
                                "remaining_queue": session.scalar(select(func.count()).select_from(Candidate).where(Candidate.status.in_(["queued", "pending", "review_required"])))}
                 report_details = run.details

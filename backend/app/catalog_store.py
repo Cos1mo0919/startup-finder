@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from hashlib import sha256
+from urllib.parse import urlsplit
 
 from sqlalchemy import select
 
@@ -22,7 +23,17 @@ def _description(entry: CatalogEntry, method: str) -> str:
     return entry.description_uz.strip()
 
 
-def save_catalog_result(session, article, result: CatalogResult, when=None) -> dict:
+def _primary_url(entry: CatalogEntry, article_url: str) -> str | None:
+    """Directory redirects and the discovery page are sources, not official sites."""
+    url = entry.official_url
+    if not url:
+        return None
+    if urlsplit(url).hostname == urlsplit(article_url).hostname:
+        return None
+    return url
+
+
+def save_catalog_result(session, article, result: CatalogResult, when=None, settings=None) -> dict:
     when = when or now_utc()
     url = canonical_url(article.url)
     candidate = session.get(Candidate, url)
@@ -116,7 +127,7 @@ def save_catalog_result(session, article, result: CatalogResult, when=None) -> d
             project = Project(
                 name=entry.name, normalized_project_name=normalize(entry.name),
                 creator=entry.creator or "", organization="", country=entry.country or "",
-                city="", event="", main_url=entry.official_url,
+                city="", event="", main_url=_primary_url(entry, url),
                 fingerprint=sha256(f"{normalize(entry.name)}|{normalize(entry.creator or '')}|{normalize(entry.country or '')}".encode()).hexdigest(),
                 aliases=entry.aliases, first_seen=when, last_seen=when,
                 published_at=article.published_at or when, category="other", audience="unknown",
@@ -139,8 +150,8 @@ def save_catalog_result(session, article, result: CatalogResult, when=None) -> d
             project.creator = entry.creator
         if not project.country and entry.country:
             project.country = entry.country
-        if not project.main_url and entry.official_url:
-            project.main_url = entry.official_url
+        if not project.main_url and _primary_url(entry, url):
+            project.main_url = _primary_url(entry, url)
         if not project.short_description or (result.analysis_method == "llm" and project.analysis_method == "deterministic"):
             project.short_description = description
             project.content = {**(project.content or {}), "summary_uz": description, "what_uz": description,
@@ -187,6 +198,10 @@ def save_catalog_result(session, article, result: CatalogResult, when=None) -> d
                 notes="Stored source excerpt used for catalog publication"))
         if article.image_url and not any(i.get("url") == article.image_url for i in project.images):
             project.images = [*project.images, {"url": article.image_url, "source_url": url, "publisher": article.publisher}][:5]
+        if state == "AUTO_PUBLISHED" and previous_status != "PUBLISHED" and settings is not None:
+            from .daily import reserve_publication
+            from .geography import project_scope
+            reserve_publication(session, settings, project_scope(project), when, current_url=url)
         candidate.project_ids = list(dict.fromkeys([*(candidate.project_ids or []), project.id]))
         candidate.reason = reason
         counts["auto_published" if state == "AUTO_PUBLISHED" and previous_status != "PUBLISHED" else "review_required" if state == "REVIEW_REQUIRED" else "duplicates"] += 1

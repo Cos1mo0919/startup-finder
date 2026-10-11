@@ -65,7 +65,7 @@ def refresh_publication(project: Project) -> str:
     return project.publication_status
 
 
-def synchronize_candidate_publication(factory) -> None:
+def synchronize_candidate_publication(factory, settings=None) -> None:
     """Reconcile candidate labels with the canonical public project state.
 
     A historical candidate is upgraded from IGNORE only when a real, published
@@ -122,6 +122,13 @@ def synchronize_candidate_publication(factory) -> None:
                     and bool(project.creator or project.organization) and bool((project.content or {}).get("facts"))
                     and project.confidence >= 5)
                 if catalog_validated or historical_validated:
+                    if settings is not None:
+                        from .daily import DailyLimitReached, reserve_publication
+                        from .geography import project_scope
+                        try:
+                            reserve_publication(session, settings, project_scope(project))
+                        except DailyLimitReached:
+                            continue
                     project.publication_status = "PUBLISHED"
                     project.publication_reason = "recovered_from_legacy_problem_gate"
                     project.status_history = history(project.status_history, "PUBLISHED", "reconciliation",

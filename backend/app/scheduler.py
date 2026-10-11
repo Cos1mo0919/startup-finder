@@ -1,6 +1,7 @@
 """Continuous source checks plus durable reconciliation and deep-scan checkpoints."""
 
 from datetime import timedelta
+from zoneinfo import ZoneInfo
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from sqlalchemy import select
@@ -23,6 +24,11 @@ def run_once(settings, factory, archive=False):
 
 
 def drain_once(settings, factory):
+    from .daily import today_stats
+    with factory() as session:
+        today = today_stats(session, settings)
+    if today["published"] >= today["limit"]:
+        return {"status": "daily_limit_reached", "daily_publication": today}
     pipeline = CatalogPipeline(settings, factory)
     try:
         return pipeline.run(discover=False, reanalyze=False)
@@ -104,9 +110,13 @@ def reconcile_due(settings, factory):
 
 
 def make_scheduler(settings, factory):
-    scheduler = BackgroundScheduler(timezone=TASHKENT)
+    timezone = ZoneInfo(settings.scheduler_timezone)
+    scheduler = BackgroundScheduler(timezone=timezone)
     scheduler.add_job(run_once, hourly_trigger(), args=[settings, factory], id="discovery",
                       max_instances=1, coalesce=True, misfire_grace_time=300)
+    scheduler.add_job(drain_once, CronTrigger(hour=settings.scheduler_hour, minute=0,
+                      timezone=timezone), args=[settings, factory], id="daily_processing",
+                      max_instances=1, coalesce=True, misfire_grace_time=3600)
     scheduler.add_job(drain_once, "interval", minutes=15, args=[settings, factory],
                       id="raw_processing", max_instances=1, coalesce=True)
     scheduler.add_job(reanalyze_once, "interval", hours=6, args=[settings, factory],

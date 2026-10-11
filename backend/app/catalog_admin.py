@@ -6,7 +6,8 @@ from .catalog_store import history
 from .db import Candidate, Project, now_utc
 
 
-def catalog_action(session, project_id: str, action: str, reason: str = "", target_id: str = "") -> dict:
+def catalog_action(session, project_id: str, action: str, reason: str = "", target_id: str = "",
+                   settings=None) -> dict:
     project = session.get(Project, project_id)
     if project is None:
         raise ValueError("project_not_found")
@@ -15,6 +16,10 @@ def catalog_action(session, project_id: str, action: str, reason: str = "", targ
     if action == "PUBLISH":
         if not project.name or not project.short_description or not project.sources:
             raise ValueError("publication_fields_missing")
+        if project.publication_status != "PUBLISHED" and settings is not None:
+            from .daily import reserve_publication
+            from .geography import project_scope
+            reserve_publication(session, settings, project_scope(project), when)
         project.publication_status = "PUBLISHED"
         project.visible = True
         project.publication_reason = reason or "admin_verified"

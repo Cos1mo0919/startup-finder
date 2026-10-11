@@ -1,4 +1,23 @@
-# Stage 1 — Uzbekistan
+# izlanish architecture — Uzbekistan, Global and GitHub
+
+## Daily publication and catalog sections (2026-10-11)
+
+`daily_stats` counts first transitions into canonical `Project.publication_status=PUBLISHED`
+per Asia/Tashkent day. The catalog store, admin publish action and legacy
+reconciliation reserve the slot within their database transaction. The pipeline
+lease serializes normal workers; the SQL update enforces the total cap even if
+another writer tries to publish. Source discovery and raw ingestion continue
+when processing reaches the cap. Run details persist the stop reason and queue
+remainder. A stable `database_identity` UUID distinguishes independent SQLite
+copies, including a Codespace and a cloud checkout.
+
+`project_scope` assigns exactly one catalog section from source provenance:
+GitHub, Uzbekistan, Global. It does not modify `Project.country`. Home counters
+and catalog filters call the same rule. The source registry retains disabled
+seeds for blocked/JS-only sources; only verified adapters are activated.
+GitHub repository search uses a fixed public API endpoint and optional
+`GITHUB_TOKEN`; discovered repository pages enter the ordinary raw/candidate
+pipeline and still require evidence-based classification.
 
 ## Canonical catalog publication (current)
 

@@ -25,7 +25,7 @@ export function Home() {
   return <main className="page catalog-page">
     <div className="catalog-heading"><h1>Loyihalar</h1><p>Mahsulotlar, startaplar va prototiplar — qisqa tavsif va asl manbalar bilan.</p></div>
     <div className="catalog-controls">
-      <div className="intel-tabs" aria-label="Loyihalar hududi">{[["","Barchasi"],["Uzbekistan","O‘zbekiston"],["global","Global"]].map(([value,label])=><button key={value} className={country===value?"selected":""} onClick={()=>change("country",value)}>{label}</button>)}</div>
+      <div className="intel-tabs" aria-label="Loyihalar hududi">{[["","Barchasi"],["Uzbekistan","O‘zbekiston"],["global","Global"],["github","GitHub"]].map(([value,label])=><button key={value} className={country===value?"selected":""} onClick={()=>change("country",value)}>{label}</button>)}</div>
       <form className="catalog-search" role="search" onSubmit={event=>{event.preventDefault();change("q",query.trim())}}><Search size={18}/><input aria-label="Loyiha nomini qidirish" value={query} onChange={event=>setQuery(event.target.value)} placeholder="Loyiha nomi"/><button type="submit">Qidirish</button></form>
     </div>
     <div className="catalog-count">{results.data?.total ?? 0} ta loyiha</div>

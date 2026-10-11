@@ -6,7 +6,7 @@ from pathlib import Path
 from .config import Settings
 from .db import make_db
 from .catalog_pipeline import CatalogPipeline
-from .registry import seed_registry
+from .registry import seed_registry, activate_validated_sources
 from .db import RegistrySource, SourceBlock
 from .evidence import audit_existing
 from .radar_api import source_json
@@ -54,6 +54,10 @@ def main():
         help="Explicitly apply seed configuration changes, preserving health",
     )
     parser.add_argument("--list-sources", action="store_true")
+    parser.add_argument("--db-stats", action="store_true",
+                        help="Show non-secret database identity and project counts for deployment comparison")
+    parser.add_argument("--activate-validated-sources", action="store_true",
+                        help="Enable only verified dormant source adapters without resetting operator settings")
     parser.add_argument("--reanalyze-problems", action="store_true", help="Recheck stored projects against cached source quotes")
     parser.add_argument("--reclassify-candidates", action="store_true", help="Queue a bounded batch of rejected candidates for the current classifier")
     parser.add_argument("--reclassify-url", help="Reprocess one stored candidate URL with current rules, without fetching sources")
@@ -91,6 +95,30 @@ def main():
     settings = Settings()
     engine, factory = make_db(settings.database_url)
     try:
+        if args.db_stats:
+            from sqlalchemy import func
+            from sqlalchemy.engine import make_url
+            from .db import Candidate, DatabaseIdentity, Project, RawDiscovery
+            from .daily import publication_summary
+            url = make_url(settings.database_url)
+            with factory() as session:
+                output = {"database_driver": url.drivername,
+                    "database_path": url.database if url.drivername.startswith("sqlite") else None,
+                    "database_instance_id": session.get(DatabaseIdentity, "primary").instance_uuid,
+                    "projects_total": session.scalar(select(func.count()).select_from(Project)),
+                    "projects_published": session.scalar(select(func.count()).select_from(Project).where(
+                        Project.publication_status == "PUBLISHED")),
+                    "raw_pending": session.scalar(select(func.count()).select_from(RawDiscovery).where(
+                        RawDiscovery.status == "pending")),
+                    "candidates_queued": session.scalar(select(func.count()).select_from(Candidate).where(
+                        Candidate.status == "queued")),
+                    "daily_publication": publication_summary(session, settings)}
+            print(json.dumps(output, ensure_ascii=False, indent=2))
+            return 0
+        if args.activate_validated_sources:
+            print(json.dumps({"activated": activate_validated_sources(factory, settings.sources_file)},
+                             ensure_ascii=False, indent=2))
+            return 0
         if args.recheck_noise:
             from .raw_discovery import recheck_obvious_noise
             result = recheck_obvious_noise(factory, limit=max(500, settings.max_candidates))

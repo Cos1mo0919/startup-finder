@@ -397,6 +397,7 @@ def test_unknown_country_show_hn_project_appears_in_global_catalog(settings, fac
     from backend.app.main import create_app
 
     item = article()
+    item.url = "https://example.com/product"
     entry = CatalogEntry(name="KotibAI", confidence=0.9, country=None,
                          description_uz="KotibAI o‘zbek tilidagi ovozli xabarlarni matnga o‘giradi va murakkab biznes jarayonlarini avtomatlashtirish imkonini beradi")
     with factory.begin() as session:
@@ -413,25 +414,44 @@ def test_unknown_country_show_hn_project_appears_in_global_catalog(settings, fac
         assert client.get("/api/projects?country=Uzbekistan").json()["total"] == 0
 
 
-def test_scope_hint_never_overrides_explicit_project_country():
+def test_catalog_section_follows_source_before_country():
     from types import SimpleNamespace
     from backend.app.geography import project_scope
 
     source = SimpleNamespace(source_id="show-hn-rss", url="https://news.ycombinator.com/item?id=1")
     project = SimpleNamespace(country="Uzbekistan", sources=[source], discovery_source_url=source.url)
-    assert project_scope(project) == "Uzbekistan"
+    assert project_scope(project) == "Global"
     project.country = ""
     assert project_scope(project) == "Global"
     project.sources = [SimpleNamespace(source_id="uzhunt", url="https://uzhunt.uz/p/example")]
     assert project_scope(project) == "Uzbekistan"
     project.sources = [SimpleNamespace(source_id=None, url="https://github.com/example/product")]
     project.discovery_source_url = ""
-    assert project_scope(project) == "Unknown"
+    assert project_scope(project) == "GitHub"
     project.sources = [SimpleNamespace(source_id="spot-uz", url="https://www.spot.uz/oz/story")]
     project.main_url = "https://www.flowtica.ai/products/flowtica-scribe"
-    assert project_scope(project) == "Global"
+    assert project_scope(project) == "Uzbekistan"
     project.country = "Uzbekistan"
     assert project_scope(project) == "Uzbekistan"
+
+
+def test_github_project_is_exclusive_public_section(settings, factory):
+    from fastapi.testclient import TestClient
+    from backend.app.main import create_app
+
+    item = article()
+    item.url = "https://github.com/example/voice-tool"
+    entry = CatalogEntry(name="Voice Tool", confidence=0.9, country="Uzbekistan",
+        description_uz="Voice Tool o‘zbekcha ovozli xabarlarni matnga aylantirib ish jarayonlarini tezlashtiradi")
+    with factory.begin() as session:
+        save_catalog_result(session, item, CatalogResult("PROJECT", 0.9, (entry,)))
+    with TestClient(create_app(settings)) as client:
+        home = client.get("/api/catalog/home").json()
+        assert (home["total"], home["uzbekistan_total"], home["global_total"], home["github_total"]) == (1, 0, 0, 1)
+        assert client.get("/api/projects?country=github").json()["total"] == 1
+        assert client.get("/api/projects?country=Uzbekistan").json()["total"] == 0
+        admin = client.get("/api/admin/status", headers={"X-Admin-Key": "test-admin-key"}).json()
+        assert admin["public_sections"] == {"Uzbekistan": 0, "Global": 0, "GitHub": 1}
 
 
 def test_bad_source_images_use_fallback():

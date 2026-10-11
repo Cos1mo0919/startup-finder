@@ -1,8 +1,11 @@
 """Versioned, idempotent initial→radar migration. DDL is fixed, never user input."""
 
 import sqlite3
+import json
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import urlsplit
+from zoneinfo import ZoneInfo
 from sqlalchemy import inspect, text
 
 ADDITIONS = {
@@ -186,4 +189,38 @@ def migrate(engine, metadata):
                          {"at": datetime.now(timezone.utc).isoformat()})
         if conn.scalar(text("SELECT version FROM schema_migrations WHERE version=9")) is None:
             conn.execute(text("INSERT INTO schema_migrations(version,applied_at) VALUES(9,:at)"),
+                         {"at": datetime.now(timezone.utc).isoformat()})
+        if conn.scalar(text("SELECT version FROM schema_migrations WHERE version=10")) is None:
+            # Backfill only publication transitions that are supported by saved
+            # history. First-seen is a conservative fallback for legacy cards.
+            totals = {}
+            for row in conn.execute(text("SELECT id,country,first_seen,status_history,publication_status "
+                                         "FROM projects")):
+                history = json.loads(row.status_history) if isinstance(row.status_history, str) else row.status_history or []
+                published = [item.get("timestamp") for item in history
+                             if item.get("value") in ("PUBLISHED", "AUTO_PUBLISHED") and item.get("timestamp")]
+                moment = published[0] if published else row.first_seen if row.publication_status == "PUBLISHED" else None
+                if not moment:
+                    continue
+                try:
+                    parsed = datetime.fromisoformat(str(moment).replace("Z", "+00:00"))
+                    if parsed.tzinfo is None:
+                        parsed = parsed.replace(tzinfo=timezone.utc)
+                    day = parsed.astimezone(ZoneInfo("Asia/Tashkent")).date().isoformat()
+                except ValueError:
+                    continue
+                urls = [value for (value,) in conn.execute(text(
+                    "SELECT url FROM project_sources WHERE project_id=:id"), {"id": row.id})]
+                hosts = {(urlsplit(url).hostname or "").lower() for url in urls}
+                section = ("github" if "github.com" in hosts else "uzbekistan"
+                           if any(host.endswith(".uz") for host in hosts) or row.country == "Uzbekistan"
+                           else "global")
+                item = totals.setdefault(day, {"published": 0, "uzbekistan": 0, "global": 0, "github": 0})
+                item["published"] += 1
+                item[section] += 1
+            for day, values in totals.items():
+                conn.execute(text("INSERT INTO daily_stats "
+                    "(day,published_count,uzbekistan_count,global_count,github_count) "
+                    "VALUES (:day,:published,:uzbekistan,:global,:github)"), {"day": day, **values})
+            conn.execute(text("INSERT INTO schema_migrations(version,applied_at) VALUES(10,:at)"),
                          {"at": datetime.now(timezone.utc).isoformat()})

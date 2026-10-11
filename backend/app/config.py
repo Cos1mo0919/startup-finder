@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Literal
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -36,6 +37,11 @@ class Settings(BaseSettings):
     admin_api_key: SecretStr = SecretStr("")
     trusted_egress_proxy: bool = False
     scheduler_enabled: bool = True
+    daily_publish_limit: int = Field(default=100, ge=1, le=100)
+    daily_uz_limit: int = Field(default=30, ge=0, le=100)
+    scheduler_hour: int = Field(default=9, ge=0, le=23)
+    scheduler_timezone: Literal["Asia/Tashkent"] = "Asia/Tashkent"
+    github_token: SecretStr = SecretStr("")
     evidence_min_score: float = Field(default=5.0, ge=0, le=10)
     archive_pages: int = Field(default=20, ge=1, le=600)
     search_queries_per_source: int = Field(default=3, ge=1, le=30)

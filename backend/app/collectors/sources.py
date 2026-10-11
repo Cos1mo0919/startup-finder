@@ -125,11 +125,11 @@ class Discovery:
                     result.project_name, result.project_description = structured_project_fields(raw, source.options)
             return result
 
-    def page_links(self, url, pattern="", match_text=False):
+    def page_links(self, url, pattern="", match_text=False, selector="a[href]"):
         raw, final = self.web.get(url)
         soup = BeautifulSoup(raw, "html.parser")
         links = []
-        for anchor in soup.select("a[href]")[:2000]:
+        for anchor in soup.select(selector)[:2000]:
             try:
                 link = safe_url(urljoin(final, anchor["href"].strip()))
                 if urlsplit(link).hostname != urlsplit(final).hostname or canonical_url(
@@ -185,7 +185,10 @@ class Discovery:
                 return [{"url": source.url, "published_at": None}]
             if not source.options.get("link_pattern"):
                 raise FetchError("source_requires_configuration")
-            return self.page_links(source.url, source.options["link_pattern"])
+            return self.page_links(source.url, source.options["link_pattern"],
+                                   selector=source.options.get("link_selector", "a[href]"))
+        if method == "github_search":
+            return self.github_search(source)
         if method == "search":
             if isinstance(self.search, NoSearch):
                 raise FetchError("requires_api_key")
@@ -208,6 +211,44 @@ class Discovery:
             return list({i["url"]: i for i in found}.values())
 
         raise FetchError("source_requires_configuration")
+
+    def github_search(self, source):
+        """Use GitHub's public repository search with its own optional credential."""
+        import httpx
+        from urllib.parse import urlencode
+        from ..network import public_dns
+
+        queries = source.options.get("queries") or [
+            "Uzbekistan startup in:name,description,readme",
+            "Tashkent project in:name,description,readme",
+            "startup launch in:name,description,readme",
+        ]
+        token = self.settings.github_token.get_secret_value()
+        headers = {"User-Agent": self.settings.user_agent,
+                   "Accept": "application/vnd.github+json"}
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+        public_dns("https://api.github.com/")
+        found = {}
+        try:
+            with httpx.Client(timeout=self.settings.fetch_timeout, headers=headers) as client:
+                for query in queries[:3]:
+                    url = "https://api.github.com/search/repositories?" + urlencode(
+                        {"q": query, "sort": "updated", "order": "desc", "per_page": 30})
+                    response = client.get(url)
+                    if response.status_code in (403, 429):
+                        raise FetchError("github_rate_limited")
+                    if response.status_code != 200:
+                        raise FetchError(f"http_{response.status_code}")
+                    for item in response.json().get("items", []):
+                        if item.get("html_url") and item.get("description"):
+                            found[item["html_url"]] = {"url": item["html_url"],
+                                "title": item.get("full_name", ""),
+                                "description": item["description"][:500],
+                                "published_at": None}
+        except (httpx.HTTPError, ValueError, TypeError, KeyError) as exc:
+            raise FetchError("github_network_unavailable") from exc
+        return list(found.values())
 
     def discover(self, now, archive=False):
         self.clock = now

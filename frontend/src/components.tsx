@@ -16,6 +16,7 @@ export function cardExcerpt(value: string, maxWords = 20): string {
   return words.length > maxWords ? `${words.slice(0, maxWords).join(" ")}…` : words.join(" ");
 }
 export function projectGeographyLabel(project: Project): string {
+  if (project.scope === "GitHub") return "GitHub";
   if (project.country === "Uzbekistan" || project.scope === "Uzbekistan") return "O‘zbekiston";
   return project.country || (project.scope === "Global" ? "Global" : "Davlat noma’lum");
 }

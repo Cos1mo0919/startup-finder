@@ -1,4 +1,4 @@
-"""Public catalog geography; source provenance is a scope hint, not a country fact."""
+"""Exclusive catalog sections based on provenance; never infer a country fact."""
 
 from urllib.parse import urlsplit
 
@@ -13,35 +13,27 @@ GLOBAL_SOURCE_IDS = {
 }
 LOCAL_HOSTS = {"uzhunt.uz", "spot.uz", "it-park.uz", "ictweek.uz"}
 GLOBAL_HOSTS = {"news.ycombinator.com", "hnrss.org", "producthunt.com", "ycombinator.com"}
-# Exact official domains verified during source review. A local news article
-# about these international products does not establish a local origin.
-GLOBAL_PRIMARY_HOSTS = {"flowtica.ai", "virtualaccelerate.com"}
+LOCAL_SOURCE_IDS.update({"startupbase", "startup-ilmiy", "loyiha-ilmiy", "debocha"})
+GLOBAL_SOURCE_IDS.update({"microlaunch", "uneed"})
+LOCAL_HOSTS.update({"startupbase.uz", "stanbase.uz", "startup.ilmiy.uz", "loyiha.ilmiy.uz", "debocha.uz"})
+GLOBAL_HOSTS.update({"betalist.com", "indiehackers.com", "microlaunch.net", "uneed.best"})
+
+
+def _host(url):
+    return ((urlsplit(url).hostname or "").lower().removeprefix("www.") if url else "")
 
 
 def project_scope(project) -> str:
-    """Return Uzbekistan, Global or Unknown without inventing a project's country."""
-    country = (project.country or "").strip().casefold()
-    if country in {"uzbekistan", "o‘zbekiston", "узбекистан"}:
-        return "Uzbekistan"
-    if country:
-        return "Global"
-
-    primary_host = ((urlsplit(project.main_url).hostname or "").lower().removeprefix("www.")
-                    if getattr(project, "main_url", None) else "")
-    if primary_host in GLOBAL_PRIMARY_HOSTS:
-        return "Global"
-
+    """Return exactly one section: GitHub, Uzbekistan or Global."""
     sources = project.sources or []
-    ids = {source.source_id for source in sources}
-    if ids & LOCAL_SOURCE_IDS:
-        return "Uzbekistan"
-    if ids & GLOBAL_SOURCE_IDS:
-        return "Global"
     urls = [project.discovery_source_url, *(source.url for source in sources)]
-    for url in urls:
-        host = (urlsplit(url).hostname or "").lower() if url else ""
-        if host in LOCAL_HOSTS or host.endswith(".uz"):
-            return "Uzbekistan"
-        if host in GLOBAL_HOSTS:
-            return "Global"
-    return "Unknown"
+    hosts = {_host(url) for url in urls}
+    if any(host == "github.com" or host.endswith(".github.com") for host in hosts):
+        return "GitHub"
+    ids = {source.source_id for source in sources}
+    if ids & LOCAL_SOURCE_IDS or any(host in LOCAL_HOSTS or host.endswith(".uz") for host in hosts):
+        return "Uzbekistan"
+    if ids & GLOBAL_SOURCE_IDS or any(host in GLOBAL_HOSTS for host in hosts):
+        return "Global"
+    country = (project.country or "").strip().casefold()
+    return "Uzbekistan" if country in {"uzbekistan", "o‘zbekiston", "узбекистан"} else "Global"
