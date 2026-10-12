@@ -47,7 +47,7 @@ def test_raw_is_committed_before_provider_and_project_publishes_without_deep_sco
         assert project.publication_status == "PUBLISHED" and project.opportunity_score is None
         assert raw.status == "processed" and raw.canonical_project_id == project.id
         assert raw.llm_provider == "gemini" and raw.llm_attempt_count == 1
-        assert raw.classifier_prompt_version == "catalog_classifier_v2"
+        assert raw.classifier_prompt_version == "catalog_classifier_v3"
     pipeline.close()
 
 

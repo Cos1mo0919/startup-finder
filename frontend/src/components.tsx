@@ -16,6 +16,7 @@ export function cardExcerpt(value: string, maxWords = 20): string {
   return words.length > maxWords ? `${words.slice(0, maxWords).join(" ")}…` : words.join(" ");
 }
 export function projectGeographyLabel(project: Project): string {
+  if (project.scope === "Boshqa") return "Boshqa";
   if (project.scope === "GitHub") return "GitHub";
   if (project.country === "Uzbekistan" || project.scope === "Uzbekistan") return "O‘zbekiston";
   return project.country || (project.scope === "Global" ? "Global" : "Davlat noma’lum");
@@ -57,6 +58,7 @@ export function Header() {
             <span className="flag">●</span> Bosh sahifa
           </NavLink>
           <NavLink to="/loyihalar">Loyihalar</NavLink>
+          <NavLink to="/boshqa">Boshqa</NavLink>
           <NavLink to="/arxiv">Arxiv</NavLink>
           <NavLink to="/manbalar">Manbalar</NavLink>
         </nav>
@@ -132,6 +134,7 @@ export function Card({
             <ArrowUpRight size={20} />
           </Link>
           <p className="summary">{cardExcerpt(p.short_description || p.summary_uz)}</p>
+          {p.scope === "Boshqa" && <p className="card-section-note"><strong>AI aniqlay olmadi.</strong> {p.section_reason}</p>}
           {p.problem_statement && <p className="card-problem"><strong>Qanday muammoni hal qiladi?</strong> {cardExcerpt(p.problem_statement, 24)}</p>}
           <p className="card-evidence">{p.catalog_score === null || p.score_pending ? "Baholanmagan" : `${p.catalog_score.toFixed(1)} / 10`} · {p.source_count} ta manba</p>
         </div>

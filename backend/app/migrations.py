@@ -30,6 +30,8 @@ ADDITIONS = {
         "opportunity_details": "JSON NOT NULL DEFAULT '{}'",
         "publication_status": "VARCHAR(30) NOT NULL DEFAULT 'DISCOVERED'",
         "publication_reason": "VARCHAR(100) NOT NULL DEFAULT ''",
+        "catalog_section_override": "VARCHAR(30) NOT NULL DEFAULT ''",
+        "catalog_section_reason": "VARCHAR(200) NOT NULL DEFAULT ''",
         "secondary_problems": "JSON NOT NULL DEFAULT '[]'",
         "discovery_source_url": "TEXT",
         "analysis_method": "VARCHAR(20) NOT NULL DEFAULT 'legacy'",
@@ -58,6 +60,7 @@ ADDITIONS = {
         "reanalysis_next_at": "DATETIME",
     },
     "project_sources": {"source_id": "VARCHAR(80) REFERENCES sources(id)"},
+    "daily_stats": {"boshqa_count": "INTEGER NOT NULL DEFAULT 0"},
     "runs": {"details": "JSON NOT NULL DEFAULT '{}'"},
     "candidates": {
         "origin": "VARCHAR(40) NOT NULL DEFAULT 'other'",

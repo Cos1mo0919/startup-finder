@@ -24,7 +24,7 @@ from .intelligence_api import dashboard, idea_json, problem_json, sector_intelli
 from .signal_quality import audit_signals
 from .publication import lifecycle_stage, synchronize_candidate_publication
 from .catalog_ranking import rank as catalog_rank
-from .geography import project_scope
+from .geography import project_scope, section_reason
 from .daily import publication_summary
 
 
@@ -69,6 +69,7 @@ def serialize_project(project, detail=False):
     }
     result.update(
         scope=project_scope(project),
+        section_reason=section_reason(project),
         summary_uz=content.get("summary_uz", ""),
         short_description=project.short_description or content.get("summary_uz", ""),
         catalog_score=project.catalog_score,
@@ -197,6 +198,7 @@ def create_app(settings=None):
         q: str = Query(default="", max_length=200),
         category: str = "",
         country: str = "",
+        archive: bool = False,
         city: str = "",
         audience: Literal["", "individual", "business", "both", "unknown"] = "",
         period: Literal["all", "today", "7d", "30d"] = "all",
@@ -231,7 +233,7 @@ def create_app(settings=None):
                     cast(Project.sectors, String).contains('"' + sector + '"', autoescape=True),
                 )
             )
-        scope_filter = country in {"global", "Uzbekistan", "github"}
+        scope_filter = country in {"global", "Uzbekistan", "github", "boshqa"}
         if country and not scope_filter:
             query = query.where(Project.country == country)
         if city:
@@ -251,6 +253,9 @@ def create_app(settings=None):
         if min_evidence:
             query = query.where(Project.confidence >= min_evidence)
         now = now_utc()
+        if archive:
+            # Archive is a date view, never a holding area for uncertain classification.
+            query = query.where(Project.published_at < today_start(now) - timedelta(days=2))
         if period == "today":
             query = query.where(Project.published_at >= today_start(now), Project.date_estimated.is_(False))
         elif period in ("7d", "30d"):
@@ -258,8 +263,8 @@ def create_app(settings=None):
                                 Project.date_estimated.is_(False))
         if year:
             query = query.where(
-                Project.published_at >= datetime(year, 1, 1, tzinfo=timezone.utc),
-                Project.published_at < datetime(year + 1, 1, 1, tzinfo=timezone.utc),
+                Project.published_at >= datetime(year, 1, 1, tzinfo=TASHKENT).astimezone(timezone.utc),
+                Project.published_at < datetime(year + 1, 1, 1, tzinfo=TASHKENT).astimezone(timezone.utc),
             )
         order = {
             "date": Project.published_at,
@@ -273,7 +278,7 @@ def create_app(settings=None):
             if sort == "catalog" or scope_filter:
                 all_items = session.scalars(query).all()
                 if scope_filter:
-                    wanted = {"global": "Global", "github": "GitHub", "Uzbekistan": "Uzbekistan"}[country]
+                    wanted = {"global": "Global", "github": "GitHub", "Uzbekistan": "Uzbekistan", "boshqa": "Boshqa"}[country]
                     all_items = [project for project in all_items if project_scope(project) == wanted]
                     total = len(all_items)
             if sort == "catalog":
@@ -299,12 +304,27 @@ def create_app(settings=None):
     def catalog_home():
         with factory() as session:
             all_items = session.scalars(select(Project).where(Project.publication_status == "PUBLISHED")).all()
-            ordered = sorted(all_items, key=lambda project: (
-                catalog_rank(project, neutral=settings.catalog_neutral_rank),
-                aware(project.published_at)), reverse=True)
+            now = now_utc()
+            today = today_start(now)
+            eligible = [project for project in all_items if not project.date_estimated and
+                        aware(project.published_at) < today + timedelta(days=1)]
+            fresh_period = "empty"
+            fresh = []
+            for label, start in (("today", today), ("yesterday", today - timedelta(days=1)),
+                                 ("three_days", today - timedelta(days=2))):
+                previous = today if label == "yesterday" else None
+                fresh = [project for project in eligible if aware(project.published_at) >= start and
+                         (previous is None or aware(project.published_at) < previous)]
+                if fresh:
+                    fresh_period = label
+                    break
+            ordered = sorted(fresh, key=lambda project: (aware(project.published_at), project.id), reverse=True)
             local = [project for project in ordered if project_scope(project) == "Uzbekistan"]
             global_items = [project for project in ordered if project_scope(project) == "Global"]
             github_items = [project for project in ordered if project_scope(project) == "GitHub"]
+            sections = {section: 0 for section in ("Uzbekistan", "Global", "GitHub", "Boshqa")}
+            for project in all_items:
+                sections[project_scope(project)] += 1
             sectors = {}
             for project in all_items:
                 key = project.primary_sector or "Other"
@@ -315,9 +335,11 @@ def create_app(settings=None):
                     bucket["sum_score"] += project.catalog_score
             return {
                 "total": len(all_items),
-                "uzbekistan_total": len(local),
-                "global_total": len(global_items),
-                "github_total": len(github_items),
+                "uzbekistan_total": sections["Uzbekistan"],
+                "global_total": sections["Global"],
+                "github_total": sections["GitHub"],
+                "boshqa_total": sections["Boshqa"],
+                "fresh_period": fresh_period,
                 "top": [serialize_project(project) for project in ordered[:6]],
                 "uzbekistan": [serialize_project(project) for project in local[:4]],
                 "global": [serialize_project(project) for project in global_items[:4]],
@@ -327,6 +349,18 @@ def create_app(settings=None):
                              if value["scored"] else None}
                             for value in sorted(sectors.values(), key=lambda value: (-value["projects"], value["sector"]))],
             }
+
+    @app.get("/api/catalog/facets")
+    def catalog_facets():
+        with factory() as session:
+            items = session.scalars(select(Project).where(Project.publication_status == "PUBLISHED")).all()
+            sections = {section: 0 for section in ("Uzbekistan", "Global", "GitHub", "Boshqa")}
+            years = {}
+            for project in items:
+                sections[project_scope(project)] += 1
+                year = str(aware(project.published_at).astimezone(TASHKENT).year)
+                years[year] = years.get(year, 0) + 1
+            return {"total": len(items), "sections": sections, "years": years}
 
     @app.get("/api/projects/{project_id}")
     def project_detail(project_id: str):
@@ -389,7 +423,7 @@ def create_app(settings=None):
                     blocked_sources.append({"source_id": source_id, "at": iso(last.at), "reason": last.reason})
             provider_rows = {row.name: row for row in session.scalars(select(ProviderHealth))}
             daily_publication = publication_summary(session, settings)
-            public_sections = {"Uzbekistan": 0, "Global": 0, "GitHub": 0}
+            public_sections = {"Uzbekistan": 0, "Global": 0, "GitHub": 0, "Boshqa": 0}
             for project in session.scalars(select(Project).where(Project.publication_status == "PUBLISHED")):
                 public_sections[project_scope(project)] += 1
             provider_status = []
@@ -507,15 +541,39 @@ def create_app(settings=None):
                     "reanalysis_state": project.reanalysis_state}
 
     @app.get("/api/admin/catalog", dependencies=[Depends(require_admin)])
-    def admin_catalog(page: int = Query(1, ge=1), page_size: int = Query(30, ge=1, le=100)):
+    def admin_catalog(page: int = Query(1, ge=1), page_size: int = Query(30, ge=1, le=100),
+                      section: Literal["", "Boshqa"] = ""):
         with factory() as session:
             query = select(Project).order_by(Project.first_seen.desc())
-            total = session.scalar(select(func.count()).select_from(Project))
-            rows = session.scalars(query.offset((page - 1) * page_size).limit(page_size)).all()
+            if section:
+                matching = [project for project in session.scalars(query) if project_scope(project) == section]
+                total = len(matching)
+                rows = matching[(page - 1) * page_size:page * page_size]
+            else:
+                total = session.scalar(select(func.count()).select_from(Project))
+                rows = session.scalars(query.offset((page - 1) * page_size).limit(page_size)).all()
             return {"total": total, "items": [{"id": project.id, "name": project.name,
                     "status": project.publication_status, "reason": project.publication_reason,
                     "method": project.publication_method, "analysis_method": project.analysis_method,
+                    "scope": project_scope(project), "section_reason": section_reason(project),
                     "source_count": len(project.sources)} for project in rows]}
+
+    @app.post("/api/admin/projects/{project_id}/section", dependencies=[Depends(require_admin)])
+    def admin_project_section(project_id: str, section: Literal["Uzbekistan", "Global", "GitHub", "Boshqa"],
+                              reason: str = Query(min_length=3, max_length=200)):
+        from .catalog_store import history
+        with factory.begin() as session:
+            project = session.get(Project, project_id)
+            if project is None:
+                raise HTTPException(404, "Loyiha topilmadi")
+            if not reason.strip():
+                raise HTTPException(422, "Bo‘lim sababi kerak")
+            previous = project_scope(project)
+            project.catalog_section_override = section
+            project.catalog_section_reason = reason.strip()
+            project.attribute_history = history(project.attribute_history, section, "admin_section",
+                                                f"{previous}: {reason.strip()}", now_utc())
+            return {"id": project.id, "scope": project_scope(project), "reason": reason.strip()}
 
     @app.post("/api/admin/projects/{project_id}/action", dependencies=[Depends(require_admin)])
     def admin_project_action(project_id: str, action: Literal["PUBLISH", "HIDE", "REJECT", "MERGE"],

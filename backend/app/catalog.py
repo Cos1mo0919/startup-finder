@@ -30,7 +30,7 @@ PROJECT_TYPES = (
 )
 STAGES = ("idea", "prototype", "launched", "growing", "unknown")
 NEUTRAL_REASON = "insufficient evidence; neutral fallback"
-PROMPT_PATH = ROOT / "config/prompts/catalog_classifier_v2.txt"
+PROMPT_PATH = ROOT / "config/prompts/catalog_classifier_v3.txt"
 STOPWORDS = {
     "uz": {"va", "hamda", "uchun", "bilan", "bu", "bir", "shu", "yoki", "ning", "esa"},
     "ru": {"и", "для", "это", "на", "в", "с", "по", "как", "или", "из"},
@@ -197,6 +197,8 @@ def decision(result: CatalogResult, entry: CatalogEntry | None = None) -> tuple[
         return "REVIEW_REQUIRED", "low_confidence"
     if not entry or not entry.name or not entry.description_uz:
         return "REVIEW_REQUIRED", "name_unclear"
+    if entry.stage == "idea" and entry.scores and entry.scores.real_product <= 2:
+        return "REVIEW_REQUIRED", "future_plan_without_product_evidence"
     return "AUTO_PUBLISHED", "llm_verified_project"
 
 

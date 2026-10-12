@@ -1,6 +1,9 @@
 import json
+from datetime import date
+from types import SimpleNamespace
 
 from backend.app.collectors.sources import Discovery
+from backend.app.collectors.archive import archive_links
 from backend.app.db import RegistrySource, SourceBlock
 from backend.app.registry import activate_validated_sources, seed_registry
 
@@ -16,6 +19,16 @@ def test_directory_selector_keeps_only_repository_cards(settings):
     links = discovery.page_links("https://github.com/trending",
         "https://github[.]com/[^/?]+/[^/?]+$", selector="article.Box-row h2 a[href]")
     assert [item["url"] for item in links] == ["https://github.com/owner/tool"]
+
+
+def test_github_archive_passes_year_window_to_search(settings):
+    discovery = Discovery(settings, object())
+    window = (date(2025, 1, 1), date(2025, 12, 31))
+    observed = []
+    discovery.github_search = lambda source, found_window=None: observed.append(found_window) or []
+    source = SimpleNamespace(collection_method="github_search")
+    assert archive_links(discovery, source, window) == []
+    assert observed == [window]
 
 
 def test_explicit_source_activation_keeps_blocked_source_disabled(settings, factory, tmp_path):

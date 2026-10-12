@@ -23,6 +23,7 @@ function App() {
       <Routes>
         <Route path="/" element={<DashboardPage />} />
         <Route path="/loyihalar" element={<Home />} />
+        <Route path="/boshqa" element={<Home section="boshqa" />} />
         <Route path="/arxiv" element={<ArchivePage />} />
         <Route path="/loyiha/:id" element={<Detail />} />
         <Route path="/muammolar" element={<Navigate to="/admin" replace />} />

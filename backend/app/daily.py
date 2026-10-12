@@ -36,7 +36,8 @@ def today_stats(session, settings, when=None):
     return {"day": day, "published": row.published_count if row else 0,
             "uzbekistan": row.uzbekistan_count if row else 0,
             "global": row.global_count if row else 0,
-            "github": row.github_count if row else 0, "limit": settings.daily_publish_limit,
+            "github": row.github_count if row else 0,
+            "boshqa": row.boshqa_count if row else 0, "limit": settings.daily_publish_limit,
             "uzbekistan_target": min(settings.daily_uz_limit, settings.daily_publish_limit)}
 
 
@@ -56,7 +57,8 @@ def reserve_publication(session, settings, section: str, when=None, current_url=
     day = calendar_day(when or now_utc(), settings)
     _ensure_row(session, day)
     column = {"Uzbekistan": DailyStats.uzbekistan_count,
-              "Global": DailyStats.global_count, "GitHub": DailyStats.github_count}[section]
+              "Global": DailyStats.global_count, "GitHub": DailyStats.github_count,
+              "Boshqa": DailyStats.boshqa_count}[section]
     conditions = [DailyStats.day == day,
                   DailyStats.published_count < settings.daily_publish_limit]
     if section != "Uzbekistan":
@@ -68,7 +70,7 @@ def reserve_publication(session, settings, section: str, when=None, current_url=
             local_query = local_query.where(Candidate.url != current_url)
         local_queued = session.scalar(local_query) or 0
         if local_queued:
-            conditions.append(DailyStats.global_count + DailyStats.github_count <
+            conditions.append(DailyStats.global_count + DailyStats.github_count + DailyStats.boshqa_count <
                               settings.daily_publish_limit - min(settings.daily_uz_limit,
                                                                  settings.daily_publish_limit))
     changed = session.execute(update(DailyStats).where(*conditions).values(

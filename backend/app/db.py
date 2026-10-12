@@ -74,6 +74,8 @@ class Project(Base):
     opportunity_details: Mapped[dict] = mapped_column(JSON, default=dict)
     publication_status: Mapped[str] = mapped_column(String(30), default="DISCOVERED", index=True)
     publication_reason: Mapped[str] = mapped_column(String(100), default="")
+    catalog_section_override: Mapped[str] = mapped_column(String(30), default="")
+    catalog_section_reason: Mapped[str] = mapped_column(String(200), default="")
     secondary_problems: Mapped[list] = mapped_column(JSON, default=list)
     analysis_method: Mapped[str] = mapped_column(String(20), default="legacy", index=True)
     catalog_score: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -243,6 +245,7 @@ class DailyStats(Base):
     uzbekistan_count: Mapped[int] = mapped_column(Integer, default=0)
     global_count: Mapped[int] = mapped_column(Integer, default=0)
     github_count: Mapped[int] = mapped_column(Integer, default=0)
+    boshqa_count: Mapped[int] = mapped_column(Integer, default=0)
 
 
 class DatabaseIdentity(Base):

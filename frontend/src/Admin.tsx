@@ -7,21 +7,29 @@ import { ProblemsPage, ProblemDetailPage, IdeasPage, IdeaDetailPage, SignalsPage
 
 type ReviewItem = {url:string;title:string;source_id:string|null;status:string;reason:string;detector_result:string;canonical_project:string;creator:string;primary_problem:string;evidence:{url:string;type:string;quote:string}[];confidence:number|null;review_decision:string};
 type Yield = {source_id:string;name:string;enabled:boolean;items_fetched:number;candidate_records:number;project_candidates:number;verified_projects:number;published_projects:number;rejected_items:number;dominant_rejection_reasons:[string,number][]};
-type CatalogItem = {id:string;name:string;status:string;reason:string;method:string;analysis_method:string;source_count:number};
+type CatalogItem = {id:string;name:string;status:string;reason:string;method:string;analysis_method:string;scope:string;section_reason:string;source_count:number};
 
 function CatalogReview({adminKey}:{adminKey:string}) {
   const [refresh,setRefresh]=useState(0);
   const [message,setMessage]=useState("");
   const [reason,setReason]=useState("");
   const [target,setTarget]=useState("");
-  const {data,loading,error}=useApi<{total:number;items:CatalogItem[]}>("/api/admin/catalog",refresh,adminKey);
+  const [sections,setSections]=useState<Record<string,string>>({});
+  const [onlyBoshqa,setOnlyBoshqa]=useState(false);
+  const {data,loading,error}=useApi<{total:number;items:CatalogItem[]}>(onlyBoshqa?"/api/admin/catalog?section=Boshqa":"/api/admin/catalog",refresh,adminKey);
   const act=async (item:CatalogItem,action:"PUBLISH"|"HIDE"|"REJECT"|"MERGE")=>{
     const params=new URLSearchParams({action,reason,target_id:target});
     const response=await fetch(`/api/admin/projects/${encodeURIComponent(item.id)}/action?${params}`,{method:"POST",headers:{"X-Admin-Key":adminKey}});
     setMessage(response.ok?`${item.name}: ${action}`:`${item.name}: qaror saqlanmadi`);
     if(response.ok)setRefresh(value=>value+1);
   };
-  return <section className="detail-section"><h1>Loyihalar boshqaruvi</h1><p>{data?.total||0} ta loyiha yozuvi. Birlashtirish manba va dalillarni saqlaydi.</p><label>Qaror sababi <input value={reason} onChange={event=>setReason(event.target.value)} /></label><label>Birlashtirish manzili ID <input value={target} onChange={event=>setTarget(event.target.value)} /></label>{message&&<p role="status">{message}</p>}{loading?<Loading/>:error?<p>Ro‘yxatni yuklab bo‘lmadi.</p>:<div className="admin-review-list">{data?.items.map(item=><article className="intel-card" key={item.id}><h2>{item.name}</h2><p>{item.status} · {item.reason||"—"} · {item.analysis_method} · {item.source_count} manba</p><small>{item.id}</small><div className="admin-actions"><button onClick={()=>act(item,"PUBLISH")}>Nashr</button><button disabled={!reason.trim()} onClick={()=>act(item,"HIDE")}>Yashirish</button><button disabled={!reason.trim()} onClick={()=>act(item,"REJECT")}>Rad etish</button><button disabled={!target.trim()} onClick={()=>act(item,"MERGE")}>Birlashtirish</button></div></article>)}</div>}</section>;
+  const assign=async(item:CatalogItem)=>{
+    const params=new URLSearchParams({section:sections[item.id]||item.scope,reason:reason.trim()});
+    const response=await fetch(`/api/admin/projects/${encodeURIComponent(item.id)}/section?${params}`,{method:"POST",headers:{"X-Admin-Key":adminKey}});
+    setMessage(response.ok?`${item.name}: bo‘lim yangilandi`:`${item.name}: bo‘lim saqlanmadi`);
+    if(response.ok)setRefresh(value=>value+1);
+  };
+  return <section className="detail-section"><h1>Loyihalar boshqaruvi</h1><p>{data?.total||0} ta loyiha yozuvi. Birlashtirish manba va dalillarni saqlaydi.</p><label><input type="checkbox" checked={onlyBoshqa} onChange={event=>setOnlyBoshqa(event.target.checked)}/> Faqat Boshqa</label><label>Qaror sababi <input value={reason} onChange={event=>setReason(event.target.value)} /></label><label>Birlashtirish manzili ID <input value={target} onChange={event=>setTarget(event.target.value)} /></label>{message&&<p role="status">{message}</p>}{loading?<Loading/>:error?<p>Ro‘yxatni yuklab bo‘lmadi.</p>:<div className="admin-review-list">{data?.items.map(item=><article className="intel-card" key={item.id}><h2>{item.name}</h2><p>{item.status} · {item.scope} · {item.reason||"—"} · {item.analysis_method} · {item.source_count} manba</p><small>{item.id}</small><div className="admin-actions"><button onClick={()=>act(item,"PUBLISH")}>Nashr</button><button disabled={!reason.trim()} onClick={()=>act(item,"HIDE")}>Yashirish</button><button disabled={!reason.trim()} onClick={()=>act(item,"REJECT")}>Rad etish</button><button disabled={!target.trim()} onClick={()=>act(item,"MERGE")}>Birlashtirish</button><select aria-label={`${item.name} bo‘limi`} value={sections[item.id]||item.scope} onChange={event=>setSections({...sections,[item.id]:event.target.value})}>{[["Uzbekistan","O‘zbekiston"],["Global","Global"],["GitHub","GitHub"],["Boshqa","Boshqa"]].map(([value,label])=><option key={value} value={value}>{label}</option>)}</select><button disabled={!reason.trim()} onClick={()=>assign(item)}>Bo‘limni saqlash</button></div></article>)}</div>}</section>;
 }
 
 function ReviewQueue({adminKey}:{adminKey:string}) {

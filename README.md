@@ -28,7 +28,7 @@ Codespace нужен экспорт именно его БД: локальные
 
 Веб-сайт для поиска реальных проектов и решаемых ими проблем. Охват Узбекистана сохраняется; по разрешению пользователя работает отдельное ежедневное обнаружение международных проектов. Для каталога обязательны конкретная идентичность проекта, содержательное описание, проверяемый URL и дедупликация; глубокий анализ проблемы и рынка необязателен для публикации.
 
-Публичный интерфейс на узбекском: главная страница, простой каталог, архив, группы источников и подробная страница проекта с фактами. Техническое состояние доступно владельцу в `/admin`. Приложение не создаёт вымышленных карточек ради заполнения ленты.
+Публичный интерфейс на узбекском: главная страница, каталог, отдельный раздел «Boshqa», архив по дате, группы источников и подробная страница проекта с фактами. Техническое состояние доступно владельцу в `/admin`. Приложение не создаёт вымышленных карточек ради заполнения ленты.
 
 ## Что реализовано
 
@@ -106,7 +106,7 @@ cp .env.example .env   # только если .env ещё не существу
 ./scripts/start.sh
 ```
 
-Один процесс обслуживает frontend и API на порту **8000**. Публичные проверки: `GET /api/health`, `GET /api/projects`; техническое состояние: `GET /api/admin/status` с заголовком `X-Admin-Key`. Веб-страницы: `/`, `/loyihalar`, `/arxiv`, `/manbalar`, `/loyiha/{id}`; `/admin` доступен владельцу. Сервис должен быть доступен через порт вашего окружения или настроенный reverse proxy; облачный onboarding не создаёт публичный URL автоматически.
+Один процесс обслуживает frontend и API на порту **8000**. Публичные проверки: `GET /api/health`, `GET /api/projects`; техническое состояние: `GET /api/admin/status` с заголовком `X-Admin-Key`. Веб-страницы: `/`, `/loyihalar`, `/boshqa`, `/arxiv`, `/manbalar`, `/loyiha/{id}`; `/admin` доступен владельцу. Сервис должен быть доступен через порт вашего окружения или настроенный reverse proxy; облачный onboarding не создаёт публичный URL автоматически.
 
 Для frontend-разработки используйте два терминала:
 
@@ -616,6 +616,64 @@ o‘zgarmadi. Natijalarni to‘liq statistikasi va cheklovlari
 Для предыдущего релиза v3.1 сохранён `reports/pipeline-baseline-v3.1.json`;
 инструкция восстановления той версии — `reports/pipeline-restore.md`.
 Протокол Stage C и ограничения измерения: `reports/stage-c.md`.
+
+## Public catalog and 2025 archive (12.10.2026)
+
+The public menu is `Bosh sahifa`, `Loyihalar`, `Boshqa`, `Arxiv`, `Manbalar`.
+The compact home shows only published projects dated today in Asia/Tashkent;
+if there are none, it shows yesterday, then the last three calendar days.
+Estimated publication dates are excluded from the fresh window. If the window
+is empty, it links to the archive. Home counters link to the matching catalog
+section. `Loyihalar` offers 2026/2025 year and Uzbekistan/Global/GitHub/Boshqa
+section filters, with counts from `/api/catalog/facets`. `Arxiv` is purely a
+publication-date view of projects older than the three-day home window; it
+does not receive uncertain candidates. Older existing 2022–2024 cards remain
+stored and accessible without a new backfill.
+
+`Boshqa` contains only canonical **published** projects whose location cannot
+be established from trusted source provenance or country. A project whose
+identity or evidence is uncertain stays internal in review; it is not exposed
+to fill this section. Cards explain section uncertainty. An owner may assign
+a section with a reason from `/admin/catalog`; the protected endpoint is
+`POST /api/admin/projects/{id}/section?section=Global&reason=...`. Previous
+section and reason remain in `attribute_history`. This does not edit country,
+source evidence or historical publication date.
+
+Before running the requested 2025 backfill, a SQLite backup was made at
+`data/backups/izlanish-before-boshqa-backfill-20251012.sqlite3` (ignored by Git).
+To restore locally,
+stop all application processes, retain a copy of the current database, then
+copy that backup to `data/finder.sqlite3` before restarting. The bounded run is:
+
+```bash
+.venv/bin/python -m backend.app.cli --backfill \
+  --from-date 2025-01-01 --to-date 2025-12-31 \
+  --report data/backfill-2025.json
+```
+
+The command preserves existing project IDs and deduplicates new evidence.
+Archive page and candidate budgets still apply. A GitHub repository creation
+date is only a search hint, not proof of product launch. Brave Search needs
+`SEARCH_API_KEY`; without it, its sources report missing configuration.
+The report distinguishes found candidates from actual published projects.
+Yearly runs keep queue entries tagged to their requested window so existing
+fresh candidates do not use up the archive processing budget. To process the
+remaining saved 2025 queue without refetching sources, use:
+
+```bash
+.venv/bin/python -m backend.app.cli --backfill --drain \
+  --from-date 2025-01-01 --to-date 2025-12-31 \
+  --report data/backfill-2025-drain.json
+```
+
+The measured 12 October run, published project URLs, manual review decisions,
+source yield and remaining queue are in
+[`reports/backfill-2025-20261012.json`](reports/backfill-2025-20261012.json).
+Five 2025 cards are public after review (one pre-existing, four added). The
+extended drain stopped with `provider_circuit_open` after temporary LLM failures;
+it left the queue intact. The classifier prompt is now version 3 with explicit
+examples for programs and proposed systems. This prompt revision was not itself
+measured against a live provider in that completed run.
 
 ## Autonomous discovery engine (10.10.2026)
 

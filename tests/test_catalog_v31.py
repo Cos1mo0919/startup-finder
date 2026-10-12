@@ -83,6 +83,15 @@ def test_llm_schema_scoring_and_status():
     assert result.entries[0].creator is None
 
 
+def test_future_plan_without_product_evidence_stays_in_review():
+    future = parse_classifier_response(project_payload(stage="idea", scores={
+        "clarity": 7, "real_product": 1, "novelty": 4, "potential": 4},
+        score_reasons={"clarity": "Plan is described", "real_product": "Only future pilot is planned",
+                       "novelty": "insufficient evidence; neutral fallback",
+                       "potential": "insufficient evidence; neutral fallback"}), article().text)
+    assert decision(future, future.entries[0]) == ("REVIEW_REQUIRED", "future_plan_without_product_evidence")
+
+
 def test_missing_score_evidence_is_reduced_to_documented_neutral_fallback():
     payload = project_payload(scores={"clarity": 8, "real_product": 9, "novelty": 8, "potential": 9},
                               score_reasons={"clarity": "Clear product", "real_product": "Customers use it",
@@ -388,7 +397,8 @@ def test_unscored_project_is_public_without_problem_or_numeric_score(settings, f
         assert card["problem_statement"] == ""
         assert card["short_description"].startswith("KotibAI")
         home = client.get("/api/catalog/home").json()
-        assert home["total"] == 1 and home["uzbekistan"][0]["id"] == card["id"]
+        assert home["total"] == home["uzbekistan_total"] == 1
+        assert home["top"] == []  # An old publication is not new today.
         assert client.get("/api/projects?year=2026").json()["total"] == 1
 
 
@@ -408,8 +418,7 @@ def test_unknown_country_show_hn_project_appears_in_global_catalog(settings, fac
         home = client.get("/api/catalog/home").json()
         assert home["total"] == home["global_total"] == 1
         assert home["uzbekistan_total"] == 0
-        assert home["global"][0]["country"] == ""
-        assert home["global"][0]["scope"] == "Global"
+        assert home["top"] == []  # Historical publication stays in the catalog.
         assert client.get("/api/projects?country=global").json()["total"] == 1
         assert client.get("/api/projects?country=Uzbekistan").json()["total"] == 0
 
@@ -451,7 +460,7 @@ def test_github_project_is_exclusive_public_section(settings, factory):
         assert client.get("/api/projects?country=github").json()["total"] == 1
         assert client.get("/api/projects?country=Uzbekistan").json()["total"] == 0
         admin = client.get("/api/admin/status", headers={"X-Admin-Key": "test-admin-key"}).json()
-        assert admin["public_sections"] == {"Uzbekistan": 0, "Global": 0, "GitHub": 1}
+        assert admin["public_sections"] == {"Uzbekistan": 0, "Global": 0, "GitHub": 1, "Boshqa": 0}
 
 
 def test_bad_source_images_use_fallback():

@@ -1,5 +1,50 @@
 # Project status
 
+## 2026-10-12 — Boshqa, compact home, 2025 backfill
+
+The Cloud database was backed up at `data/backups/izlanish-before-boshqa-backfill-20251012.sqlite3`
+before schema changes. Baseline: 44 project records, 23 published, one published
+2025 project. The existing project IDs and pre-2025 archive were preserved.
+
+Public navigation is now Bosh sahifa / Loyihalar / Boshqa / Arxiv / Manbalar.
+The home header has four compact clickable counters and one fresh-project block.
+It selects projects by Asia/Tashkent publication day: today, otherwise yesterday,
+otherwise the past three days, otherwise an archive link. The catalog has 2026/2025
+year and Uzbekistan/Global/GitHub/Boshqa section filters with counts. Boshqa is for
+a real published project with uncertain section, never a substitute for the archive;
+admin can assign its section with a recorded reason. Arxiv selects older publications
+by source publication date, not discovery time. Existing 2022–2024 records remain
+available, but were not scanned in this task.
+
+The first live 2025 backfill exposed a queue bug: archived URLs were processed from
+unrelated backlog instead of their year. The queue now tags and prioritizes the
+requested archive window. A repeated fetch checked 18 sources and found 2,533 URL
+candidates under configured limits. The subsequent drains processed a bounded
+sample; the 100-candidate drain stopped after 69 candidates because Gemini and
+Groq opened temporary provider circuits. The report records the partial reason,
+provider counts, source yield and remaining backlog. The source classifier prompt
+was versioned to v3 after manual review exposed false positives for degree programs,
+accelerators, planned infrastructure and future-only systems.
+
+Final Cloud state after manual source review: 58 project records, 27 published
+(22 from 2026, 5 from 2025). Four valid 2025 projects were added: Burgut ko‘z,
+Boyqush, Organizm and Smartcast. Ten erroneous automatic cards were withdrawn to
+review with exact reasons and source history preserved. The 2025 scoped queue has
+2,465 candidates, including 2,235 still queued; this is **not** a complete audit of
+2025 or a 100-project claim. Brave search was unavailable without SEARCH_API_KEY;
+archive pagination was limited, especially Show HN. Full figures and URLs are in
+`reports/backfill-2025-20261012.json`; the large live run files remain under ignored
+`data/backfill-2025*.json`.
+
+Cloud API smoke checks: `/api/health` 200, home 27 total and 5 in the three-day
+fallback, catalog facets 27, 2025 catalog/archive both 5, Boshqa 0. The empty Boshqa
+state and admin assignment were tested with an isolated database. All 44 baseline
+project IDs and their publication timestamps remain unchanged. Final validation
+after the classifier prompt revision: 303 backend tests, Ruff, TypeScript/Vite
+production build and 20 desktop/mobile Playwright checks passed. A concurrent
+build initially caused a Playwright request to hit a missing `dist`; running the
+browser suite after the build passed all checks.
+
 ## 2026-10-11 — daily processing, GitHub section, source verification
 
 The Cloud SQLite database was backed up before migration at

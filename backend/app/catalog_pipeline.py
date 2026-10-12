@@ -8,7 +8,7 @@ from datetime import timedelta
 from time import monotonic, sleep
 from uuid import uuid4
 
-from sqlalchemy import case, func, or_, select, update
+from sqlalchemy import case, func, literal, or_, select, update
 
 from .catalog import (CatalogResult, ClassifierFailure,
                       deterministic_entry)
@@ -151,6 +151,8 @@ class CatalogPipeline(Pipeline):
             errors.extend(source_errors)
             counts["sources_checked"] = checked
             counts["candidates_found"] = len({canonical_url(item["url"]) for item in links})
+            archive_window = getattr(self.discovery, "window", None) if archive else None
+            scope = [part.isoformat() for part in archive_window] if archive_window else []
             with self.factory() as session:
                 if discover and not archive:
                     old_window = session.scalars(select(Candidate).where(
@@ -188,9 +190,16 @@ class CatalogPipeline(Pipeline):
                                                            "_feed_date": item["published_at"].isoformat() if item.get("published_at") else None,
                                                            "_discovery_url": item.get("discovery_url"),
                                                            "_discovery_title": item.get("title", "")},
-                                        status="queued", source_id=item.get("source_id"), origin=item.get("origin", "other"))
+                                        status="queued", source_id=item.get("source_id"), origin=item.get("origin", "other"),
+                                        archive_scope=scope)
                         session.add(row)
                         counts["new_candidates"] += 1
+                    elif scope and row.status in {"queued", "pending", "review_required"}:
+                        hint = item.get("published_at")
+                        dated = ((hint and scope[0] <= str(hint)[:10] <= scope[1]) or
+                                 f"/{scope[0][:4]}/" in url)
+                        if not row.archive_scope or dated:
+                            row.archive_scope = scope
                     elif created and row.status in {"published", "rejected"}:
                         record_transition(raw, "processed" if row.status == "published" else "rejected",
                                           row.reason or "previously_processed", (row.project_ids or [None])[0], now)
@@ -249,6 +258,8 @@ class CatalogPipeline(Pipeline):
                     query = select(Candidate)
                 if only_source:
                     query = query.where(Candidate.source_id == only_source)
+                if archive_window and not only_urls:
+                    query = query.where(Candidate.archive_scope[0].as_string() == scope[0])
                 if only_urls:
                     query = query.where(Candidate.url.in_([canonical_url(url) for url in only_urls]))
                 source_weight = case(
@@ -258,18 +269,27 @@ class CatalogPipeline(Pipeline):
                     (RegistrySource.source_type == "community", 3),
                     else_=1,
                 )
+                archive_hint = case(
+                    (Candidate.article["_feed_date"].as_string().like(f"{scope[0][:4]}%"), 1),
+                    (Candidate.url.contains(f"/{scope[0][:4]}/"), 1),
+                    else_=0,
+                ) if scope else None
                 if process:
                     # One candidate per source each round prevents a large Global archive
                     # from starving smaller Uzbekistan feeds during hourly processing.
                     ranked = select(
                         Candidate.url.label("url"),
                         func.row_number().over(partition_by=Candidate.source_id,
-                                               order_by=(Candidate.updated_at, Candidate.url)).label("source_position"),
+                                               order_by=((archive_hint.desc(), Candidate.updated_at, Candidate.url)
+                                                         if archive_hint is not None else
+                                                         (Candidate.updated_at, Candidate.url))).label("source_position"),
                         source_weight.label("source_weight"),
                         RegistrySource.priority.label("source_priority"),
                         case((RegistrySource.country == "Uzbekistan", 1), else_=0).label("local_source"),
+                        (archive_hint if archive_hint is not None else literal(0)).label("archive_hint"),
                     ).outerjoin(RegistrySource, Candidate.source_id == RegistrySource.id).where(query.whereclause).subquery()
                     urls = session.scalars(select(ranked.c.url).order_by(
+                        ranked.c.archive_hint.desc(),
                         ranked.c.local_source.desc(),
                         ranked.c.source_position,
                         ranked.c.source_weight.desc(), ranked.c.source_priority.desc(), ranked.c.url,

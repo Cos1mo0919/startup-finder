@@ -212,7 +212,7 @@ class Discovery:
 
         raise FetchError("source_requires_configuration")
 
-    def github_search(self, source):
+    def github_search(self, source, window=None):
         """Use GitHub's public repository search with its own optional credential."""
         import httpx
         from urllib.parse import urlencode
@@ -233,6 +233,8 @@ class Discovery:
         try:
             with httpx.Client(timeout=self.settings.fetch_timeout, headers=headers) as client:
                 for query in queries[:3]:
+                    if window:
+                        query += f" created:{window[0].isoformat()}..{window[1].isoformat()}"
                     url = "https://api.github.com/search/repositories?" + urlencode(
                         {"q": query, "sort": "updated", "order": "desc", "per_page": 30})
                     response = client.get(url)

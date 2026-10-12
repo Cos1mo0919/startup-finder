@@ -1,5 +1,5 @@
 import json
-from datetime import date
+from datetime import date, datetime, timezone
 from pydantic import SecretStr
 from sqlalchemy import select
 
@@ -26,6 +26,29 @@ def test_keyless_news_is_review_not_published(settings, factory):
         assert session.scalars(select(Project)).all() == []
     # A second drain does not revisit an unchanged keyless review record.
     assert pipeline.run(discover=False)["counts"]["candidates"] == 0
+    pipeline.close()
+
+
+def test_year_backfill_processes_its_window_before_unrelated_queue(settings, factory):
+    page = sample_article("ArchiveTool", "https://example.com/2025/06/01/archive-tool")
+    page.published_at = datetime(2025, 6, 1, tzinfo=timezone.utc)
+    with factory.begin() as session:
+        session.add(Candidate(url="https://example.com/2026/current", article={"_queued": True},
+                              status="queued", archive_scope=["2026-01-01", "2026-12-31"]))
+    discovery = FakeDiscovery([page])
+    discovery.window = (date(2025, 1, 1), date(2025, 12, 31))
+    class Classifier:
+        def classify(self, article):
+            return CatalogResult("PROJECT", 0.9, (CatalogEntry(name="ArchiveTool", confidence=0.9,
+                description_uz="ArchiveTool talabalar uchun hujjatlarni saqlash va vazifalarni rejalash imkonini beradi"),))
+    settings = settings.model_copy(update={"max_candidates": 1, "ai_api_key": SecretStr("test-key")})
+    pipeline = CatalogPipeline(settings, factory, discovery, classifier=Classifier())
+    result = pipeline.run(archive=True, reanalyze=False)
+    assert result["counts"]["auto_published"] == 1
+    with factory() as session:
+        project = session.scalar(select(Project))
+        assert project.published_at.year == 2025
+        assert session.get(Candidate, "https://example.com/2026/current").status == "queued"
     pipeline.close()
 
 

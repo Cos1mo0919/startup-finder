@@ -19,6 +19,10 @@ def url_day(url):
 
 
 def archive_links(discovery, source, window):
+    if getattr(source, "collection_method", "") == "github_search":
+        # Search repository creation dates as discovery hints. The repository
+        # creation date is not asserted as the product launch date.
+        return discovery.github_search(source, window)
     config = source.options.get("archive", {})
     if config.get("hn_algolia"):
         return show_hn_archive_links(discovery, source, window)

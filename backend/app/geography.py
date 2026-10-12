@@ -24,7 +24,10 @@ def _host(url):
 
 
 def project_scope(project) -> str:
-    """Return exactly one section: GitHub, Uzbekistan or Global."""
+    """Return one catalog section; unknown provenance is not a country fact."""
+    override = getattr(project, "catalog_section_override", "") or ""
+    if override in {"GitHub", "Uzbekistan", "Global", "Boshqa"}:
+        return override
     sources = project.sources or []
     urls = [project.discovery_source_url, *(source.url for source in sources)]
     hosts = {_host(url) for url in urls}
@@ -36,4 +39,13 @@ def project_scope(project) -> str:
     if ids & GLOBAL_SOURCE_IDS or any(host in GLOBAL_HOSTS for host in hosts):
         return "Global"
     country = (project.country or "").strip().casefold()
-    return "Uzbekistan" if country in {"uzbekistan", "o‘zbekiston", "узбекистан"} else "Global"
+    if country in {"uzbekistan", "o‘zbekiston", "узбекистан"}:
+        return "Uzbekistan"
+    return "Global" if country else "Boshqa"
+
+
+def section_reason(project) -> str:
+    if project_scope(project) != "Boshqa":
+        return ""
+    return (getattr(project, "catalog_section_reason", "") or
+            "Manba va mamlakat asosida bo‘limni ishonchli aniqlab bo‘lmadi.")

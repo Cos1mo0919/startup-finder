@@ -14,7 +14,7 @@ from .catalog import (ClassifierFailure, CatalogResult, PROMPT_PATH,
 from .db import ProviderHealth, now_utc
 from .network import FetchError, public_dns, safe_url
 
-PROMPT_VERSION = "catalog_classifier_v2"
+PROMPT_VERSION = "catalog_classifier_v3"
 PROVIDER_NAMES = ("gemini", "openrouter", "groq", "openai")
 
 

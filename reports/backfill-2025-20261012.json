@@ -1,0 +1,549 @@
+{
+  "captured_at_utc": "2026-10-12",
+  "baseline": {
+    "total_project_records": 44,
+    "published_projects": 23,
+    "published_2025": 1
+  },
+  "final": {
+    "total_project_records": 58,
+    "published_projects": 27,
+    "published_2025": 5,
+    "published_2026": 22,
+    "archive_scope_candidates": 2465,
+    "archive_scope_status": {
+      "published": 7,
+      "rejected": 172,
+      "review_required": 50,
+      "event": 1,
+      "queued": 2235
+    }
+  },
+  "sources_checked_per_fetch_run": 18,
+  "first_fetch_links": 2524,
+  "second_fetch_links": 2533,
+  "runs": [
+    {
+      "id": 95,
+      "file": "backfill-2025-first.json",
+      "status": "partial",
+      "counts": {
+        "sources_checked": 18,
+        "candidates_found": 2524,
+        "new_candidates": 2129,
+        "raw_discoveries": 2176,
+        "pre_filtered": 0,
+        "project_candidates": 0,
+        "recovered_window_rejections": 0,
+        "provider_circuit_open": 0,
+        "candidates": 30,
+        "auto_published": 0,
+        "review_required": 1,
+        "rejected": 21,
+        "duplicates": 0,
+        "enriched": 0,
+        "source_unavailable": 0,
+        "reanalysis_circuit_open": 0
+      },
+      "errors": [
+        {
+          "source": "Markaziy Yevroosiyo venchur forumi (CEVF)",
+          "stage": "event",
+          "code": "http_503"
+        },
+        {
+          "source": "https://www.it-park.uz/en/itpark/news",
+          "stage": "fetch",
+          "code": "article_body_missing"
+        },
+        {
+          "source": "https://buxdu.uz/101-xalqaro-aloqa-yangiliklari",
+          "stage": "fetch",
+          "code": "article_body_missing"
+        },
+        {
+          "source": "https://www.it-park.uz/en/itpark/startups",
+          "stage": "fetch",
+          "code": "article_body_missing"
+        },
+        {
+          "source": "https://buxdu.uz/102-amaldagi-loyihalar",
+          "stage": "fetch",
+          "code": "article_body_missing"
+        },
+        {
+          "source": "https://www.it-park.uz/ru/itpark/news",
+          "stage": "fetch",
+          "code": "article_body_missing"
+        },
+        {
+          "source": "https://buxdu.uz/131-ilmiy-tadqiqot-innovatsion-va-startap-loyihalar",
+          "stage": "fetch",
+          "code": "article_body_missing"
+        },
+        {
+          "source": "https://www.it-park.uz/ru/itpark/startups",
+          "stage": "fetch",
+          "code": "article_body_missing"
+        },
+        {
+          "source": "https://buxdu.uz/182-kelajakka-qadam-dasturi-loyihalari",
+          "stage": "fetch",
+          "code": "article_body_missing"
+        }
+      ],
+      "stop_reason": "source_error",
+      "limits": {
+        "max_candidates": 30,
+        "archive_pages": 20
+      },
+      "providers": [
+        {
+          "name": "gemini",
+          "configured": true,
+          "requests": 0,
+          "successes": 0,
+          "fallback_count": 0,
+          "schema_failures": 0,
+          "timeouts": 0
+        },
+        {
+          "name": "openrouter",
+          "configured": false,
+          "requests": 0,
+          "successes": 0,
+          "fallback_count": 0,
+          "schema_failures": 0,
+          "timeouts": 0
+        },
+        {
+          "name": "groq",
+          "configured": true,
+          "requests": 0,
+          "successes": 0,
+          "fallback_count": 0,
+          "schema_failures": 0,
+          "timeouts": 0
+        },
+        {
+          "name": "openai",
+          "configured": false,
+          "requests": 0,
+          "successes": 0,
+          "fallback_count": 0,
+          "schema_failures": 0,
+          "timeouts": 0
+        }
+      ]
+    },
+    {
+      "id": 96,
+      "file": "backfill-2025.json",
+      "status": "completed",
+      "counts": {
+        "sources_checked": 18,
+        "candidates_found": 2533,
+        "new_candidates": 54,
+        "raw_discoveries": 64,
+        "pre_filtered": 0,
+        "project_candidates": 4,
+        "recovered_window_rejections": 0,
+        "provider_circuit_open": 0,
+        "candidates": 30,
+        "auto_published": 4,
+        "review_required": 0,
+        "rejected": 28,
+        "duplicates": 0,
+        "enriched": 0,
+        "source_unavailable": 0,
+        "reanalysis_circuit_open": 0
+      },
+      "errors": [],
+      "stop_reason": "batch_budget_reached",
+      "limits": {
+        "max_candidates": 30,
+        "archive_pages": 20
+      },
+      "providers": [
+        {
+          "name": "gemini",
+          "configured": true,
+          "requests": 11,
+          "successes": 10,
+          "fallback_count": 0,
+          "schema_failures": 0,
+          "timeouts": 0
+        },
+        {
+          "name": "openrouter",
+          "configured": false,
+          "requests": 0,
+          "successes": 0,
+          "fallback_count": 0,
+          "schema_failures": 0,
+          "timeouts": 0
+        },
+        {
+          "name": "groq",
+          "configured": true,
+          "requests": 0,
+          "successes": 0,
+          "fallback_count": 0,
+          "schema_failures": 0,
+          "timeouts": 0
+        },
+        {
+          "name": "openai",
+          "configured": false,
+          "requests": 0,
+          "successes": 0,
+          "fallback_count": 0,
+          "schema_failures": 0,
+          "timeouts": 0
+        }
+      ]
+    },
+    {
+      "id": 97,
+      "file": "backfill-2025-drain.json",
+      "status": "completed",
+      "counts": {
+        "sources_checked": 0,
+        "candidates_found": 0,
+        "new_candidates": 0,
+        "raw_discoveries": 30,
+        "pre_filtered": 0,
+        "project_candidates": 2,
+        "recovered_window_rejections": 0,
+        "provider_circuit_open": 0,
+        "candidates": 30,
+        "auto_published": 2,
+        "review_required": 8,
+        "rejected": 20,
+        "duplicates": 0,
+        "enriched": 0,
+        "source_unavailable": 0,
+        "reanalysis_circuit_open": 0
+      },
+      "errors": [],
+      "stop_reason": "batch_budget_reached",
+      "limits": {
+        "max_candidates": 30,
+        "archive_pages": 20
+      },
+      "providers": [
+        {
+          "name": "gemini",
+          "configured": true,
+          "requests": 39,
+          "successes": 22,
+          "fallback_count": 8,
+          "schema_failures": 15,
+          "timeouts": 1
+        },
+        {
+          "name": "openrouter",
+          "configured": false,
+          "requests": 0,
+          "successes": 0,
+          "fallback_count": 0,
+          "schema_failures": 0,
+          "timeouts": 0
+        },
+        {
+          "name": "groq",
+          "configured": true,
+          "requests": 3,
+          "successes": 0,
+          "fallback_count": 2,
+          "schema_failures": 3,
+          "timeouts": 0
+        },
+        {
+          "name": "openai",
+          "configured": false,
+          "requests": 0,
+          "successes": 0,
+          "fallback_count": 0,
+          "schema_failures": 0,
+          "timeouts": 0
+        }
+      ]
+    },
+    {
+      "id": 98,
+      "file": "backfill-2025-drain-100.json",
+      "status": "partial",
+      "counts": {
+        "sources_checked": 0,
+        "candidates_found": 0,
+        "new_candidates": 0,
+        "raw_discoveries": 36,
+        "pre_filtered": 0,
+        "project_candidates": 15,
+        "recovered_window_rejections": 0,
+        "provider_circuit_open": 1,
+        "candidates": 69,
+        "auto_published": 8,
+        "review_required": 15,
+        "rejected": 48,
+        "duplicates": 2,
+        "enriched": 0,
+        "source_unavailable": 0,
+        "reanalysis_circuit_open": 0
+      },
+      "errors": [
+        {
+          "source": "llm",
+          "stage": "classification",
+          "code": "provider_circuit_open"
+        }
+      ],
+      "stop_reason": "ai_provider_limit",
+      "limits": {
+        "max_candidates": 100,
+        "archive_pages": 20
+      },
+      "providers": [
+        {
+          "name": "gemini",
+          "configured": true,
+          "requests": 79,
+          "successes": 60,
+          "fallback_count": 9,
+          "schema_failures": 16,
+          "timeouts": 3
+        },
+        {
+          "name": "openrouter",
+          "configured": false,
+          "requests": 0,
+          "successes": 0,
+          "fallback_count": 0,
+          "schema_failures": 0,
+          "timeouts": 0
+        },
+        {
+          "name": "groq",
+          "configured": true,
+          "requests": 3,
+          "successes": 0,
+          "fallback_count": 2,
+          "schema_failures": 1,
+          "timeouts": 0
+        },
+        {
+          "name": "openai",
+          "configured": false,
+          "requests": 0,
+          "successes": 0,
+          "fallback_count": 0,
+          "schema_failures": 0,
+          "timeouts": 0
+        }
+      ]
+    }
+  ],
+  "source_yield": {
+    "adu": {
+      "fetched": 18
+    },
+    "betalist": {
+      "fetched": 108,
+      "raw_discoveries": 15
+    },
+    "bsu": {
+      "fetched": 35,
+      "raw_discoveries": 1,
+      "processed": 7,
+      "errors": 4,
+      "auto_published": 0,
+      "review_required": 0,
+      "rejected": 3,
+      "duplicates": 0
+    },
+    "gazeta": {
+      "raw_discoveries": 21,
+      "fetched": 43,
+      "processed": 9,
+      "auto_published": 0,
+      "review_required": 0,
+      "rejected": 9,
+      "duplicates": 0
+    },
+    "github-search": {
+      "raw_discoveries": 91,
+      "fetched": 95
+    },
+    "github-trending": {
+      "raw_discoveries": 12,
+      "fetched": 17
+    },
+    "ictweek": {
+      "fetched": 6
+    },
+    "indie-hackers": {
+      "raw_discoveries": 17,
+      "fetched": 34
+    },
+    "itpark": {
+      "fetched": 80,
+      "processed": 9,
+      "errors": 4,
+      "auto_published": 0,
+      "review_required": 0,
+      "rejected": 5,
+      "duplicates": 0
+    },
+    "namdu": {
+      "fetched": 242,
+      "processed": 9,
+      "auto_published": 0,
+      "review_required": 0,
+      "rejected": 9,
+      "duplicates": 0
+    },
+    "product-hunt": {
+      "raw_discoveries": 40,
+      "fetched": 77
+    },
+    "qarshidu": {
+      "fetched": 60,
+      "processed": 6,
+      "auto_published": 0,
+      "review_required": 0,
+      "rejected": 6,
+      "duplicates": 0
+    },
+    "show-hn-rss": {
+      "raw_discoveries": 1808,
+      "fetched": 3718
+    },
+    "spot-ru": {
+      "fetched": 176,
+      "raw_discoveries": 77,
+      "processed": 57,
+      "auto_published": 7,
+      "review_required": 16,
+      "rejected": 36,
+      "duplicates": 2,
+      "project_candidates": 11
+    },
+    "spot-startups": {
+      "fetched": 40,
+      "processed": 1,
+      "auto_published": 0,
+      "review_required": 1,
+      "rejected": 0,
+      "duplicates": 0
+    },
+    "spot-uz": {
+      "raw_discoveries": 117,
+      "fetched": 254,
+      "processed": 59,
+      "auto_published": 7,
+      "review_required": 7,
+      "rejected": 47,
+      "duplicates": 0,
+      "project_candidates": 10
+    },
+    "uneed": {
+      "raw_discoveries": 24,
+      "fetched": 48
+    },
+    "uzhunt": {
+      "fetched": 10,
+      "processed": 2,
+      "auto_published": 0,
+      "review_required": 0,
+      "rejected": 2,
+      "duplicates": 0
+    }
+  },
+  "published_2025": [
+    {
+      "name": "Boyqush",
+      "date": "2025-02-26",
+      "url": "https://www.spot.uz/oz/2025/02/26/it-startap"
+    },
+    {
+      "name": "Burgut ko‘z",
+      "date": "2025-02-26",
+      "url": "https://www.spot.uz/oz/2025/02/26/it-startap"
+    },
+    {
+      "name": "DMED",
+      "date": "2025-01-07",
+      "url": "https://www.spot.uz/ru/2025/01/07/dmed"
+    },
+    {
+      "name": "Organizm",
+      "date": "2025-02-26",
+      "url": "https://www.spot.uz/oz/2025/02/26/it-startap"
+    },
+    {
+      "name": "Smartcast",
+      "date": "2025-07-31",
+      "url": "https://www.spot.uz/oz/2025/07/31/smartcast"
+    }
+  ],
+  "manually_withdrawn": [
+    {
+      "name": "Baytqo‘rg‘on-Parkent temir yo‘li",
+      "reason": "planned_rail_infrastructure_not_startup_product",
+      "url": "https://www.spot.uz/oz/2025/06/18/parkent-projects"
+    },
+    {
+      "name": "Executive MBA",
+      "reason": "education_degree_program_not_product",
+      "url": "https://www.spot.uz/ru/2025/07/22/team-university"
+    },
+    {
+      "name": "Raqamli som",
+      "reason": "future_2027_prototype_not_launched_2025",
+      "url": "https://www.spot.uz/oz/2025/02/25/krgyz-digital-som"
+    },
+    {
+      "name": "Startup Boost Uzbekistan",
+      "reason": "accelerator_program_signal_not_project",
+      "url": "https://www.spot.uz/ru/2025/04/18/startup-boost"
+    },
+    {
+      "name": "Tushia universiteti filiali",
+      "reason": "university_branch_announcement_not_project",
+      "url": "https://www.spot.uz/oz/2025/09/19/tushia-university"
+    },
+    {
+      "name": "Байткурган — Паркент",
+      "reason": "planned_rail_infrastructure_not_startup_product",
+      "url": "https://www.spot.uz/ru/2025/06/18/parkent-projects"
+    },
+    {
+      "name": "Паркентсой",
+      "reason": "planned_housing_infrastructure_not_startup_product",
+      "url": "https://www.spot.uz/ru/2025/06/18/parkent-projects"
+    },
+    {
+      "name": "Сув хисоби",
+      "reason": "future_government_system_no_2025_product_evidence",
+      "url": "https://www.spot.uz/ru/2025/09/18/services"
+    },
+    {
+      "name": "Цифровая махалля",
+      "reason": "future_2026_platform_in_2025_announcement",
+      "url": "https://www.spot.uz/ru/2025/09/18/services"
+    },
+    {
+      "name": "Цифровое сельское хозяйство",
+      "reason": "future_platform_plan_no_product_2025",
+      "url": "https://www.spot.uz/ru/2025/07/31/space-agro"
+    }
+  ],
+  "limitations": [
+    "SEARCH_API_KEY absent; Brave search not run",
+    "Archive pagination limited to 20 pages/slices per source; Show HN estimate 175 pages not scanned",
+    "A later queue drain stopped after both configured providers opened their per-run circuit breakers",
+    "Older years 2022-2024 were not scanned in this task"
+  ],
+  "backup": "data/backups/izlanish-before-boshqa-backfill-20251012.sqlite3"
+}

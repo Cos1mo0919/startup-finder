@@ -75,7 +75,7 @@ export function StatusPage({adminKey}:{adminKey:string}) {
           </div>
         ))}
       </div>
-      <div className="notice"><p>Bo‘limlar: O‘zbekiston {s.public_sections?.Uzbekistan??0} · Global {s.public_sections?.Global??0} · GitHub {s.public_sections?.GitHub??0}. Oxirgi to‘xtash sababi: {stopReasonLabels[s.last_stop_reason||""]||"Hali aniqlanmagan"}.</p></div>
+      <div className="notice"><p>Bo‘limlar: O‘zbekiston {s.public_sections?.Uzbekistan??0} · Global {s.public_sections?.Global??0} · GitHub {s.public_sections?.GitHub??0} · Boshqa {s.public_sections?.Boshqa??0}. Oxirgi to‘xtash sababi: {stopReasonLabels[s.last_stop_reason||""]||"Hali aniqlanmagan"}.</p></div>
       <p className="status-database-id">Baza ID: {s.database_instance_id||"—"} · {s.database_driver||"—"}</p>
       <div className="notice">
         <Clock3 size={18} />

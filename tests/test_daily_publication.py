@@ -9,7 +9,7 @@ from backend.app.catalog_store import save_catalog_result
 from backend.app.catalog_pipeline import CatalogPipeline
 from backend.app.catalog_admin import catalog_action
 from backend.app.daily import DailyLimitReached, publication_summary, reserve_publication, today_stats
-from backend.app.db import Candidate, DailyStats, DatabaseIdentity, Project, RegistrySource, make_db
+from backend.app.db import Candidate, DailyStats, DatabaseIdentity, Project, RegistrySource, make_db, now_utc
 from tests.conftest import FakeDiscovery, sample_article
 
 
@@ -28,6 +28,18 @@ def test_daily_limit_and_tashkent_rollover(settings, factory):
         assert today_stats(session, settings, after_midnight)["published"] == 1
         assert session.scalars(select(DailyStats)).all()
         assert publication_summary(session, settings, after_midnight)["week"] == 3
+
+
+def test_boshqa_publication_uses_a_real_daily_slot(settings, factory):
+    settings = settings.model_copy(update={"daily_publish_limit": 1, "daily_uz_limit": 0})
+    when = datetime(2026, 10, 12, 8, tzinfo=timezone.utc)
+    with factory.begin() as session:
+        reserve_publication(session, settings, "Boshqa", when)
+        with pytest.raises(DailyLimitReached):
+            reserve_publication(session, settings, "Global", when)
+    with factory() as session:
+        stats = today_stats(session, settings, when)
+        assert stats["published"] == stats["boshqa"] == 1
 
 
 def test_nonlocal_reservation_released_after_local_queue_exhausted(settings, factory):
@@ -104,7 +116,7 @@ def test_pipeline_stops_at_daily_limit_and_preserves_queue(settings, factory):
 
 def test_admin_republish_does_not_bypass_daily_cap(settings, factory):
     settings = settings.model_copy(update={"daily_publish_limit": 1, "daily_uz_limit": 0})
-    when = datetime(2026, 10, 11, 8, tzinfo=timezone.utc)
+    when = now_utc()
     article = sample_article("Alpha", "https://example.com/alpha")
     entry = CatalogEntry(name="Alpha", confidence=0.9,
         description_uz="Alpha fermerlarga sug‘orish sarfini kuzatish va ishlarni rejalash imkonini beradi")

@@ -1,5 +1,32 @@
 # izlanish architecture — Uzbekistan, Global and GitHub
 
+## Public date views and uncertain section (2026-10-12)
+
+`Project.publication_status=PUBLISHED` remains the only public eligibility gate.
+`project_scope` assigns the independent catalog section Uzbekistan, Global,
+GitHub or Boshqa. Boshqa means a **published real project** whose source and
+country do not support a confident section. It is not a route for unverified
+PROJECT candidates; review/rejected records stay internal. An owner can set
+`catalog_section_override` with a reason through the protected admin endpoint;
+the old scope and reason are appended to `attribute_history`. Project country,
+evidence and publication date remain unchanged.
+
+`/api/catalog/home` chooses publications from today, then yesterday, then the
+last three Asia/Tashkent calendar days. Estimated dates never count as fresh.
+`/api/projects?archive=true` selects publications older than that fresh window;
+archive is a date view and does not infer classification quality. The year
+filter uses publication time in Asia/Tashkent. Historical 2022–2024 records
+are preserved; the requested new backfill is limited to 2025. The `/api/catalog/facets`
+endpoint counts the same published canonical projects by year and section.
+Yearly backfill tags queued candidates with its archive window and processes
+only that window; dated feed/URL hints take precedence within each source.
+This prevents a large current-day queue from consuming a historical run's
+candidate budget. GitHub archive search uses a repository creation-year query
+only to discover candidate pages, never as evidence of product launch.
+A classified idea with `real_product <= 2` stays in review when the source
+only promises a future prototype; it cannot enter the historical catalog as
+an already existing project.
+
 ## Daily publication and catalog sections (2026-10-11)
 
 `daily_stats` counts first transitions into canonical `Project.publication_status=PUBLISHED`

@@ -20,7 +20,8 @@ export type Project = {
   city: string;
   event: string;
   country: string;
-  scope?: "Uzbekistan" | "Global" | "GitHub";
+  scope?: "Uzbekistan" | "Global" | "GitHub" | "Boshqa";
+  section_reason?: string;
   category: string;
   primary_sector: string;
   sectors: string[];
@@ -159,7 +160,7 @@ export type Status = {
   daily_publication?: {day:string;published:number;uzbekistan:number;global:number;github:number;limit:number;uzbekistan_target:number;week:number;month:number};
   database_instance_id?: string;
   database_driver?: string;
-  public_sections?: {Uzbekistan:number;Global:number;GitHub:number};
+  public_sections?: {Uzbekistan:number;Global:number;GitHub:number;Boshqa:number};
   last_stop_reason?: string;
   pending_candidates: number;
   ai_enabled: boolean;
