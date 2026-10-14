@@ -3,8 +3,7 @@ services:
     name: izlanish
     runtime: docker
     branch: render-deploy
-    plan: starter
-    numInstances: 1
+    plan: free
     dockerfilePath: ./Dockerfile
     dockerContext: .
     healthCheckPath: /api/health

@@ -858,3 +858,10 @@ Baseline до этой миграции — `reports/pipeline-baseline.json`; т
 Текущие требования PostgreSQL/RLS и запуска Render определены в
 `docs/RENDER_DEPLOY.md`; упоминания SQLite/reports в исторических заметках
 относятся к прежним этапам, отчёты не входят в текущую ветку деплоя.
+
+## Бесплатный ежедневный запуск
+
+Подготовлены bounded CLI, ручные GitHub Actions, дневные лимиты и приватный backup.
+Render scheduler остаётся выключенным; расписания пока закомментированы.
+Секреты, trial на 5 проектов, лимиты, инвентаризация и ограничения описаны в
+[docs/FREE_DAILY_OPERATIONS.md](docs/FREE_DAILY_OPERATIONS.md).

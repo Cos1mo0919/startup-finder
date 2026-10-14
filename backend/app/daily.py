@@ -81,3 +81,11 @@ def reserve_publication(session, settings, section: str, when=None, current_url=
         reason = ("daily_publish_limit_reached" if row.published_count >= settings.daily_publish_limit
                   else "local_reservation_active")
         raise DailyLimitReached(reason)
+    from .free_budget import current_budget, state_name
+    budget = current_budget()
+    if budget:
+        from .db import SchedulerCheckpoint
+        row = session.scalar(select(SchedulerCheckpoint).where(
+            SchedulerCheckpoint.name == state_name(day)).with_for_update())
+        row.cursor = {**row.cursor, "events": [*row.cursor.get("events", []),
+                      {"at": (when or now_utc()).isoformat(), "resource": "published"}][-2000:]}

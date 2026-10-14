@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .writer import serialized_worker
+
 import json
 import re
 from .db import SchedulerCheckpoint, now_utc
@@ -82,6 +84,9 @@ async def poll_channels(settings, factory, client=None):
             await client.disconnect()
 
 
+
+
+@serialized_worker
 def poll_once(settings, factory):
     import asyncio
     return asyncio.run(poll_channels(settings, factory))

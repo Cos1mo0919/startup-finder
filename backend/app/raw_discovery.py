@@ -46,6 +46,11 @@ def ingest_raw(session, *, source_adapter: str, source_url: str, source_name: st
 
 def cheap_decision(session, row: RawDiscovery) -> tuple[str, str, str | None]:
     """Return (action, reason, project_id); uncertain content continues."""
+    hidden = session.scalar(select(Project).join(Source, Source.project_id == Project.id).where(
+        Source.url == row.source_url, Project.publication_method == "admin",
+        Project.publication_status != "PUBLISHED"))
+    if hidden:
+        return "reject", "admin_decision_preserved", hidden.id
     project = session.scalar(select(Project).join(Source, Source.project_id == Project.id)
                              .where(Source.url == row.source_url, Project.publication_status == "PUBLISHED"))
     if project:

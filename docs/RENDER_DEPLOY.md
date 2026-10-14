@@ -11,7 +11,7 @@ from main are removed from this tree; main's Git history is not rewritten.
 Create a Render **Web Service**, connect the private repository, choose branch
 `render-deploy` and Docker runtime. Dockerfile: `./Dockerfile`; context: `.`;
 health endpoint: `/api/health`. Keep the Docker default command. `render.yaml`
-provides the equivalent Blueprint with a Starter service and one instance.
+provides the equivalent Blueprint with a Free service and one instance.
 No service has been created by Codex and no production database has been used.
 
 The multi-stage Dockerfile runs `npm ci` and `npm run build` with Node 24,
@@ -107,13 +107,13 @@ The watchdog handles daily 08:00/23:30 reconciliation, weekly Uzbekistan-local
 problem scans and monthly Global trend scans. `SCHEDULER_ENABLED=false` prevents
 all these jobs from running. It does not disable explicitly invoked CLI commands.
 Backfill/merge never runs automatically on deployment. Web shutdown waits for
-running scheduler jobs. Keep one Render instance/worker while scheduler lives in
-the web service; an always-on paid service is recommended. A sleeping/free web
-service cannot provide reliable hourly execution. A separate worker/cron would
-be needed for that deployment; none is provisioned by this branch.
+running scheduler jobs. Keep one Render instance/worker. A sleeping/free web
+service cannot provide reliable hourly execution. The prepared free daily
+GitHub Actions job is documented in [FREE_DAILY_OPERATIONS.md](FREE_DAILY_OPERATIONS.md).
+It is manual-only until the owner enables its schedule.
 
-After initial verification, the owner may enable the scheduler deliberately.
-Leave startup data updates off unless audits/seeding are explicitly desired.
+For the free daily configuration, leave the integrated scheduler and startup
+data updates off. Run collection through the bounded external job.
 
 ## Merge tools
 

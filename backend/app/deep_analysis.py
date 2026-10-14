@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .writer import serialized_worker
+
 import json
 from datetime import timedelta
 from pathlib import Path
@@ -50,6 +52,9 @@ def weighted_score(criteria, path: Path = WEIGHTS_PATH):
     return round(sum(criteria[name]["score"] * weights[name] for name in CRITERION_NAMES) * 20, 1), config["version"]
 
 
+
+
+@serialized_worker
 def deep_analysis_once(settings, factory, service=None, limit=5):
     """Analyze published rows only; a failure cannot change publication status."""
     service = service or LLMService(settings, factory)

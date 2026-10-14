@@ -102,13 +102,33 @@ def save_catalog_result(session, article, result: CatalogResult, when=None, sett
         candidate.status_history = history(candidate.status_history, state, result.analysis_method, reason, when)
         counts["rejected" if state == "REJECTED" else "review_required"] += 1
         return counts
-    for entry in result.entries:
+    deferred = False
+    for index, entry in enumerate(result.entries):
+        from .free_budget import current_budget
+        budget = current_budget()
+        if budget:
+            budget.check_time()
+            from .db import DailyStats
+            daily = session.get(DailyStats, budget.day)
+            if daily and daily.published_count >= budget.target:
+                candidate.article = {**candidate.article,
+                                     "_deferred_catalog_entries": [item.model_dump(mode="json") for item in result.entries[index:]],
+                                     "_deferred_analysis_method": result.analysis_method}
+                deferred = True
+                break
         state, reason = decision(result, entry)
         project, possible = duplicate_decision(session, entry, url)
         if possible and project is None:
             state, reason = "REVIEW_REQUIRED", "possible_duplicate"
         if project is not None:
             counts["duplicates"] += 1
+            if project.publication_method == "admin" and project.publication_status != "PUBLISHED":
+                # An automated recheck must never erase the owner's HIDE/REJECT
+                # marker, including by overwriting publication_method below.
+                counts["review_required"] += 1
+                candidate.reason = "admin_decision_preserved"
+                candidate.project_ids = list(dict.fromkeys([*(candidate.project_ids or []), project.id]))
+                continue
             if project.publication_status == "PUBLISHED" and state == "REVIEW_REQUIRED":
                 state, reason = "AUTO_PUBLISHED", "existing_published_project"
             elif project.publication_method == "admin" and project.publication_status != "PUBLISHED":
@@ -143,6 +163,8 @@ def save_catalog_result(session, article, result: CatalogResult, when=None, sett
             session.add(project)
             session.flush()
         previous_status = project.publication_status
+        published_before = previous_status == "PUBLISHED" or any(
+            item.get("value") in {"PUBLISHED", "AUTO_PUBLISHED"} for item in project.status_history or [])
         if entry.name != project.name and normalize(entry.name) != project.normalized_project_name:
             project.aliases = list(dict.fromkeys([*(project.aliases or []), entry.name]))
         project.last_seen = when
@@ -201,11 +223,14 @@ def save_catalog_result(session, article, result: CatalogResult, when=None, sett
         if state == "AUTO_PUBLISHED" and previous_status != "PUBLISHED" and settings is not None:
             from .daily import reserve_publication
             from .geography import project_scope
-            reserve_publication(session, settings, project_scope(project), when, current_url=url)
+            if not published_before:
+                reserve_publication(session, settings, project_scope(project), when, current_url=url)
         candidate.project_ids = list(dict.fromkeys([*(candidate.project_ids or []), project.id]))
         candidate.reason = reason
         counts["auto_published" if state == "AUTO_PUBLISHED" and previous_status != "PUBLISHED" else "review_required" if state == "REVIEW_REQUIRED" else "duplicates"] += 1
-    if counts["auto_published"]:
+    if deferred:
+        candidate.status, candidate.reason = "queued", "daily_goal_deferred_entries"
+    elif counts["auto_published"]:
         candidate.status, candidate.reason = "published", ""
     elif counts["review_required"]:
         candidate.status = "review_required"

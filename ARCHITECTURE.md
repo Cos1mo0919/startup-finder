@@ -764,3 +764,13 @@ prefilter as ingestion and reports provider/model results separately.
 Exact project-name matches with conflicting creator metadata are marked as
 possible duplicates for review. An operator may use the existing MERGE action
 to retain both source histories under the canonical project ID.
+
+## Bounded free daily operations
+
+`backend.app.free_daily` runs the catalog pipeline under a shared `pipeline`
+lease. `free_budget` commits daily attempt reservations in existing
+`scheduler_checkpoints` before network/LLM calls; a crash preserves spend and
+remaining queue. `writer` serializes admin/registry/auxiliary workers with that
+lease. Paid providers and startup audits are disabled in the bounded profile.
+Rendered web service flags remain off; Actions workflows are manual-only.
+See `docs/FREE_DAILY_OPERATIONS.md` for limits, activation and unverified quotas.

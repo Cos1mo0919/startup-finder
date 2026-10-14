@@ -18,6 +18,7 @@ from .db import (Candidate, DatabaseIdentity, EcosystemSignal, Problem, ProblemE
                  SchedulerCheckpoint, SourceBlock,
                  SolutionIdea, aware, make_db, now_utc)
 from .llm_service import LLMService
+from .writer import writer_session, writer_scope, WriterBusy
 from .scheduler import make_scheduler
 from .schemas import CATEGORIES
 from .intelligence import migrate_existing_problems
@@ -143,11 +144,12 @@ def create_app(settings=None):
     settings = settings or Settings()
     engine, factory = make_db(settings.database_url, auto_migrate=settings.database_auto_migrate)
     if settings.startup_data_updates_enabled:
-        seed_registry(factory, settings.sources_file)
-        audit_existing(factory, settings.evidence_min_score)
-        audit_signals(factory)
-        migrate_existing_problems(factory)
-        synchronize_candidate_publication(factory, settings)
+        with writer_scope(factory):
+            seed_registry(factory, settings.sources_file)
+            audit_existing(factory, settings.evidence_min_score)
+            audit_signals(factory)
+            migrate_existing_problems(factory)
+            synchronize_candidate_publication(factory, settings)
     scheduler = make_scheduler(settings, factory)
 
     @asynccontextmanager
@@ -165,6 +167,10 @@ def create_app(settings=None):
                            allow_methods=["GET", "POST", "PATCH", "OPTIONS"],
                            allow_headers=["Content-Type", "X-Admin-Key"], allow_credentials=False)
     app.state.factory, app.state.scheduler = factory, scheduler
+
+    @app.exception_handler(WriterBusy)
+    async def writer_busy_handler(request, exc):
+        return JSONResponse({"detail": "Qidiruv ishlamoqda. Keyinroq qayta urinib ko‘ring."}, status_code=409)
 
     def require_admin(x_admin_key: str = Header(default="")):
         expected = settings.admin_api_key.get_secret_value()
@@ -452,12 +458,15 @@ def create_app(settings=None):
                                         "last_error": health.last_error if health else ""})
             radar = radar_status(session, settings.evidence_min_score)
             intelligence = status_extra(session)
+            from .free_budget import free_status
+            free_daily = free_status(session, settings)
         job = scheduler.get_job("discovery")
         next_run = getattr(job, "next_run_time", None) if settings.scheduler_enabled else None
         daily_job = scheduler.get_job("daily_processing")
         next_daily_processing = getattr(daily_job, "next_run_time", None) if settings.scheduler_enabled else None
         return {
             "timezone": "Asia/Tashkent",
+            "free_daily": free_daily,
             "scheduler_enabled": settings.scheduler_enabled,
             "next_run": iso(next_run),
             "next_daily_processing": iso(next_daily_processing),
@@ -515,7 +524,7 @@ def create_app(settings=None):
         allowed = {"not_project", "no_meaningful_problem", "minor_feature", "duplicate", "insufficient_evidence", "missing_creator", "signal_only", "irrelevant", "old_irrelevant_content", "other"}
         if action == "REJECT" and reason not in allowed:
             raise HTTPException(422, "Rad etish sababi kerak")
-        with factory.begin() as session:
+        with writer_session(factory) as session:
             candidate = session.get(Candidate, url)
             if not candidate or candidate.status not in {"pending", "review_required", "error"}:
                 raise HTTPException(404, "Ko‘rib chiqiladigan nomzod topilmadi")
@@ -568,7 +577,7 @@ def create_app(settings=None):
     def admin_project_section(project_id: str, section: Literal["Uzbekistan", "Global", "GitHub", "Boshqa"],
                               reason: str = Query(min_length=3, max_length=200)):
         from .catalog_store import history
-        with factory.begin() as session:
+        with writer_session(factory) as session:
             project = session.get(Project, project_id)
             if project is None:
                 raise HTTPException(404, "Loyiha topilmadi")
@@ -585,7 +594,7 @@ def create_app(settings=None):
     def admin_project_action(project_id: str, action: Literal["PUBLISH", "HIDE", "REJECT", "MERGE"],
                              reason: str = "", target_id: str = ""):
         from .catalog_admin import catalog_action
-        with factory.begin() as session:
+        with writer_session(factory) as session:
             try:
                 return catalog_action(session, project_id, action, reason, target_id, settings)
             except ValueError as exc:

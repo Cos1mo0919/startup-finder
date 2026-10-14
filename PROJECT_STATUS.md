@@ -653,3 +653,16 @@ international country-filter tab showed only Screens (United States). The
 Global without inventing a country. Telegram
 credentials remain unconfigured. Stage/user acceptance is not implied by this
 technical validation.
+
+## 2026-10-14 — free daily job prepared, not activated
+
+Child branch of render-deploy: bounded daily CLI, durable daily request ledger,
+shared writer lease, persistent owner HIDE/REJECT, private streaming backup,
+manual-only discovery/backup Actions and admin budget display. No production
+connection, migration, discovery, backup or schedule activation performed.
+Offline validation: 360 backend tests, Ruff, TypeScript/Vite build and 22
+Playwright desktop/mobile tests passed. Follow-up budget/backup tests passed.
+A read-only historical snapshot diagnostics process peaked at76MiB; this is
+not a full service memory guarantee. Actual provider/account quotas, Actions
+execution, Supabase backup/restore and deployed memory remain unverified.
+Owner setup and inventory: `docs/FREE_DAILY_OPERATIONS.md`.

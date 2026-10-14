@@ -15,4 +15,6 @@ reports
 **/*-shm
 **/*.bak
 **/backups
+**/*.dump
+**/*.dump.gpg
 *.log

@@ -40,6 +40,27 @@ class Settings(BaseSettings):
     database_auto_migrate: bool = True
     startup_data_updates_enabled: bool = True
     cors_origins: list[str] = Field(default_factory=list)
+    daily_project_target: int = Field(default=20, ge=1, le=100)
+    daily_max_run_seconds: int = Field(default=2700, ge=1, le=2700)
+    daily_pages_per_run: int = Field(default=60, ge=0, le=1000)
+    daily_pages_per_day: int = Field(default=80, ge=0, le=1000)
+    daily_gemini_requests_per_run: int = Field(default=10, ge=0, le=100)
+    daily_gemini_requests_per_day: int = Field(default=10, ge=0, le=100)
+    daily_groq_requests_per_run: int = Field(default=10, ge=0, le=100)
+    daily_groq_requests_per_day: int = Field(default=10, ge=0, le=100)
+    daily_search_requests_per_run: int = Field(default=0, ge=0, le=100)
+    daily_search_requests_per_day: int = Field(default=0, ge=0, le=100)
+    daily_github_requests_per_run: int = Field(default=2, ge=0, le=10)
+    daily_github_requests_per_day: int = Field(default=2, ge=0, le=10)
+    daily_candidates_per_run: int = Field(default=80, ge=1, le=500)
+    daily_candidates_per_day: int = Field(default=120, ge=1, le=500)
+    daily_max_sources: int = Field(default=12, ge=1, le=30)
+    daily_llm_min_interval_seconds: int = Field(default=60, ge=1, le=120)
+    daily_llm_max_output_tokens: int = Field(default=2048, ge=256, le=4096)
+    daily_max_database_bytes: int = Field(default=250_000_000, ge=1, le=500_000_000)
+    daily_max_rss_mb: int = Field(default=384, ge=64, le=512)
+    free_provider_quotas_confirmed: bool = False
+    free_search_quota_confirmed: bool = False
     daily_publish_limit: int = Field(default=100, ge=1, le=100)
     daily_uz_limit: int = Field(default=30, ge=0, le=100)
     scheduler_hour: int = Field(default=9, ge=0, le=23)

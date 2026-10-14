@@ -1,0 +1,69 @@
+name: Bounded free daily discovery
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        type: choice
+        description: Trial is capped at five projects and five minutes
+        options: [trial, daily]
+        default: trial
+  # Enable only after owner approval and account quota review:
+  # schedule:
+  #   - cron: '0 3 * * *' # 08:00 Asia/Tashkent; GitHub may delay scheduled jobs.
+permissions:
+  contents: read
+concurrency:
+  group: izlanish-database-writer
+  cancel-in-progress: false
+jobs:
+  discovery:
+    runs-on: ubuntu-latest
+    timeout-minutes: 48
+    env:
+      SCHEDULER_ENABLED: 'false'
+      DATABASE_AUTO_MIGRATE: 'false'
+      STARTUP_DATA_UPDATES_ENABLED: 'false'
+      DAILY_PROJECT_TARGET: ${{ vars.DAILY_PROJECT_TARGET || '20' }}
+      DAILY_MAX_RUN_SECONDS: ${{ vars.DAILY_MAX_RUN_SECONDS || '2700' }}
+      DAILY_PAGES_PER_RUN: ${{ vars.DAILY_PAGES_PER_RUN || '60' }}
+      DAILY_PAGES_PER_DAY: ${{ vars.DAILY_PAGES_PER_DAY || '80' }}
+      DAILY_GEMINI_REQUESTS_PER_RUN: ${{ vars.DAILY_GEMINI_REQUESTS_PER_RUN || '10' }}
+      DAILY_GEMINI_REQUESTS_PER_DAY: ${{ vars.DAILY_GEMINI_REQUESTS_PER_DAY || '10' }}
+      DAILY_GROQ_REQUESTS_PER_RUN: ${{ vars.DAILY_GROQ_REQUESTS_PER_RUN || '10' }}
+      DAILY_GROQ_REQUESTS_PER_DAY: ${{ vars.DAILY_GROQ_REQUESTS_PER_DAY || '10' }}
+      DAILY_SEARCH_REQUESTS_PER_RUN: '0'
+      DAILY_SEARCH_REQUESTS_PER_DAY: '0'
+      DAILY_GITHUB_REQUESTS_PER_RUN: ${{ vars.DAILY_GITHUB_REQUESTS_PER_RUN || '2' }}
+      DAILY_GITHUB_REQUESTS_PER_DAY: ${{ vars.DAILY_GITHUB_REQUESTS_PER_DAY || '2' }}
+      DAILY_CANDIDATES_PER_RUN: ${{ vars.DAILY_CANDIDATES_PER_RUN || '80' }}
+      DAILY_CANDIDATES_PER_DAY: ${{ vars.DAILY_CANDIDATES_PER_DAY || '120' }}
+      DAILY_MAX_SOURCES: ${{ vars.DAILY_MAX_SOURCES || '12' }}
+      DAILY_LLM_MIN_INTERVAL_SECONDS: ${{ vars.DAILY_LLM_MIN_INTERVAL_SECONDS || '60' }}
+      DAILY_LLM_MAX_OUTPUT_TOKENS: ${{ vars.DAILY_LLM_MAX_OUTPUT_TOKENS || '2048' }}
+      DAILY_MAX_DATABASE_BYTES: ${{ vars.DAILY_MAX_DATABASE_BYTES || '250000000' }}
+      DAILY_MAX_RSS_MB: ${{ vars.DAILY_MAX_RSS_MB || '384' }}
+      FREE_PROVIDER_QUOTAS_CONFIRMED: ${{ vars.FREE_PROVIDER_QUOTAS_CONFIRMED || 'false' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install backend only
+        run: |
+          python -m pip install uv==0.12.19
+          uv sync --frozen --no-dev
+      - name: Run bounded discovery
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GEMINI_MODEL: ${{ vars.GEMINI_MODEL || 'gemini-3.1-flash-lite' }}
+          GROQ_MODEL: ${{ vars.GROQ_MODEL || 'openai/gpt-oss-20b' }}
+        run: |
+          if [ '${{ inputs.mode }}' = 'trial' ]; then
+            .venv/bin/python -m backend.app.free_daily --trial
+          else
+            .venv/bin/python -m backend.app.free_daily
+          fi

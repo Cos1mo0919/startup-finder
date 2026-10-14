@@ -92,6 +92,10 @@ class WebClient:
                 time.sleep(wait)
             self.last_request[host] = time.monotonic()
             try:
+                from .free_budget import current_budget
+                budget = current_budget()
+                if budget:
+                    budget.reserve("pages")
                 with self.client.stream("GET", url) as response:
                     if response.status_code in (301, 302, 303, 307, 308):
                         target = safe_url(urljoin(url, response.headers.get("location", "")))
@@ -108,6 +112,8 @@ class WebClient:
                         raise FetchError("unsupported_content_type")
                     data = bytearray()
                     for chunk in response.iter_bytes(chunk_size=16384):
+                        if budget:
+                            budget.check_time()
                         data.extend(chunk)
                         if len(data) > self.settings.max_page_bytes:
                             raise FetchError("page_too_large")
