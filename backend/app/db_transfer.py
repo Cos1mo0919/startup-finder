@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 import sqlite3
 from sqlalchemy.engine import make_url
-from .config import Settings
+from .config import ROOT
 
 
 def database_path(url):
@@ -39,9 +39,10 @@ def snapshot(source, target):
 
 def main():
     parser = argparse.ArgumentParser(description="Export consistent SQLite data (including committed WAL)")
+    parser.add_argument("--source", type=Path, default=ROOT / "data/finder.sqlite3")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
-    snapshot(database_path(Settings().database_url), args.output)
+    snapshot(args.source, args.output)
     print(json.dumps({"exported": str(args.output), "bytes": args.output.stat().st_size}))
 
 

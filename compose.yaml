@@ -5,11 +5,7 @@ services:
       - "8000:8000"
     env_file: .env
     environment:
-      DATABASE_URL: sqlite:////app/data/finder.sqlite3
-    volumes:
-      - finder-data:/app/data
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL to the PostgreSQL connection URL}
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
-volumes:
-  finder-data:

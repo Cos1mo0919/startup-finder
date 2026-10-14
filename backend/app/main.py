@@ -5,6 +5,7 @@ from typing import Literal
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import String, cast, func, or_, select, text
 from .registry import seed_registry
 from .evidence import audit_existing
@@ -140,12 +141,13 @@ def serialize_project(project, detail=False):
 
 def create_app(settings=None):
     settings = settings or Settings()
-    engine, factory = make_db(settings.database_url)
-    seed_registry(factory, settings.sources_file)
-    audit_existing(factory, settings.evidence_min_score)
-    audit_signals(factory)
-    migrate_existing_problems(factory)
-    synchronize_candidate_publication(factory, settings)
+    engine, factory = make_db(settings.database_url, auto_migrate=settings.database_auto_migrate)
+    if settings.startup_data_updates_enabled:
+        seed_registry(factory, settings.sources_file)
+        audit_existing(factory, settings.evidence_min_score)
+        audit_signals(factory)
+        migrate_existing_problems(factory)
+        synchronize_candidate_publication(factory, settings)
     scheduler = make_scheduler(settings, factory)
 
     @asynccontextmanager
@@ -158,6 +160,10 @@ def create_app(settings=None):
         engine.dispose()
 
     app = FastAPI(title="izlanish loyihalari", lifespan=lifespan)
+    if settings.cors_origins:
+        app.add_middleware(CORSMiddleware, allow_origins=settings.cors_origins,
+                           allow_methods=["GET", "POST", "PATCH", "OPTIONS"],
+                           allow_headers=["Content-Type", "X-Admin-Key"], allow_credentials=False)
     app.state.factory, app.state.scheduler = factory, scheduler
 
     def require_admin(x_admin_key: str = Header(default="")):

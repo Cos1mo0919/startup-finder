@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
+: "${DATABASE_URL:?DATABASE_URL is required. Configure the PostgreSQL connection in environment settings.}"
 if [[ ! -x .venv/bin/uvicorn || ! -f frontend/dist/index.html ]]; then
   echo "Dependencies or frontend build missing. Run ./scripts/setup.sh first." >&2
   exit 1

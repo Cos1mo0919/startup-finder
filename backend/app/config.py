@@ -1,14 +1,14 @@
 from pathlib import Path
 from typing import Literal
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=ROOT / ".env", extra="ignore")
-    database_url: str = f"sqlite:///{ROOT / 'data/finder.sqlite3'}"
+    model_config = SettingsConfigDict(env_file=ROOT / ".env", extra="ignore", hide_input_in_errors=True)
+    database_url: str = ""
     sources_file: Path = ROOT / "config/sources.json"
     trusted_catalog_file: Path = ROOT / "config/trusted_catalog_pages.json"
     telegram_channels_file: Path = ROOT / "config/telegram_channels.json"
@@ -37,6 +37,9 @@ class Settings(BaseSettings):
     admin_api_key: SecretStr = SecretStr("")
     trusted_egress_proxy: bool = False
     scheduler_enabled: bool = True
+    database_auto_migrate: bool = True
+    startup_data_updates_enabled: bool = True
+    cors_origins: list[str] = Field(default_factory=list)
     daily_publish_limit: int = Field(default=100, ge=1, le=100)
     daily_uz_limit: int = Field(default=30, ge=0, le=100)
     scheduler_hour: int = Field(default=9, ge=0, le=23)
@@ -56,6 +59,12 @@ class Settings(BaseSettings):
     max_page_bytes: int = Field(default=2_000_000, ge=1000, le=5_000_000)
     user_agent: str = "StartupFinder/0.1 (+public research aggregator; respects robots.txt)"
     frontend_dist: Path = ROOT / "frontend/dist"
+
+    @model_validator(mode="after")
+    def require_database_url(self):
+        if not self.database_url.strip():
+            raise ValueError("DATABASE_URL is required. Configure PostgreSQL for the application; tests pass an isolated SQLite URL explicitly.")
+        return self
 
     @property
     def ai_key(self) -> str:

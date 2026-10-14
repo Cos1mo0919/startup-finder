@@ -1,6 +1,7 @@
 """Isolated test server. Fixtures NEVER enter the live database."""
 
 import tempfile
+import os
 from pathlib import Path
 import uvicorn
 from backend.app.config import Settings
@@ -11,6 +12,7 @@ from tests.conftest import FakeDiscovery, sample_analysis, sample_article
 
 
 def main():
+    os.environ["IZLANISH_TEST_MODE"] = "1"
     with tempfile.TemporaryDirectory(prefix="finder-browser-") as folder:
         source_file = Path(folder) / "sources.json"
         source_file.write_text("[]")
@@ -21,6 +23,9 @@ def main():
             scheduler_enabled=False,
             ai_api_key="",
             openai_api_key="",
+            gemini_api_key="",
+            openrouter_api_key="",
+            groq_api_key="",
             search_api_key="",
             admin_api_key="test-admin-key",
         )
