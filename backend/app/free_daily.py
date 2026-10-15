@@ -3,9 +3,7 @@
 import argparse
 import json
 import resource
-import signal
 import sys
-import threading
 from collections import Counter
 from datetime import timedelta
 from time import monotonic
@@ -128,11 +126,6 @@ def run_daily(settings, factory, *, trial=False, pipeline_factory=CatalogPipelin
                     "openai": False, "openrouter": False,
                     "search:brave": bool(settings.search_api_key.get_secret_value())}}
             token = ACTIVE.set(budget)
-            alarm = threading.current_thread() is threading.main_thread()
-            previous_handler = signal.getsignal(signal.SIGALRM) if alarm else None
-            if alarm:
-                signal.signal(signal.SIGALRM, lambda *_: budget.stop("max_run_seconds"))
-                signal.setitimer(signal.ITIMER_REAL, seconds)
             pipeline, counts, seen, stop, errors = None, Counter(), set(), "", []
             active_url = None
             try:
@@ -195,12 +188,14 @@ def run_daily(settings, factory, *, trial=False, pipeline_factory=CatalogPipelin
                 stop = "worker_error"
                 errors.append(safe_error(exc, function="free_daily.run_daily", candidate_url=active_url))
             finally:
-                if alarm:
-                    signal.setitimer(signal.ITIMER_REAL, 0)
-                    signal.signal(signal.SIGALRM, previous_handler)
-                if pipeline:
-                    pipeline.close()
-                ACTIVE.reset(token)
+                try:
+                    if pipeline:
+                        pipeline.close()
+                except Exception as exc:
+                    stop = "worker_error"
+                    errors.append(safe_error(exc, function="free_daily.close", candidate_url=active_url))
+                finally:
+                    ACTIVE.reset(token)
                 with factory.begin() as session:
                     row = session.get(Run, run_id)
                     daily = session.get(DailyStats, budget.day)
@@ -229,7 +224,7 @@ def main():
     try:
         settings = Settings()
         # Never migrate or seed the production schema before taking the lease.
-        engine, factory = make_db(settings.database_url, auto_migrate=False)
+        engine, factory = make_db(settings.database_url, auto_migrate=False, statement_timeout_ms=30000)
         try:
             result = run_daily(settings, factory, trial=args.trial)
             print(json.dumps(result, ensure_ascii=False))

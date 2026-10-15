@@ -876,3 +876,10 @@ Render scheduler остаётся выключенным; расписания �
 регрессионного теста: [docs/DAILY_POSTGRES_DEBUG.md](docs/DAILY_POSTGRES_DEBUG.md).
 Точная причина ещё проверяется; локальный skip PostgreSQL не считается успешной
 проверкой. Производственная DATABASE_URL не используется этими тестами.
+
+Для run113 найдено скрытое переключение autocommit в SQLAlchemy pre-ping.
+PostgreSQL runtime pool теперь проверяется без переключения autocommit; ACTIVE
+соединения заменяются, ошибки публикации откатываются, lease освобождается
+независимо от сохранения отчёта. Убран SIGALRM, SQL daily job ограничен timeout.
+Отдельный PostgreSQL16 workflow: `.github/workflows/postgres-regression.yml`.
+Локальные PostgreSQL skip не означают успешного выполнения этих CI-кейсов.

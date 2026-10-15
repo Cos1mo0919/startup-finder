@@ -349,3 +349,15 @@ reasoning и особенности её tokenizer могут отличатьс
 и документация обновлены. Проверки:377 backend tests, Ruff, build и22 browser tests.
 Trial ограничивает запросы за запуск до5, но не переписывает общий API-day cap
 на5: иначе пробный запуск мог бы заблокировать обычный daily до конца окна.
+
+### 2026-10-15: безопасный дедлайн и PostgreSQL pool
+
+После ошибки run113 удалён SIGALRM, который мог прервать psycopg внутри SQL.
+Дедлайн45 минут проверяется между операциями; один текущий ограниченный запрос
+и cleanup могут завершиться позже. Daily CLI задаёт PostgreSQL statement_timeout
+30 секунд на НОВОМ соединении, connect_timeout10 секунд; Actions hard timeout
+остаётся48 минут. Runtime checkout не переключает autocommit: откатывает
+незавершённые неактивные транзакции, заменяет ACTIVE-соединения, выполняет
+SELECT1/rollback до передачи соединения приложению. SQLite не меняется.
+Отдельная PostgreSQL CI-проверка: `.github/workflows/postgres-regression.yml`.
+Подробности/непроверенные пункты — `docs/DAILY_POSTGRES_DEBUG.md`.

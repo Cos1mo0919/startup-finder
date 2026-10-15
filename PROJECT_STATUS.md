@@ -693,3 +693,16 @@ network draft for pypi.org/files.pythonhosted.org awaits owner publication.
 Owner explicitly authorized committing/pushing diagnostics and the skipped PostgreSQL
 tests to the feature branch before reproduction. No publication fix is claimed.
 See docs/DAILY_POSTGRES_DEBUG.md. Work remains unfinished until real reproduction.
+
+## 2026-10-15 — run113 autocommit/ACTIVE fix
+
+Runtime PostgreSQL pre-ping replaced with non-toggling SELECT1/rollback checkout;
+ACTIVE/UNKNOWN connections are discarded. SQLite behavior preserved. Removed
+asynchronous SIGALRM around DB work; daily connections use30s statement/10s
+connect timeout, cooperative45m deadline and48m Actions cap. Dedicated final
+lease-release transactions cover Run initialization/report and close failures.
+Original SQLAlchemy do_ping reproduces the reported exception in an offline test.
+Added separate PostgreSQL16 regression workflow (no production secrets) covering
+review->publication, poisoned ACTIVE pool checkout, post-INSERT rollback and retry.
+Local validation:392 passed,5 PostgreSQL skipped, Ruff/build/22 browser passed.
+Live PostgreSQL/Supabase not accessed; actual PostgreSQL CI results pending.
