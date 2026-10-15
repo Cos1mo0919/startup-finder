@@ -28,7 +28,8 @@ def state_name(day):
 
 class DailyBudget:
     def __init__(self, factory, limits, target, seconds, run_id, clock=now_utc, timer=monotonic,
-                 min_interval=60, output_tokens=2048, max_database_bytes=250_000_000, max_rss_mb=384):
+                 min_interval=60, output_tokens=2048, max_database_bytes=250_000_000, max_rss_mb=384,
+                 provider_policies=None):
         self.factory, self.limits, self.target = factory, limits, target
         self.clock, self.timer, self.deadline = clock, timer, timer() + seconds
         self.day = clock().astimezone(TASHKENT).date().isoformat()
@@ -36,6 +37,9 @@ class DailyBudget:
         self.min_interval, self.output_tokens = min_interval, output_tokens
         self.max_database_bytes, self.max_rss_mb = max_database_bytes, max_rss_mb
         self.stop_reason = ""
+        from .llm_budget import ProviderQuotas
+        self.quotas = ProviderQuotas(self, provider_policies) if provider_policies else None
+        self.request_output_tokens = output_tokens
         with factory.begin() as session:
             row = session.get(SchedulerCheckpoint, state_name(self.day))
             if row is None:
@@ -75,6 +79,8 @@ class DailyBudget:
             state = session.get(SchedulerCheckpoint, state_name(self.day)).cursor
             if enforce_caps:
                 for key, (run_cap, day_cap) in self.limits.items():
+                    if self.quotas and key.startswith("llm:"):
+                        continue  # Provider windows differ from the publication day.
                     provider = key.removeprefix("llm:")
                     if state.get("blocked", {}).get(provider):
                         continue
@@ -84,15 +90,31 @@ class DailyBudget:
                         self.stop("daily_limit:" + key)
 
     def blocked(self, provider):
+        if self.quotas and provider in self.quotas.policies:
+            return self.quotas.blocked(provider)
         with self.factory() as session:
             state = session.get(SchedulerCheckpoint, state_name(self.day)).cursor
             return (state.get("blocked") or {}).get(provider)
 
     def block(self, provider, reason):
+        if self.quotas and provider in self.quotas.policies:
+            return self.quotas.block(provider, reason)
         with self.factory.begin() as session:
             row = session.scalar(select(SchedulerCheckpoint).where(
                 SchedulerCheckpoint.name == state_name(self.day)).with_for_update())
             row.cursor = {**row.cursor, "blocked": {**row.cursor.get("blocked", {}), provider: reason}}
+
+    def wait(self, seconds):
+        while seconds > 0:
+            self.check_time()
+            from .writer import renew_writer
+            renew_writer(self.factory)
+            chunk = min(seconds, 30, max(0, self.deadline - self.timer()))
+            if chunk <= 0:
+                self.stop("max_run_seconds")
+            sleep(chunk)
+            seconds -= chunk
+        self.check_time()
 
     def reserve_many(self, resources):
         self.check()
@@ -158,13 +180,29 @@ def free_status(session, settings):
         for event in (checkpoint.cursor if checkpoint else {}).get("events", []):
             from datetime import datetime
             if aware(datetime.fromisoformat(event["at"])) >= now - timedelta(hours=24):
-                recent[event["resource"]] += 1
+                recent[event["resource"]] += event.get("amount", 1)
     today = session.get(DailyStats, day)
+    from .llm_budget import quota_status
+    provider_quotas = quota_status(session, now)
+    limits = {key: value for key, value in limits.items()
+              if not (key.startswith("llm:") and key.removeprefix("llm:") in provider_quotas)}
+    # Rolling 24h metrics use the provider ledger across publication midnights.
+    for provider in provider_quotas:
+        row = session.get(SchedulerCheckpoint, "llm_quota:" + provider)
+        from datetime import datetime
+        events = [event for event in row.cursor.get("events", [])
+                  if aware(datetime.fromisoformat(event["at"])) >= now - timedelta(hours=24)]
+        recent["llm:" + provider] = len(events)
+        recent["tokens:" + provider] = sum(event["tokens"] for event in events)
     return {"day": day, "timezone": "Asia/Tashkent", "target": data.get("target", settings.daily_project_target),
             "published_today": today.published_count if today else 0,
             "usage_today": usage, "usage_24h": dict(recent), "limits": limits,
-            "blocked_providers": data.get("blocked", {}),
+            "blocked_providers": {**{name: reason for name, reason in data.get("blocked", {}).items()
+                                     if name not in provider_quotas},
+                                  **{name: value["blocked_reason"] for name, value in provider_quotas.items()
+                                     if value["blocked_reason"]}},
             "providers_enabled": data.get("providers_enabled", {}),
+            "provider_quotas": provider_quotas,
             "warnings": [key for key, value in usage.items()
                          if limits.get(key, [0, 0])[1] > 0 and value >= limits[key][1] * 0.8],
             "last_run": {"id": runs[0].id, "status": runs[0].status,

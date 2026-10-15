@@ -18,6 +18,7 @@ from .config import Settings
 from .daily import today_stats
 from .db import Candidate, DailyStats, RegistrySource, Run, make_db, now_utc
 from .free_budget import ACTIVE, BudgetStop, DailyBudget
+from .llm_budget import policies
 from .network import canonical_url
 from .raw_discovery import ingest_raw
 from .registry import due, record_check
@@ -42,6 +43,7 @@ def profile(settings, trial=False):
                 "search:github": 1, "candidates": 20}
         limits = {key: tuple(min(value, caps[key]) for value in values) for key, values in limits.items()}
     updates = {"scheduler_enabled": False, "database_auto_migrate": False,
+               "gemini_model": "gemini-3.1-flash-lite",
                "startup_data_updates_enabled": False, "daily_publish_limit": target, "daily_uz_limit": 0,
                "llm_provider_order": "gemini,groq", "ai_api_key": SecretStr(""),
                "openai_api_key": SecretStr(""), "openrouter_api_key": SecretStr(""),
@@ -113,7 +115,8 @@ def run_daily(settings, factory, *, trial=False, pipeline_factory=CatalogPipelin
                                  min_interval=settings.daily_llm_min_interval_seconds,
                                  output_tokens=settings.daily_llm_max_output_tokens,
                                  max_database_bytes=settings.daily_max_database_bytes,
-                                 max_rss_mb=settings.daily_max_rss_mb)
+                                 max_rss_mb=settings.daily_max_rss_mb,
+                                 provider_policies=policies(settings))
             with factory.begin() as session:
                 from .db import SchedulerCheckpoint
                 from .free_budget import state_name

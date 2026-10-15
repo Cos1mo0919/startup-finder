@@ -29,6 +29,7 @@ const resourceLabels: Record<string,string> = {
   pages: "Sahifa so‘rovlari", candidates: "Nomzodlar", "llm:gemini": "Gemini",
   "llm:groq": "Groq", "llm:openai": "OpenAI", "llm:openrouter": "OpenRouter",
   "search:brave": "Brave qidiruvi", "search:github": "GitHub qidiruvi",
+  "tokens:groq": "Groq tokenlari", "tokens:gemini": "Gemini tokenlari",
 };
 function stopLabel(reason?:string) {
   if (!reason) return "Hali ishga tushmagan";
@@ -119,6 +120,15 @@ export function StatusPage({adminKey}:{adminKey:string}) {
         {s.free_daily.warnings.length>0&&<p role="alert">Diqqat: budjetning kamida 80% sarflandi — {s.free_daily.warnings.join(", ")}</p>}
         <p>Kun oxirigacha to‘xtatilgan xizmatlar: {Object.entries(s.free_daily.blocked_providers).map(([name,reason])=>`${name}: ${reason}`).join("; ")||"Yo‘q"}.</p>
         <p>Kunlik rejim xizmatlari: {Object.entries(s.free_daily.providers_enabled).map(([name,enabled])=>`${name}: ${enabled ? "yoqilgan" : "o‘chirilgan"}`).join("; ")||"Hali ishga tushmagan"}.</p>
+        {Object.entries(s.free_daily.provider_quotas||{}).map(([name,quota])=><div key={name}>
+          <h3>{name} · API budjeti</h3>
+          <p>So‘rovlar: {quota.requests} / {quota.limits.requests} · Tokenlar: {quota.tokens} / {quota.limits.tokens}.</p>
+          <p>Daqiqalik chegara: {quota.limits.rpm} so‘rov, {quota.limits.tpm} token.
+            Hisoblash oynasi: {quota.timezone}. Keyingi chegara yangilanishi: {date(quota.reset_at,true)}.</p>
+          <p>Provayder tasdiqlagan: {quota.reported_tokens} token. Tasdiqlanmagan urinishlar: {quota.unconfirmed_attempts} — xavfsiz zaxira hisoblangan.</p>
+          {quota.warnings.length>0&&<p role="alert">Diqqat: {name} API budjetining kamida 80% sarflandi ({quota.warnings.join(", ")}).</p>}
+          {quota.blocked_reason&&<p>To‘xtatilgan: {quota.blocked_reason}.</p>}
+        </div>)}
       </section>}
       <div className="status-grid">
         <section className="detail-section">

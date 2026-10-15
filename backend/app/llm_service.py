@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from email.utils import parsedate_to_datetime
 from time import monotonic
 from urllib.parse import urlsplit
 
@@ -14,14 +15,16 @@ from .catalog import (ClassifierFailure, CatalogResult, PROMPT_PATH,
 from .db import ProviderHealth, now_utc
 from .network import FetchError, public_dns, safe_url
 from .free_budget import current_budget
+from .llm_budget import ProviderBudgetUnavailable, fit_prompt
 
 PROMPT_VERSION = "catalog_classifier_v3"
 PROVIDER_NAMES = ("gemini", "openrouter", "groq", "openai")
 
 
 class ProviderFailure(Exception):
-    def __init__(self, code: str):
+    def __init__(self, code: str, retry_after: float = 0):
         self.code = code
+        self.retry_after = retry_after
         super().__init__(code)
 
 
@@ -40,7 +43,14 @@ class LLMAnalysis:
 
 def _http_error(response):
     if response.status_code == 429:
-        raise ProviderFailure("rate_limited")
+        try:
+            retry_after = max(0, float(response.headers.get("retry-after", "0")))
+        except ValueError:
+            try:
+                retry_after = max(0, (parsedate_to_datetime(response.headers.get("retry-after", "")) - now_utc()).total_seconds())
+            except (ValueError, TypeError, OverflowError):
+                retry_after = 0
+        raise ProviderFailure("rate_limited", retry_after)
     if response.status_code in (402, 403) and "quota" in response.text.lower()[:1000]:
         raise ProviderFailure("quota_exceeded")
     if response.status_code >= 400:
@@ -58,19 +68,22 @@ class OpenAICompatibleProvider:
         return bool(self.key and self.model)
 
     def complete(self, system: str, user: str, timeout: float) -> dict:
+        self.last_usage = None
         if not self.configured:
             raise ProviderFailure("missing_key")
         body = {"model": self.model, "temperature": 0.1, "response_format": {"type": "json_object"},
                 "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]}
         if current_budget():
-            body["max_tokens"] = current_budget().output_tokens
+            body["max_tokens"] = current_budget().request_output_tokens
         try:
             public_dns(self.base_url, {urlsplit(self.base_url).hostname} if self.trusted_egress_proxy else ())
             client = self.client or httpx
             response = client.post(self.base_url + "/chat/completions", json=body,
                                    headers={"Authorization": "Bearer " + self.key}, timeout=timeout)
             _http_error(response)
-            return json.loads(response.json()["choices"][0]["message"]["content"])
+            data = response.json()
+            self.last_usage = data.get("usage")
+            return json.loads(data["choices"][0]["message"]["content"])
         except httpx.TimeoutException as exc:
             raise ProviderFailure("timeout") from exc
         except httpx.HTTPError as exc:
@@ -89,23 +102,30 @@ class GeminiProvider:
 
     @property
     def configured(self):
-        return bool(self.key and self.model)
+        return bool(self.key and self.model == "gemini-3.1-flash-lite")
 
     def complete(self, system: str, user: str, timeout: float) -> dict:
+        self.last_usage = None
         if not self.configured:
             raise ProviderFailure("missing_key")
         body = {"systemInstruction": {"parts": [{"text": system}]},
                 "contents": [{"role": "user", "parts": [{"text": user}]}],
                 "generationConfig": {"temperature": 0.1, "responseMimeType": "application/json"}}
         if current_budget():
-            body["generationConfig"]["maxOutputTokens"] = current_budget().output_tokens
+            body["generationConfig"]["maxOutputTokens"] = current_budget().request_output_tokens
         try:
             client = self.client or httpx
             response = client.post(
                 f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:generateContent",
                 json=body, headers={"x-goog-api-key": self.key}, timeout=timeout)
             _http_error(response)
-            content = response.json()["candidates"][0]["content"]["parts"][0]["text"]
+            data = response.json()
+            usage = data.get("usageMetadata", {})
+            if "totalTokenCount" in usage:
+                self.last_usage = {"total_tokens": usage["totalTokenCount"],
+                                   "prompt_tokens": usage.get("promptTokenCount", 0),
+                                   "completion_tokens": usage.get("candidatesTokenCount", 0)}
+            content = data["candidates"][0]["content"]["parts"][0]["text"]
             return json.loads(content)
         except httpx.TimeoutException as exc:
             raise ProviderFailure("timeout") from exc
@@ -236,31 +256,56 @@ class LLMService:
                 continue
             if not provider.configured or self.failures[provider.name] >= self.settings.llm_circuit_breaker_failures:
                 continue
-            for _ in range(1 + self.settings.llm_max_retries_per_provider):
+            managed = bool(budget and budget.quotas and provider.name in budget.quotas.policies)
+            retries = self.settings.llm_rate_limit_retries if managed else self.settings.llm_max_retries_per_provider
+            for attempt in range(1 + retries):
+                request_system, request_user = system, user
+                reservation = None
                 if budget:
-                    budget.reserve("llm:" + provider.name)
+                    if managed:
+                        try:
+                            request_system, request_user, tokens, output = fit_prompt(
+                                system, user, budget.quotas.policies[provider.name]["request_tokens"], budget.output_tokens)
+                            reservation = budget.quotas.reserve(provider.name, tokens)
+                            budget.request_output_tokens = output
+                        except ProviderBudgetUnavailable:
+                            break  # Fall through to the next provider, without spending.
+                    else:
+                        budget.reserve("llm:" + provider.name)
                 began = monotonic()
                 attempts += 1
                 self.last_attempt_count = attempts
                 try:
-                    payload = provider.complete(system, user, self.settings.llm_timeout_seconds)
+                    payload = provider.complete(request_system, request_user, self.settings.llm_timeout_seconds)
                     result = validate(payload)
                     self._metric(provider.name, "success")
                     return LLMAnalysis(result, provider.name, provider.model, attempts)
                 except ProviderFailure as exc:
+                    self._metric(provider.name, exc.code)
+                    if managed and exc.code == "rate_limited" and attempt < retries and exc.retry_after <= 60:
+                        budget.wait(max(exc.retry_after, self.settings.llm_rate_limit_backoff_seconds * 2 ** attempt))
+                        continue
                     if budget and exc.code in {"rate_limited", "quota_exceeded"}:
                         budget.block(provider.name, exc.code)
-                    self._metric(provider.name, exc.code)
                     if exc.code in {"rate_limited", "quota_exceeded", "missing_key"}:
                         break
                 except (ClassifierFailure, ValueError) as exc:
                     self._metric(provider.name, "business_validation_failed" if str(exc).startswith("invalid_score") else "schema_validation_failed")
                 finally:
+                    if reservation:
+                        budget.quotas.reconcile(provider.name, reservation, getattr(provider, "last_usage", None))
                     self._metric(provider.name, "request", round((monotonic() - began) * 1000, 2))
+                if managed:
+                    break  # Only 429 gets the dedicated bounded retry loop.
                 if self.failures[provider.name] >= self.settings.llm_circuit_breaker_failures:
                     break
             self.metrics[provider.name]["fallback_count"] += 1
             if self.factory:
                 with self.factory.begin() as session:
-                    session.get(ProviderHealth, provider.name).fallback_count += 1
+                    row = session.get(ProviderHealth, provider.name)
+                    if row is None:
+                        row = ProviderHealth(name=provider.name)
+                        session.add(row)
+                        session.flush()
+                    row.fallback_count += 1
         raise LLMUnavailable("llm_unavailable")
