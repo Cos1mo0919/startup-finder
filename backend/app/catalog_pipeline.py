@@ -463,9 +463,11 @@ class CatalogPipeline(Pipeline):
             status = "partial" if errors else "completed"
         except BudgetStop as exc:
             status, stop_reason = "stopped", str(exc)
-        except Exception:
+        except Exception as exc:
             status = "failed"
-            errors.append({"source": "pipeline", "stage": "catalog", "code": "catalog_run_failed"})
+            from .safe_errors import safe_error
+            errors.append({"source": "pipeline", "stage": "catalog",
+                           **safe_error(exc, function="catalog_pipeline.run", candidate_url=locals().get("url"))})
             raise
         finally:
             with self.factory.begin() as session:
@@ -474,6 +476,7 @@ class CatalogPipeline(Pipeline):
                 run.counts = dict(counts)
                 run.errors = errors[:100]
                 run.details = {"mode": "catalog_archive" if archive else "catalog_fresh",
+                               "last_error": errors[-1] if errors else None,
                                "window": [part.isoformat() for part in self.discovery.window] if getattr(self.discovery, "window", None) else [],
                                "coverage": getattr(self.discovery, "archive_coverage", []),
                                "limits": {"max_candidates": self.settings.max_candidates,

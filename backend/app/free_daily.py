@@ -23,6 +23,7 @@ from .network import canonical_url
 from .raw_discovery import ingest_raw
 from .registry import due, record_check
 from .writer import WriterBusy, writer_scope
+from .safe_errors import safe_error
 
 
 def profile(settings, trial=False):
@@ -133,15 +134,18 @@ def run_daily(settings, factory, *, trial=False, pipeline_factory=CatalogPipelin
                 signal.signal(signal.SIGALRM, lambda *_: budget.stop("max_run_seconds"))
                 signal.setitimer(signal.ITIMER_REAL, seconds)
             pipeline, counts, seen, stop, errors = None, Counter(), set(), "", []
+            active_url = None
             try:
                 budget.check()
                 pipeline = pipeline_factory(settings, factory)
                 def drain():
+                    nonlocal active_url
                     while True:
                         budget.check()
                         url = next_candidate(factory, seen, bool(pipeline.llm_service and pipeline.llm_service.available))
                         if not url:
                             return
+                        active_url = url
                         budget.reserve("candidates")
                         seen.add(url)
                         result = pipeline.run(discover=False, only_urls=[url], reanalyze=False)
@@ -150,6 +154,7 @@ def run_daily(settings, factory, *, trial=False, pipeline_factory=CatalogPipelin
                         counts["review_required"] += result.get("counts", {}).get("review_required", 0)
                         counts["duplicates"] += result.get("counts", {}).get("duplicates", 0)
                         budget.check()
+                        active_url = None
                 drain()
                 with factory() as session:
                     sources = list(session.scalars(select(RegistrySource).where(RegistrySource.enabled.is_(True))
@@ -179,16 +184,16 @@ def run_daily(settings, factory, *, trial=False, pipeline_factory=CatalogPipelin
                         counts["sources_checked"] += 1
                     except BudgetStop:
                         raise
-                    except Exception:
+                    except Exception as exc:
                         record_check(factory, source.id, now_utc(), error="daily_source_failed")
-                        errors.append({"source_id": source.id, "code": "source_failed"})
+                        errors.append({**safe_error(exc, function="free_daily.collect"), "source_id": source.id})
                     drain()
                 stop = stop or "queue_empty_or_sources_complete"
             except BudgetStop as exc:
                 stop = str(exc)
             except Exception as exc:
                 stop = "worker_error"
-                errors.append({"code": type(exc).__name__})
+                errors.append(safe_error(exc, function="free_daily.run_daily", candidate_url=active_url))
             finally:
                 if alarm:
                     signal.setitimer(signal.ITIMER_REAL, 0)
@@ -205,6 +210,7 @@ def run_daily(settings, factory, *, trial=False, pipeline_factory=CatalogPipelin
                     row.finished_at, row.duration_seconds = now_utc(), round(monotonic() - began, 2)
                     row.errors = errors
                     row.details = {**row.details, "stop_reason": stop, "usage": dict(budget.used),
+                                   "last_error": errors[-1] if errors else None,
                                    "limits": limits, "target": budget.target, "day": budget.day,
                                    "budget_events": budget.events, "peak_rss_kib": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss}
                     row.details = {**row.details, "remaining_queue": session.scalar(select(func.count()).select_from(Candidate)
@@ -231,7 +237,7 @@ def main():
             engine.dispose()
         return int(result["status"] == "failed")
     except Exception as exc:
-        print(json.dumps({"status": "failed", "error_type": type(exc).__name__}), file=sys.stderr)
+        print(json.dumps({"status": "failed", "error": safe_error(exc, function="free_daily.main")}), file=sys.stderr)
         return 1
 
 
