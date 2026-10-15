@@ -12,6 +12,7 @@ from sqlalchemy.orm import sessionmaker
 from backend.app.catalog import CatalogEntry, CatalogResult
 from backend.app.catalog_pipeline import CatalogPipeline
 from backend.app.db import Base, Candidate, Lease, Project, RawDiscovery, Run
+from backend.app.connection_pool import runtime_engine
 from backend.app.free_daily import run_daily
 from backend.app.llm_service import LLMAnalysis
 from tests.conftest import FakeDiscovery, sample_article
@@ -23,7 +24,9 @@ def postgres_factory():
     # only a localhost service port; production DATABASE_URL is never inspected.
     value = os.environ.get("IZLANISH_TEST_PG_PORT")
     if not value:
-        pytest.skip("Disposable PostgreSQL unavailable: set IZLANISH_TEST_PG_PORT; Cloud provisioning is network-blocked. Production DATABASE_URL is never used.")
+        pytest.skip(
+            "Disposable PostgreSQL unavailable: set IZLANISH_TEST_PG_PORT; Cloud provisioning is network-blocked. Production DATABASE_URL is never used."
+        )
     if not value.isdigit() or not 1024 <= int(value) <= 65535:
         raise RuntimeError("Invalid disposable PostgreSQL port")
     database = "izlanish_test_" + uuid4().hex
@@ -42,7 +45,7 @@ def postgres_factory():
                 sql.SQL("CREATE DATABASE {}").format(sql.Identifier(database))
             )
         created = True
-        engine = create_engine(admin.url.set(database=database), connect_args={"connect_timeout": 3})
+        engine = runtime_engine(admin.url.set(database=database), statement_timeout_ms=30000)
         Base.metadata.create_all(engine)
         factory = sessionmaker(engine, expire_on_commit=False)
         with factory.begin() as session:
@@ -140,3 +143,107 @@ def test_daily_trial_postgres_reject_review_then_publish(settings, postgres_fact
                 select(Project.id, Project.published_at).where(Project.id.in_([row.id for row in baseline]))
             ).all()
         ) == dict(baseline)
+
+
+def test_original_psycopg_ping_fails_on_a_real_active_connection(postgres_factory):
+    import psycopg
+    from psycopg.pq import TransactionStatus
+    from sqlalchemy.dialects.postgresql.psycopg import PGDialect_psycopg
+
+    engine = postgres_factory.kw["bind"]
+    with engine.connect() as connection:
+        driver = connection.connection.driver_connection
+        driver.pgconn.send_query(b"SELECT pg_sleep(0.05)")
+        assert driver.info.transaction_status == TransactionStatus.ACTIVE
+        try:
+            with pytest.raises(psycopg.ProgrammingError, match="can't change 'autocommit'.*ACTIVE"):
+                PGDialect_psycopg().do_ping(driver)
+        finally:
+            connection.invalidate()
+
+
+@pytest.mark.parametrize("fail_publication", [False, True])
+def test_review_to_publication_replaces_active_socket_and_rolls_back(
+    settings, postgres_factory, fail_publication
+):
+    from sqlalchemy import event, literal
+    from psycopg.pq import TransactionStatus
+    from backend.app.db import now_utc
+    from datetime import timedelta
+
+    factory = postgres_factory
+    engine = factory.kw["bind"]
+    article = sample_article(name="FixtureCloud", url="https://fixture.example/4")
+    with factory.begin() as session:
+        session.add(
+            Candidate(
+                url=article.url,
+                status="review_required",
+                reason="llm_unavailable",
+                updated_at=now_utc() - timedelta(hours=7),
+                article=article.model_dump(mode="json"),
+            )
+        )
+    poisoned = []
+
+    class Reclassify(OfflineClassifier):
+        def analyze_source(self, article):
+            # Reproduce a connection returned after an interrupted command, exactly
+            # before catalog_pipeline.run opens its publication transaction.
+            def poison(driver, record):
+                driver.pgconn.send_query(b"SELECT pg_sleep(0.05)")
+                assert driver.info.transaction_status == TransactionStatus.ACTIVE
+                poisoned.append(driver)
+
+            event.listen(engine, "checkin", poison, once=True)
+            with factory() as session:
+                session.scalar(select(literal(1)))
+            return super().analyze_source(article)
+
+    def pipeline(config, factory):
+        return CatalogPipeline(config, factory, FakeDiscovery([]), llm_service=Reclassify())
+
+    failed = []
+
+    def fail_after_insert(session, context):
+        if (
+            fail_publication
+            and not failed
+            and any(isinstance(row, Project) for row in session.identity_map.values())
+        ):
+            failed.append(True)
+            raise RuntimeError("Fixture failure after PostgreSQL INSERT")
+
+    event.listen(factory, "after_flush_postexec", fail_after_insert)
+    try:
+        result = run_daily(
+            settings.model_copy(update={"llm_batch_delay_seconds": 0}),
+            factory,
+            trial=True,
+            pipeline_factory=pipeline,
+        )
+    finally:
+        event.remove(factory, "after_flush_postexec", fail_after_insert)
+    assert poisoned and all(connection.closed for connection in poisoned)
+    with factory() as session:
+        assert session.get(Lease, "pipeline").owner == ""
+        if fail_publication:
+            assert result["status"] == "failed"
+            assert session.scalar(select(func.count()).select_from(Project)) == 0
+            assert session.get(Candidate, article.url).status == "review_required"
+        else:
+            assert result["status"] == "completed", session.get(Run, result["run_id"]).errors
+            assert session.get(Candidate, article.url).status == "published"
+            assert session.scalar(select(Project)).publication_status == "PUBLISHED"
+    if fail_publication:
+        retried = run_daily(
+            settings.model_copy(update={"llm_batch_delay_seconds": 0}),
+            factory,
+            trial=True,
+            pipeline_factory=pipeline,
+        )
+        assert retried["status"] == "completed" and retried["counts"]["published"] == 1
+    # Checkout probe and session rollback leave the next borrower clean.
+    with engine.connect() as connection:
+        assert connection.connection.driver_connection.info.transaction_status == TransactionStatus.IDLE
+        assert connection.scalar(select(literal(1))) == 1

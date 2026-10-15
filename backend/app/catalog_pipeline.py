@@ -133,14 +133,14 @@ class CatalogPipeline(Pipeline):
                           "rejected": 0, "duplicates": 0, "enriched": 0,
                           "source_unavailable": 0, "reanalysis_circuit_open": 0})
         errors, yield_by_source = [], defaultdict(Counter)
-        with self.factory.begin() as session:
-            run = Run(started_at=now, status="running", counts={},
-                      details={"mode": "catalog_archive" if archive else "catalog_fresh"})
-            session.add(run)
-            session.flush()
-            run_id = run.id
-        status, stop_reason = "failed", ""
+        status, stop_reason, run_id, report_details = "failed", "", None, {}
         try:
+            with self.factory.begin() as session:
+                run = Run(started_at=now, status="running", counts={},
+                          details={"mode": "catalog_archive" if archive else "catalog_fresh"})
+                session.add(run)
+                session.flush()
+                run_id = run.id
             if only_source:
                 self.discovery.allowed_source_ids = {only_source}
             self.discovery.force = force_sources
@@ -470,26 +470,29 @@ class CatalogPipeline(Pipeline):
                            **safe_error(exc, function="catalog_pipeline.run", candidate_url=locals().get("url"))})
             raise
         finally:
-            with self.factory.begin() as session:
-                run = session.get(Run, run_id)
-                run.finished_at, run.status = now_utc(), status
-                run.counts = dict(counts)
-                run.errors = errors[:100]
-                run.details = {"mode": "catalog_archive" if archive else "catalog_fresh",
-                               "last_error": errors[-1] if errors else None,
-                               "window": [part.isoformat() for part in self.discovery.window] if getattr(self.discovery, "window", None) else [],
-                               "coverage": getattr(self.discovery, "archive_coverage", []),
-                               "limits": {"max_candidates": self.settings.max_candidates,
-                                          "archive_pages": self.settings.archive_pages},
-                               "source_yield": {key: dict(value) for key, value in yield_by_source.items()},
-                               "stop_reason": stop_reason,
-                               "processed": counts["candidates"],
-                               "published": counts["auto_published"],
-                               "daily_publication": today_stats(session, self.settings),
-                               "llm_providers": self.llm_service.status() if self.llm_service else [],
-                               "remaining_queue": session.scalar(select(func.count()).select_from(Candidate).where(Candidate.status.in_(["queued", "pending", "review_required"])))}
-                report_details = run.details
-                run.duration_seconds = round(monotonic() - began, 2)
-                self.release(session, owner)
+            try:
+                if run_id is not None:
+                    with self.factory.begin() as session:
+                        run = session.get(Run, run_id)
+                        run.finished_at, run.status = now_utc(), status
+                        run.counts = dict(counts)
+                        run.errors = errors[:100]
+                        run.details = {"mode": "catalog_archive" if archive else "catalog_fresh",
+                                       "last_error": errors[-1] if errors else None,
+                                       "window": [part.isoformat() for part in self.discovery.window] if getattr(self.discovery, "window", None) else [],
+                                       "coverage": getattr(self.discovery, "archive_coverage", []),
+                                       "limits": {"max_candidates": self.settings.max_candidates,
+                                                  "archive_pages": self.settings.archive_pages},
+                                       "source_yield": {key: dict(value) for key, value in yield_by_source.items()},
+                                       "stop_reason": stop_reason,
+                                       "processed": counts["candidates"],
+                                       "published": counts["auto_published"],
+                                       "daily_publication": today_stats(session, self.settings),
+                                       "llm_providers": self.llm_service.status() if self.llm_service else [],
+                                       "remaining_queue": session.scalar(select(func.count()).select_from(Candidate).where(Candidate.status.in_(["queued", "pending", "review_required"])))}
+                        report_details = run.details
+                        run.duration_seconds = round(monotonic() - began, 2)
+            finally:
+                self.release_owner(owner)
         return {"id": run_id, "status": status, "counts": dict(counts), "errors": errors[:100],
                 "details": report_details}

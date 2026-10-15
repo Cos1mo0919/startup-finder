@@ -65,3 +65,64 @@ was blocked by the network allowlist. A draft adds pypi.org/files.pythonhosted.o
 owner must publish it to permit installing a temporary native pgserver package.
 The integration reproduction/fix remains pending until that prerequisite or a
 Codespace disposable PostgreSQL is available. Production is not a fallback.
+
+## Run113: autocommit/ACTIVE evidence and fix
+
+The new driver message identifies an autocommit setter failure. No application
+publication code explicitly assigned autocommit; the runtime engine enabled
+`pool_pre_ping=True`. SQLAlchemy's installed `PGDialect_psycopg.do_ping()` reads
+old autocommit, sets it True, executes SELECT1, and restores it in finally.
+Either setter can fail on ACTIVE. `free_daily` additionally installed SIGALRM
+which could interrupt psycopg mid-command; restoring autocommit could then mask
+the deadline exception. The exact timing of run113 was not replayed against
+production, and production was not accessed.
+
+Changes:
+
+- `connection_pool.runtime_engine`, used by `make_db`, disables PostgreSQL's
+  autocommit-toggling pre-ping and supplies a checkout probe without changing
+  isolation/autocommit. SQLite retains its previous pre-ping/PRAGMA handling.
+- IDLE is probed with SELECT1 followed by rollback before application borrowing.
+  INTRANS/INERROR are rolled back first. ACTIVE/UNKNOWN/closed connections are
+  discarded through SQLAlchemy DisconnectionError and replaced; rollback is
+  never attempted on a socket with a command in flight. Interrupted probes are
+  explicitly invalidated. Pool reset-on-return remains rollback.
+- SIGALRM/setitimer removed from daily processing: the monotonic deadline is
+  checked between operations. Daily CLI sets a30-second PostgreSQL statement
+  timeout on each FRESH connection (SET followed by commit before user work)
+  and10-second connect timeout. No existing publication transaction is committed
+  to change settings. HTTP/LLM already have bounded timeouts. The45-minute limit
+  is cooperative: one in-flight bounded operation/cleanup can finish after it;
+  the Actions job retains its48-minute hard timeout.
+- Catalog and legacy pipeline releases execute in a dedicated last finally
+  transaction, even if Run creation/report persistence fails. Outer daily writer
+  already owns its own finally; close errors now cannot skip ACTIVE context reset
+  or reporting. Failed publication transactions roll back via factory.begin().
+  If PostgreSQL is unreachable or the process is forcibly killed, an immediate
+  release cannot be guaranteed; durable lease expiry remains the recovery path.
+
+Other audit hits are not runtime autocommit changes: migration_recovery and
+sqlite_postgres_migration issue SET TRANSACTION only in explicit maintenance
+commands. The disposable test fixture selects AUTOCOMMIT at engine creation for
+CREATE/DROP DATABASE only, on localhost. No VACUUM or CREATE INDEX CONCURRENTLY
+is invoked by daily/catalog processing. No dynamic runtime isolation-level change
+remains in this application's collection/publication path.
+
+`tests/test_connection_hygiene.py` reproduces the EXACT message by executing the
+original installed SQLAlchemy do_ping against an ACTIVE driver double, then
+checks the safe checkout, invalidation, rollback and releases on report/close
+failures. This is an executed offline reproduction, not a live PostgreSQL claim.
+
+Separate workflow `.github/workflows/postgres-regression.yml` provisions a
+PostgreSQL16 service, needs NO repository secrets and runs only on its own
+localhost UUID databases. It is workflow_dispatch / pull_request, not a production
+cron. It runs5 PostgreSQL cases:2 general catalog scenarios; original do_ping on
+a real libpq ACTIVE socket; review->publication with an ACTIVE returned socket;
+and the same path with failure after INSERT, rollback, release and successful
+retry. These5 cases remain explicitly skipped when no local PostgreSQL service
+is supplied. CI service failure fails the job rather than silently skipping.
+
+Local checks after this fix:392 backend tests passed,5 PostgreSQL tests skipped;
+Ruff, TypeScript/Vite and22 browser tests passed. Actual PostgreSQL execution and
+Supabase trial remain unverified in this Cloud environment. No schema migrations
+or production writes were performed.

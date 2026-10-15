@@ -104,6 +104,13 @@ class Pipeline:
             session.execute(update(Lease).where(Lease.name == "pipeline", Lease.owner == owner)
                             .values(expires_at=now_utc(), owner=""))
 
+    def release_owner(self, owner):
+        # Separate transaction: saving a Run report must not roll back release.
+        from .writer import current_writer
+        if not current_writer(self.factory):
+            with self.factory.begin() as session:
+                self.release(session, owner)
+
     def persist(self, analysis, articles, now, allow_shared_source=False, official_evidence=None):
         validate_analysis(analysis, articles)
         # Retain only sources actually cited by validated facts.
@@ -330,13 +337,13 @@ class Pipeline:
             "window": [d.isoformat() for d in window] if window else [],
             "coverage": [],
         }
-        with self.factory.begin() as session:
-            run = Run(started_at=start, counts=counts.copy(), details=details)
-            session.add(run)
-            session.flush()
-            run_id = run.id
-        status = "failed"
+        status, run_id = "failed", None
         try:
+            with self.factory.begin() as session:
+                run = Run(started_at=start, counts=counts.copy(), details=details)
+                session.add(run)
+                session.flush()
+                run_id = run.id
             with self.factory() as session:
                 self.pre_run_hidden = set(session.scalars(select(Project.id).where(Project.publication_status != "PUBLISHED")))
             audit_existing(self.factory, self.settings.evidence_min_score)
@@ -686,13 +693,16 @@ class Pipeline:
             logger.error("pipeline_failed")
             errors.append({"source": "Tizim", "stage": "pipeline", "code": "pipeline_failed"})
         finally:
-            details["summary"] = summarize_run(counts, errors, bool(self.settings.ai_key))
-            with self.factory.begin() as session:
-                run = session.get(Run, run_id)
-                run.finished_at, run.status = now_utc(), status
-                run.counts, run.errors, run.details = counts.copy(), errors[:100], details
-                run.duration_seconds = round(monotonic() - began, 2)
-                self.release(session, owner)
+            try:
+                if run_id is not None:
+                    details["summary"] = summarize_run(counts, errors, bool(self.settings.ai_key))
+                    with self.factory.begin() as session:
+                        run = session.get(Run, run_id)
+                        run.finished_at, run.status = now_utc(), status
+                        run.counts, run.errors, run.details = counts.copy(), errors[:100], details
+                        run.duration_seconds = round(monotonic() - began, 2)
+            finally:
+                self.release_owner(owner)
         return {"id": run_id, "status": status, "counts": counts, "errors": errors[:100], "details": details}
 
     def mark(self, url, state, reason):

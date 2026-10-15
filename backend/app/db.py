@@ -14,7 +14,6 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
-    create_engine,
     event,
     func,
 )
@@ -458,7 +457,7 @@ def normalized_database_url(url):
     return parsed
 
 
-def make_db(url, *, auto_migrate=True):
+def make_db(url, *, auto_migrate=True, statement_timeout_ms=None):
     parsed = normalized_database_url(url)
     if os.environ.get("PYTEST_CURRENT_TEST") or os.environ.get("IZLANISH_TEST_MODE") == "1":
         location = Path(parsed.database or "").resolve() if parsed.database != ":memory:" else None
@@ -467,10 +466,8 @@ def make_db(url, *, auto_migrate=True):
             raise RuntimeError("Tests may use only an isolated temporary SQLite database")
     if parsed.get_backend_name() == "sqlite" and parsed.database != ":memory:":
         Path(parsed.database).parent.mkdir(parents=True, exist_ok=True)
-    engine = create_engine(
-        parsed, connect_args={"check_same_thread": False, "timeout": 30}
-        if parsed.get_backend_name() == "sqlite" else {}, pool_pre_ping=True,
-    )
+    from .connection_pool import runtime_engine
+    engine = runtime_engine(parsed, statement_timeout_ms=statement_timeout_ms)
     if parsed.get_backend_name() == "sqlite":
 
         @event.listens_for(engine, "connect")

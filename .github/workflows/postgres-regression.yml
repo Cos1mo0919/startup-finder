@@ -1,0 +1,41 @@
+name: PostgreSQL publication regression
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'backend/app/**'
+      - 'tests/test_daily_postgres.py'
+      - 'tests/test_connection_hygiene.py'
+      - '.github/workflows/postgres-regression.yml'
+permissions:
+  contents: read
+concurrency:
+  group: postgres-regression-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  postgres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: izlanish-test-only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      IZLANISH_TEST_PG_PORT: '5432'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install uv==0.12.19
+      - run: uv sync --frozen
+      - name: PostgreSQL review to publication and transaction cleanup
+        run: .venv/bin/pytest -q -rs tests/test_daily_postgres.py tests/test_connection_hygiene.py
