@@ -98,7 +98,7 @@ def test_paid_credentials_are_not_passed_even_when_present(settings):
 def test_trial_caps_goal_time_and_calls(settings):
     config, limits, seconds = profile(settings, trial=True)
     assert config.daily_publish_limit == 5 and seconds == 300
-    assert limits["pages"] == (20, 20)
+    assert limits["pages"] == (40, 40)
     assert limits["llm:gemini"] == (5, 5) and limits["llm:groq"] == (5, 5)
     assert limits["candidates"] == (20, 20)
 

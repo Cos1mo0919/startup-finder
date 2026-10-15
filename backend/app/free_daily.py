@@ -41,6 +41,7 @@ def profile(settings, trial=False):
         caps = {"pages": 20, "llm:gemini": 5, "llm:groq": 5, "llm:openai": 0, "llm:openrouter": 0, "search:brave": 0,
                 "search:github": 1, "candidates": 20}
         limits = {key: tuple(min(value, caps[key]) for value in values) for key, values in limits.items()}
+        limits["pages"] = (settings.trial_pages_per_run, settings.trial_pages_per_day)
     updates = {"scheduler_enabled": False, "database_auto_migrate": False,
                "gemini_model": "gemini-3.1-flash-lite",
                "startup_data_updates_enabled": False, "daily_publish_limit": target, "daily_uz_limit": 0,
@@ -115,18 +116,22 @@ def run_daily(settings, factory, *, trial=False, pipeline_factory=CatalogPipelin
                                  output_tokens=settings.daily_llm_max_output_tokens,
                                  max_database_bytes=settings.daily_max_database_bytes,
                                  max_rss_mb=settings.daily_max_rss_mb,
+                                 page_mode="trial" if trial else "daily",
                                  provider_policies=policies(settings))
             with factory.begin() as session:
                 from .db import SchedulerCheckpoint
                 from .free_budget import state_name
                 row = session.get(SchedulerCheckpoint, state_name(budget.day))
-                row.cursor = {**row.cursor, "providers_enabled": {
+                row.cursor = {**row.cursor, "page_mode": "trial" if trial else "daily", "providers_enabled": {
                     "gemini": bool(settings.gemini_api_key.get_secret_value()),
                     "groq": bool(settings.groq_api_key.get_secret_value()),
                     "openai": False, "openrouter": False,
                     "search:brave": bool(settings.search_api_key.get_secret_value())}}
             token = ACTIVE.set(budget)
             pipeline, counts, seen, stop, errors = None, Counter(), set(), "", []
+            counts.update({key: 0 for key in ("attempted", "processed", "pipeline_calls_returned", "rejected",
+                          "review_required", "duplicates", "published", "fetch_failed", "budget_stopped", "no_decision", "worker_failed")})
+            candidate_runs = []
             active_url = None
             try:
                 budget.check()
@@ -141,11 +146,22 @@ def run_daily(settings, factory, *, trial=False, pipeline_factory=CatalogPipelin
                         active_url = url
                         budget.reserve("candidates")
                         seen.add(url)
+                        counts["attempted"] += 1
                         result = pipeline.run(discover=False, only_urls=[url], reanalyze=False)
-                        counts["processed"] += 1
-                        counts["rejected"] += result.get("counts", {}).get("rejected", 0)
+                        from .run_report import candidate_outcome
+                        outcome = candidate_outcome(factory, url, result)
+                        candidate_runs.append(outcome)
+                        counts["pipeline_calls_returned"] += 1
+                        if outcome["stage"] in {"published", "duplicate", "rejected", "review_required", "pending"}:
+                            counts["processed"] += 1
+                        else:
+                            counts[outcome["stage"]] += 1
+                        counts["rejected"] += result.get("counts", {}).get("rejected", 0) + result.get("counts", {}).get("pre_filtered", 0)
                         counts["review_required"] += result.get("counts", {}).get("review_required", 0)
                         counts["duplicates"] += result.get("counts", {}).get("duplicates", 0)
+                        with factory.begin() as session:
+                            row = session.get(Run, run_id)
+                            row.details = {**row.details, "candidate_runs": candidate_runs}
                         budget.check()
                         active_url = None
                 drain()
@@ -187,6 +203,11 @@ def run_daily(settings, factory, *, trial=False, pipeline_factory=CatalogPipelin
             except Exception as exc:
                 stop = "worker_error"
                 errors.append(safe_error(exc, function="free_daily.run_daily", candidate_url=active_url))
+                if active_url:
+                    counts["worker_failed"] += 1
+                    from .diagnostics import candidate_id
+                    candidate_runs.append({"candidate_id": candidate_id(active_url), "stage": "worker_failed",
+                                           "exception_class": type(exc).__name__})
             finally:
                 try:
                     if pipeline:
@@ -200,18 +221,30 @@ def run_daily(settings, factory, *, trial=False, pipeline_factory=CatalogPipelin
                     row = session.get(Run, run_id)
                     daily = session.get(DailyStats, budget.day)
                     counts["published"] = max(0, (daily.published_count if daily else 0) - initial)
+                    counts["llm_requests"] = sum(value for key, value in budget.used.items() if key.startswith("llm:"))
                     row.counts = dict(counts)
                     row.status = "failed" if stop == "worker_error" else "completed"
+                    refunded = budget.pages.refund(session) if row.status == "failed" else 0
+                    from .db import SchedulerCheckpoint
+                    page_state = session.get(SchedulerCheckpoint, budget.pages.key).cursor
+                    page_report = {"mode": budget.pages.mode, "refunded": refunded,
+                                   "attempted_this_run": budget.used["pages"],
+                                   "charged_today": page_state.get("usage", {}).get("pages", 0),
+                                   "daily_limit": limits["pages"][1]}
                     row.finished_at, row.duration_seconds = now_utc(), round(monotonic() - began, 2)
                     row.errors = errors
                     row.details = {**row.details, "stop_reason": stop, "usage": dict(budget.used),
                                    "last_error": errors[-1] if errors else None,
+                                   "page_budget": page_report,
+                                   "candidate_runs": candidate_runs,
                                    "limits": limits, "target": budget.target, "day": budget.day,
                                    "budget_events": budget.events, "peak_rss_kib": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss}
                     row.details = {**row.details, "remaining_queue": session.scalar(select(func.count()).select_from(Candidate)
                                    .where(Candidate.status.in_(["queued", "pending", "review_required"])))}
             return {"status": "failed" if stop == "worker_error" else "completed", "run_id": run_id,
                     "stop_reason": stop, "counts": dict(counts), "usage": dict(budget.used),
+                    "page_budget": page_report,
+                    "candidate_runs": candidate_runs,
                     "peak_rss_kib": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss}
     except WriterBusy:
         return {"status": "busy", "stop_reason": "another_writer_active"}
@@ -219,20 +252,41 @@ def run_daily(settings, factory, *, trial=False, pipeline_factory=CatalogPipelin
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--trial", action="store_true", help="At most five publications, 20 pages, five calls per free LLM, five minutes")
+    parser.add_argument("--trial", action="store_true", help="At most five publications, separate 40-page budget, five calls per free LLM, five minutes")
+    parser.add_argument("--reset-trial-pages", action="store_true", help="Read-only preview of today's trial page reset")
+    parser.add_argument("--apply", action="store_true", help="Apply trial page reset under writer lease")
+    parser.add_argument("--expect-state", help="Fingerprint from the reset preview; rejects changed counters/day")
+    parser.add_argument("--inspect-run", type=int, help="Read-only candidate-stage diagnostics for a prior run")
     args = parser.parse_args()
+    if sum((args.trial, args.reset_trial_pages, args.inspect_run is not None)) > 1:
+        parser.error("Choose only one of --trial, --reset-trial-pages, --inspect-run")
+    if (args.apply or args.expect_state) and not args.reset_trial_pages:
+        parser.error("--apply/--expect-state require --reset-trial-pages")
+    if args.apply and not args.expect_state:
+        parser.error("--apply requires --expect-state from the read-only preview")
     try:
         settings = Settings()
         # Never migrate or seed the production schema before taking the lease.
         engine, factory = make_db(settings.database_url, auto_migrate=False, statement_timeout_ms=30000)
         try:
-            result = run_daily(settings, factory, trial=args.trial)
+            if args.reset_trial_pages:
+                from .page_budget import reset_trial_pages
+                result = reset_trial_pages(factory, apply=args.apply, expected=args.expect_state,
+                                           limits=(settings.trial_pages_per_run, settings.trial_pages_per_day))
+            elif args.inspect_run is not None:
+                from .run_report import inspect_run
+                result = inspect_run(factory, args.inspect_run)
+            else:
+                result = run_daily(settings, factory, trial=args.trial)
             print(json.dumps(result, ensure_ascii=False))
         finally:
             engine.dispose()
-        return int(result["status"] == "failed")
+        return 0 if args.reset_trial_pages or args.inspect_run is not None else int(result.get("status") == "failed")
     except Exception as exc:
-        print(json.dumps({"status": "failed", "error": safe_error(exc, function="free_daily.main")}), file=sys.stderr)
+        message = {"status": "failed", "error": safe_error(exc, function="free_daily.main")}
+        if args.reset_trial_pages:
+            message["hint"] = "Reset not applied. Repeat the read-only preview and use its current --expect-state."
+        print(json.dumps(message), file=sys.stderr)
         return 1
 
 

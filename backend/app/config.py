@@ -44,6 +44,8 @@ class Settings(BaseSettings):
     daily_max_run_seconds: int = Field(default=2700, ge=1, le=2700)
     daily_pages_per_run: int = Field(default=60, ge=0, le=1000)
     daily_pages_per_day: int = Field(default=80, ge=0, le=1000)
+    trial_pages_per_run: int = Field(default=40, ge=1, le=200)
+    trial_pages_per_day: int = Field(default=40, ge=1, le=200)
     daily_gemini_requests_per_run: int = Field(default=10, ge=0, le=100)
     daily_gemini_requests_per_day: int = Field(default=250, ge=0, le=500)
     daily_groq_requests_per_run: int = Field(default=10, ge=0, le=100)
