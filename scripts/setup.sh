@@ -7,5 +7,5 @@ uv sync --frozen
 npm ci --prefix frontend --no-audit --no-fund
 npm run build --prefix frontend
 
-# Create/migrate the database and import missing sources; no collection or deletion.
-.venv/bin/python -m backend.app.cli --seed-sources
+# Database creation is deliberate: run the migration script before starting the
+# application against a new PostgreSQL database. Setup never writes live data.

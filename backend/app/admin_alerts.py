@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .writer import serialized_worker
+
 from datetime import timedelta
 
 import httpx
@@ -33,6 +35,9 @@ def exceptional_conditions(session):
     return conditions
 
 
+
+
+@serialized_worker
 def send_alerts(settings, factory, client=None):
     token = settings.telegram_bot_token.get_secret_value()
     chat_id = settings.admin_telegram_chat_id

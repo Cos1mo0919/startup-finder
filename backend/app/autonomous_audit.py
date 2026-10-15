@@ -14,8 +14,8 @@ from .db import Candidate, Project, ProjectDeepAnalysis, ProviderHealth, RawDisc
 
 
 def audit(factory, baseline_path=ROOT / "reports/pipeline-baseline.json"):
-    baseline = json.loads(baseline_path.read_text())
-    captured = datetime.fromisoformat(baseline["captured_at"])
+    baseline = json.loads(baseline_path.read_text()) if baseline_path.is_file() else None
+    captured = datetime.fromisoformat(baseline["captured_at"]) if baseline else None
     with factory() as session:
         projects = session.scalars(select(Project)).all()
         raws = session.scalars(select(RawDiscovery)).all()
@@ -37,7 +37,8 @@ def audit(factory, baseline_path=ROOT / "reports/pipeline-baseline.json"):
             for source, metrics in (run.details or {}).get("source_yield", {}).items():
                 for metric, amount in metrics.items():
                     source_yield[source][f"run_{metric}"] += amount
-        fresh = [p for p in projects if aware(p.first_seen) >= captured and p.publication_status == "PUBLISHED"]
+        fresh = [p for p in projects if captured is not None and aware(p.first_seen) >= captured
+                 and p.publication_status == "PUBLISHED"]
         randomizer = random.Random(20261010)
         review = [r for r in raws if r.status == "review_required"]
         rejected = [r for r in raws if r.status == "rejected"]
@@ -45,6 +46,7 @@ def audit(factory, baseline_path=ROOT / "reports/pipeline-baseline.json"):
         randomizer.shuffle(rejected)
         return {
             "baseline": baseline,
+            "baseline_available": baseline is not None,
             "final": {"total_projects": len(projects),
                       "published": sum(p.publication_status == "PUBLISHED" for p in projects),
                       "review_required": sum(p.publication_status == "REVIEW_REQUIRED" for p in projects),

@@ -16,7 +16,9 @@ def catalog_action(session, project_id: str, action: str, reason: str = "", targ
     if action == "PUBLISH":
         if not project.name or not project.short_description or not project.sources:
             raise ValueError("publication_fields_missing")
-        if project.publication_status != "PUBLISHED" and settings is not None:
+        published_before = any(item.get("value") in {"PUBLISHED", "AUTO_PUBLISHED"}
+                               for item in project.status_history or [])
+        if project.publication_status != "PUBLISHED" and not published_before and settings is not None:
             from .daily import reserve_publication
             from .geography import project_scope
             reserve_publication(session, settings, project_scope(project), when)

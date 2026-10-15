@@ -165,11 +165,19 @@ def summarize_run(counts, errors, ai_enabled):
 
 
 def candidate_diagnostics(session):
-    from sqlalchemy import select
+    from sqlalchemy import select, func
+    from types import SimpleNamespace
     from .db import Candidate, Project, RejectedCandidate, Run
 
-    candidates = list(session.scalars(select(Candidate)))
-    published = list(session.scalars(select(Project).where(Project.publication_status == "PUBLISHED")))
+    # Do not load tens of thousands of cached article bodies just to count them.
+    candidates = [SimpleNamespace(url=row.url, status=row.status, reason=row.reason,
+                                 origin=row.origin, analysis_mode=row.analysis_mode,
+                                 article={"text": row.has_text, "language": row.language}) for row in session.execute(
+        select(Candidate.url, Candidate.status, Candidate.reason, Candidate.origin, Candidate.analysis_mode,
+               (func.coalesce(Candidate.article["text"].as_string(), "") != "").label("has_text"),
+               Candidate.article["language"].as_string().label("language")))]
+    published = [SimpleNamespace(content={"analysis_mode": mode}) for (mode,) in session.execute(
+        select(Project.content["analysis_mode"].as_string()).where(Project.publication_status == "PUBLISHED"))]
     reasons = Counter()
     candidate_states = {c.url: c.status for c in candidates}
     for row in session.scalars(select(RejectedCandidate)):
@@ -191,7 +199,7 @@ def candidate_diagnostics(session):
                 else c.reason
             ] += 1
     reasons["ecosystem_signal"] = sum(c.status == "ecosystem" for c in candidates)
-    reasons["duplicates"] = sum(r.counts.get("duplicates", 0) for r in session.scalars(select(Run)))
+    reasons["duplicates"] = sum(counts.get("duplicates", 0) for (counts,) in session.execute(select(Run.counts)))
     return {
         "processing_summary": {
             "published_without_ai": sum(p.content.get("analysis_mode") == "extractive" for p in published),
@@ -228,8 +236,8 @@ def candidate_diagnostics(session):
         ],
         "historical_counts": dict(
             Counter(
-                str(p.published_at.year)
-                for p in session.scalars(select(Project).where(Project.publication_status == "PUBLISHED"))
+                str(moment.year)
+                for (moment,) in session.execute(select(Project.published_at).where(Project.publication_status == "PUBLISHED"))
             )
         ),
     }

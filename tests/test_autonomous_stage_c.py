@@ -136,8 +136,19 @@ def test_explicit_source_block_survives_seed_update(settings, factory):
         assert session.get(RegistrySource, "single-feed").enabled is False
 
 
-def test_read_only_autonomous_audit_uses_immutable_baseline(factory):
-    report = audit(factory)
+def test_read_only_autonomous_audit_uses_immutable_baseline(factory, tmp_path):
+    import json
+    path = tmp_path / "baseline.json"
+    path.write_text(json.dumps({"captured_at": "2026-01-01T00:00:00+00:00", "total_projects": 15}))
+    original = path.read_bytes()
+    report = audit(factory, path)
     assert report["baseline"]["total_projects"] == 15
     assert report["final"]["total_projects"] == 0
     assert report["samples"]["auto_published"] == []
+    assert path.read_bytes() == original
+
+
+def test_audit_without_deployment_history_does_not_require_data_reports(factory, tmp_path):
+    report = audit(factory, tmp_path / "missing.json")
+    assert report["baseline"] is None and report["baseline_available"] is False
+    assert report["new_projects"] == []

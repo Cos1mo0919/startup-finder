@@ -52,13 +52,21 @@ class BraveSearch:
         self.key = key
 
     def search(self, query, freshness="pm"):
+        from ..free_budget import current_budget
+        budget = current_budget()
+        if budget and budget.blocked("search:brave"):
+            return []
         try:
             with httpx.Client(timeout=20) as client:
+                if budget:
+                    budget.reserve("search:brave")
                 r = client.get(
                     "https://api.search.brave.com/res/v1/web/search",
                     headers={"X-Subscription-Token": self.key, "Accept": "application/json"},
                     params={"q": query, "count": 10, "freshness": freshness},
                 )
+                if budget and r.status_code in {402, 403, 429}:
+                    budget.block("search:brave", "quota_or_rate_limit")
                 r.raise_for_status()
                 payload = r.json()
             return [safe_url(item["url"]) for item in payload.get("web", {}).get("results", [])]
@@ -237,8 +245,21 @@ class Discovery:
                         query += f" created:{window[0].isoformat()}..{window[1].isoformat()}"
                     url = "https://api.github.com/search/repositories?" + urlencode(
                         {"q": query, "sort": "updated", "order": "desc", "per_page": 30})
+                    from ..free_budget import current_budget
+                    budget = current_budget()
+                    if budget:
+                        from ..free_budget import BudgetStop
+                        try:
+                            budget.reserve_many(("search:github", "pages"))
+                        except BudgetStop:
+                            # Return already fetched repositories so the caller
+                            # persists them before honoring the stop reason.
+                            break
                     response = client.get(url)
                     if response.status_code in (403, 429):
+                        if budget:
+                            budget.block("search:github", "quota_or_rate_limit")
+                            break
                         raise FetchError("github_rate_limited")
                     if response.status_code != 200:
                         raise FetchError(f"http_{response.status_code}")

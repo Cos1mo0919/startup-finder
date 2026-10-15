@@ -63,3 +63,27 @@ test("admin access requires a key and keeps technical pages separate", async ({ 
   await page.getByRole("navigation", { name: "Admin menyusi" }).getByRole("link", { name: "Signallar" }).click();
   await expect(page.getByRole("heading", { name: "Signallar" })).toBeVisible();
 });
+
+test("admin daily budgets show usage and warnings without public exposure", async ({ page, request }) => {
+  const response = await request.get("/api/admin/status", { headers: { "X-Admin-Key": "test-admin-key" } });
+  expect(response.ok()).toBeTruthy();
+  const status = await response.json();
+  await page.route("**/api/admin/status", route => route.fulfill({ json: { ...status, free_daily: {
+    day: "2026-10-14", timezone: "Asia/Tashkent", target: 20, published_today: 3,
+    found_24h: 12, published_24h: 3, usage_today: {"llm:gemini": 8}, usage_24h: {"llm:gemini": 9},
+    limits: {"llm:gemini": [10,10]}, warnings: ["llm:gemini"],
+    blocked_providers: {groq: "rate_limited"}, providers_enabled: {gemini: true, groq: true, openai: false},
+    last_run: {id: 99, status: "completed", stop_reason: "daily_limit:llm:gemini"},
+  } } }));
+  await page.goto("/admin");
+  await page.getByRole("textbox", { name: "Admin kaliti" }).fill("test-admin-key");
+  await page.getByRole("button", { name: "Kirish" }).click();
+  const panel = page.locator("section").filter({has: page.getByRole("heading", {name: "Bepul kunlik ish"})});
+  await expect(panel).toContainText("Nashr: 3/20");
+  await expect(panel).toContainText("8 / 10");
+  await expect(panel.getByRole("alert")).toContainText("80%");
+  await expect(panel).toContainText("Kunlik limiti: Gemini");
+  await expect(panel).toContainText("openai: o‘chirilgan");
+  await page.goto("/");
+  await expect(page.getByRole("heading", {name: "Bepul kunlik ish"})).toHaveCount(0);
+});

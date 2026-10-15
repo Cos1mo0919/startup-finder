@@ -1,5 +1,23 @@
 # Izlanish — Startup Finder
 
+## Render Docker Web Service
+
+Ветка `render-deploy` создана от GitHub `main` только для деплоя: код PostgreSQL,
+миграции с RLS, инструменты объединения и тесты. Баз данных, резервных копий
+и отчётов с данными в текущем дереве нет. `main` и `migration-data` не меняются.
+
+Подробная инструкция: [docs/RENDER_DEPLOY.md](docs/RENDER_DEPLOY.md). Render
+Blueprint — `render.yaml`, сборка — Dockerfile. Образ собирает Vite-фронтенд;
+FastAPI обслуживает его и `/api` на `0.0.0.0:$PORT`. Все API-запросы фронтенда
+относительные, CORS при одном домене не нужен.
+
+`DATABASE_URL` обязателен; пустое значение завершает запуск с понятной ошибкой,
+без SQLite fallback. Секреты задаются в Render Environment. Для первого запуска
+Blueprint отключает scheduler, автоматические миграции и startup-аудиты.
+Подготовка схемы с RLS — отдельная проверяемая команда оператора, описанная
+в инструкции; здесь она против боевой базы не запускалась.
+
+
 ## Публикация и диагностика статусов
 
 Единственный публичный критерий карточки — `projects.publication_status = PUBLISHED`.
@@ -32,7 +50,7 @@ Codespace нужен экспорт именно его БД: локальные
 
 ## Что реализовано
 
-- React + TypeScript + Vite; FastAPI + Pydantic; SQLAlchemy + SQLite.
+- React + TypeScript + Vite; FastAPI + Pydantic; SQLAlchemy + PostgreSQL через обязательный `DATABASE_URL` (SQLite — явные изолированные тесты).
 - Реестр источников с частотами и состоянием, RSS Spot на узбекском и русском, страницы UzHunt, IT Park и ICT Week; необязательный Brave Search API для более широкого поиска, включая сайты университетов, мероприятий, компаний и другие направления.
 - Проверка даты: обычный запуск — последние 30 дней, архивный — начиная с 01.01.2022. Дата публикации не подменяется датой обновления или обнаружения. Неизвестные и будущие даты отклоняются.
 - Приоритет: последний час → сегодня → вчера → 7 дней → 30 дней. Публичные «Сегодня» и «Новые» определяются по дате публикации, не по `first_seen`; время отображается в Asia/Tashkent.
@@ -98,7 +116,7 @@ cp .env.example .env   # только если .env ещё не существу
 ./scripts/setup.sh
 ```
 
-`setup.sh` устанавливает Python-зависимости из `uv.lock`, npm-зависимости из `frontend/package-lock.json`, собирает frontend, создаёт/мигрирует БД и импортирует отсутствующие источники. После fresh clone достаточно `./scripts/setup.sh`, затем `./scripts/start.sh`; отдельные `npm ci` и `npm run build` не нужны. `start.sh` сообщает понятную ошибку, если setup ещё не выполнен. Пакеты и контрольные суммы проверяются штатными средствами; проверки TLS не отключаются. Папки кеша можно изменить через `UV_CACHE_DIR` и `npm_config_cache`. Для обычной машины без `/workspace` задайте доступные пути кеша перед запуском скрипта.
+`setup.sh` устанавливает Python-зависимости из `uv.lock`, npm-зависимости из `frontend/package-lock.json`, собирает frontend; базу не изменяет. Настройте `DATABASE_URL` и подготовьте схему отдельно по инструкции Render, затем запустите `./scripts/start.sh`; отдельные `npm ci` и `npm run build` не нужны. `start.sh` сообщает понятную ошибку, если setup ещё не выполнен. Пакеты и контрольные суммы проверяются штатными средствами; проверки TLS не отключаются. Папки кеша можно изменить через `UV_CACHE_DIR` и `npm_config_cache`. Для обычной машины без `/workspace` задайте доступные пути кеша перед запуском скрипта.
 
 ## Запуск сайта
 
@@ -106,7 +124,7 @@ cp .env.example .env   # только если .env ещё не существу
 ./scripts/start.sh
 ```
 
-Один процесс обслуживает frontend и API на порту **8000**. Публичные проверки: `GET /api/health`, `GET /api/projects`; техническое состояние: `GET /api/admin/status` с заголовком `X-Admin-Key`. Веб-страницы: `/`, `/loyihalar`, `/boshqa`, `/arxiv`, `/manbalar`, `/loyiha/{id}`; `/admin` доступен владельцу. Сервис должен быть доступен через порт вашего окружения или настроенный reverse proxy; облачный onboarding не создаёт публичный URL автоматически.
+Один процесс обслуживает frontend и API на порту `PORT` (локально по умолчанию **8000**). Публичные проверки: `GET /api/health`, `GET /api/projects`; техническое состояние: `GET /api/admin/status` с заголовком `X-Admin-Key`. Веб-страницы: `/`, `/loyihalar`, `/boshqa`, `/arxiv`, `/manbalar`, `/loyiha/{id}`; `/admin` доступен владельцу. Сервис должен быть доступен через порт вашего окружения или настроенный reverse proxy; облачный onboarding не создаёт публичный URL автоматически.
 
 Для frontend-разработки используйте два терминала:
 
@@ -132,7 +150,7 @@ Vite работает на порту 5173 и проксирует `/api` в bac
 | `AI_MODEL` | По умолчанию `gpt-4.1-mini`; модель с JSON object mode. |
 | `SEARCH_API_KEY` | Необязательный ключ Brave Search API. |
 | `ADMIN_API_KEY` | Обязателен для `/admin` и `/api/admin/*`; задаётся только в защищённой конфигурации среды. |
-| `DATABASE_URL` | По умолчанию абсолютный путь к `data/finder.sqlite3`. PostgreSQL: `postgresql+psycopg://...`. |
+| `DATABASE_URL` | Обязательный PostgreSQL URL из секретов среды, без неявного SQLite. |
 | `SOURCES_FILE` | Путь к `config/sources.json`. |
 | `EVIDENCE_MIN_SCORE` | Минимальный Tasdiqlanganlik для ленты: 5 из 10. Автор и существование обязательны независимо от балла. |
 | `MAX_EVENT_FOLLOWUPS` | До 3 мероприятий для дополнительных поисков за запуск. |
@@ -836,3 +854,14 @@ MAX_CANDIDATES=10 LLM_BATCH_DELAY_SECONDS=1 .venv/bin/python -m backend.app.cli 
 ```
 Baseline до этой миграции — `reports/pipeline-baseline.json`; точная команда
 восстановления и путь резервной копии — `reports/autonomous-pipeline-restore.md`.
+
+Текущие требования PostgreSQL/RLS и запуска Render определены в
+`docs/RENDER_DEPLOY.md`; упоминания SQLite/reports в исторических заметках
+относятся к прежним этапам, отчёты не входят в текущую ветку деплоя.
+
+## Бесплатный ежедневный запуск
+
+Подготовлены bounded CLI, ручные GitHub Actions, дневные лимиты и приватный backup.
+Render scheduler остаётся выключенным; расписания пока закомментированы.
+Секреты, trial на 5 проектов, лимиты, инвентаризация и ограничения описаны в
+[docs/FREE_DAILY_OPERATIONS.md](docs/FREE_DAILY_OPERATIONS.md).

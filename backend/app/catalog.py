@@ -283,7 +283,7 @@ def duplicate_decision(session, entry: CatalogEntry, source_url: str):
             return project, None
     incoming_domain = urlsplit(entry.official_url).hostname if entry.official_url else None
     uncertain = None
-    for project in session.scalars(select(Project)):
+    for project in session.scalars(select(Project).execution_options(yield_per=50)):
         existing = {project.normalized_project_name, *(normalize(alias) for alias in project.aliases)}
         same_name = bool(names & existing or compact & {re.sub(r"\W", "", name) for name in existing})
         same_domain = bool(incoming_domain and project.main_url and urlsplit(project.main_url).hostname == incoming_domain)

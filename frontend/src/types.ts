@@ -131,6 +131,9 @@ export type Run = {
   duration_seconds: number | null;
 };
 export type Status = {
+  free_daily?: {day:string;timezone:string;target:number;published_today:number;found_24h:number;published_24h:number;
+    usage_today:Record<string,number>;usage_24h:Record<string,number>;limits:Record<string,[number,number]>;
+    warnings:string[];blocked_providers:Record<string,string>;providers_enabled:Record<string,boolean>;last_run:{id:number;status:string;stop_reason:string}|null};
   intelligence_counts?: Record<string, number>;
   entity_type_counts?: Record<string, number>;
   problem_gate_counts?: Record<string, number>;

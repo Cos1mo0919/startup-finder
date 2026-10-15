@@ -1,5 +1,7 @@
 from datetime import datetime, timezone
+import os
 from pathlib import Path
+import tempfile
 from uuid import uuid4
 from sqlalchemy import (
     JSON,
@@ -7,13 +9,16 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
     UniqueConstraint,
     create_engine,
     event,
+    func,
 )
+from sqlalchemy.engine import make_url
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, sessionmaker
 
 
@@ -143,7 +148,7 @@ class Candidate(Base):
     url: Mapped[str] = mapped_column(Text, primary_key=True)
     article: Mapped[dict] = mapped_column(JSON)
     status: Mapped[str] = mapped_column(String(30), default="pending", index=True)
-    reason: Mapped[str] = mapped_column(String(100), default="")
+    reason: Mapped[str] = mapped_column(Text, default="")
     attempts: Mapped[int] = mapped_column(Integer, default=0)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
 
@@ -167,7 +172,7 @@ class RawDiscovery(Base):
     publication_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     discovered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
     status: Mapped[str] = mapped_column(String(30), default="pending", index=True)
-    failure_reason: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    failure_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     retry_count: Mapped[int] = mapped_column(Integer, default=0)
     processing_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -293,7 +298,7 @@ class RegistrySource(Base):
     parser_type: Mapped[str] = mapped_column(String(80), default="")
     last_error_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_http_status: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=now_utc)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
 
 
@@ -319,7 +324,7 @@ class Event(Base):
 
 class ProjectEvidence(Base):
     __tablename__ = "project_evidence"
-    __table_args__ = (UniqueConstraint("project_id", "url", "evidence_type", "quote"),)
+    __table_args__ = (UniqueConstraint("project_id", "url", "evidence_type", "quote").ddl_if(dialect="sqlite"),)
     id: Mapped[int] = mapped_column(primary_key=True)
     project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), index=True)
     source_id: Mapped[str | None] = mapped_column(ForeignKey("sources.id"), nullable=True)
@@ -329,6 +334,12 @@ class ProjectEvidence(Base):
     discovered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
     notes: Mapped[str] = mapped_column(Text, default="")
     quote: Mapped[str] = mapped_column(Text)
+
+
+# PostgreSQL cannot index an arbitrarily long quote in a B-tree. Keep the
+# SQLite constraint and use a fixed-size digest for the PostgreSQL unique key.
+Index("uq_project_evidence_quote_pg", ProjectEvidence.project_id, func.md5(ProjectEvidence.url),
+      ProjectEvidence.evidence_type, func.md5(ProjectEvidence.quote), unique=True).ddl_if(dialect="postgresql")
 
 
 class RejectedCandidate(Base):
@@ -438,13 +449,29 @@ class SchedulerCheckpoint(Base):
     cursor: Mapped[dict] = mapped_column(JSON, default=dict)
 
 
-def make_db(url):
-    if url.startswith("sqlite:///") and ":memory:" not in url:
-        Path(url.removeprefix("sqlite:///")).parent.mkdir(parents=True, exist_ok=True)
+def normalized_database_url(url):
+    if url.startswith("postgres://"):
+        url = "postgresql://" + url.removeprefix("postgres://")
+    parsed = make_url(url)
+    if parsed.drivername == "postgresql":
+        parsed = parsed.set(drivername="postgresql+psycopg")
+    return parsed
+
+
+def make_db(url, *, auto_migrate=True):
+    parsed = normalized_database_url(url)
+    if os.environ.get("PYTEST_CURRENT_TEST") or os.environ.get("IZLANISH_TEST_MODE") == "1":
+        location = Path(parsed.database or "").resolve() if parsed.database != ":memory:" else None
+        if parsed.get_backend_name() != "sqlite" or (location and not location.is_relative_to(
+                Path(tempfile.gettempdir()).resolve())):
+            raise RuntimeError("Tests may use only an isolated temporary SQLite database")
+    if parsed.get_backend_name() == "sqlite" and parsed.database != ":memory:":
+        Path(parsed.database).parent.mkdir(parents=True, exist_ok=True)
     engine = create_engine(
-        url, connect_args={"check_same_thread": False, "timeout": 30} if url.startswith("sqlite") else {}
+        parsed, connect_args={"check_same_thread": False, "timeout": 30}
+        if parsed.get_backend_name() == "sqlite" else {}, pool_pre_ping=True,
     )
-    if url.startswith("sqlite"):
+    if parsed.get_backend_name() == "sqlite":
 
         @event.listens_for(engine, "connect")
         def configure(connection, _):
@@ -453,11 +480,16 @@ def make_db(url):
 
     from .migrations import migrate
 
-    migrate(engine, Base.metadata)
+    if auto_migrate:
+        migrate(engine, Base.metadata)
+    else:
+        from .postgres_security import validate_schema_ready
+        validate_schema_ready(engine, Base.metadata)
     factory = sessionmaker(engine, expire_on_commit=False)
-    with factory.begin() as session:
-        if session.get(Lease, "pipeline") is None:
-            session.add(Lease(name="pipeline", expires_at=datetime(2000, 1, 1, tzinfo=timezone.utc)))
-        if session.get(DatabaseIdentity, "primary") is None:
-            session.add(DatabaseIdentity(id="primary"))
+    if auto_migrate:
+        with factory.begin() as session:
+            if session.get(Lease, "pipeline") is None:
+                session.add(Lease(name="pipeline", expires_at=datetime(2000, 1, 1, tzinfo=timezone.utc)))
+            if session.get(DatabaseIdentity, "primary") is None:
+                session.add(DatabaseIdentity(id="primary"))
     return engine, factory

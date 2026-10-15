@@ -1,10 +1,12 @@
 import argparse
+from contextlib import ExitStack
 import json
 import sys
 from datetime import date
 from pathlib import Path
 from .config import Settings
 from .db import make_db
+from .writer import writer_session, writer_scope, WriterBusy
 from .catalog_pipeline import CatalogPipeline
 from .registry import seed_registry, activate_validated_sources
 from .db import RegistrySource, SourceBlock
@@ -93,8 +95,13 @@ def main():
                         help="Bounded conservative noise recheck for existing review rows")
     args = parser.parse_args()
     settings = Settings()
-    engine, factory = make_db(settings.database_url)
+    engine, factory = make_db(settings.database_url, auto_migrate=settings.database_auto_migrate)
+    stack = ExitStack()
     try:
+        readonly = any((args.db_stats, args.list_sources, args.debug_report, args.list_candidates,
+                        args.inspect_url, args.inspect_raw, args.autonomous_audit))
+        if not readonly:
+            stack.enter_context(writer_scope(factory, mark_interrupted=True))
         if args.db_stats:
             from sqlalchemy import func
             from sqlalchemy.engine import make_url
@@ -181,7 +188,7 @@ def main():
                 parser.error("--source-id is required")
             if args.block_source and not args.block_reason.strip():
                 parser.error("--block-reason is required")
-            with factory.begin() as session:
+            with writer_session(factory) as session:
                 source = session.get(RegistrySource, args.source_id)
                 if not source:
                     parser.error("Unknown source ID")
@@ -223,7 +230,7 @@ def main():
         if args.reclassify_candidates:
             from .db import Candidate
 
-            with factory.begin() as session:
+            with writer_session(factory) as session:
                 rows = session.scalars(select(Candidate).where(
                     Candidate.status == "rejected", Candidate.processing_version < 6
                 ).order_by(Candidate.updated_at).limit(settings.max_candidates)).all()
@@ -259,7 +266,7 @@ def main():
                 url = canonical_url(args.process_url)
             except FetchError as exc:
                 parser.error(str(exc))
-            with factory.begin() as session:
+            with writer_session(factory) as session:
                 source = source_for_url(session, url)
                 if source is None or not source.enabled or source.collection_method == "search":
                     parser.error("URL must belong to an enabled registered public source")
@@ -331,7 +338,11 @@ def main():
             pipeline.close()
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return 1 if result["status"] in ("failed", "partial") else 0
+    except WriterBusy:
+        print(json.dumps({"status": "busy", "reason": "another_writer_active"}))
+        return 0
     finally:
+        stack.close()
         engine.dispose()
 
 

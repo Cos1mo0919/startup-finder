@@ -8,19 +8,20 @@ from datetime import timedelta
 from time import monotonic, sleep
 from uuid import uuid4
 
-from sqlalchemy import case, func, literal, or_, select, update
+from sqlalchemy import case, func, literal, or_, select
 
-from .catalog import (CatalogResult, ClassifierFailure,
+from .catalog import (CatalogEntry, CatalogResult, ClassifierFailure,
                       deterministic_entry)
 from .catalog_store import history, save_catalog_result
 from .llm_service import LLMService, LLMUnavailable, PROMPT_VERSION
 from .raw_discovery import cheap_decision, ingest_raw, record_transition
 from .dates import parse_date
 from .dates import TASHKENT
-from .db import Candidate, Lease, Project, RawDiscovery, RegistrySource, Run, aware, now_utc
+from .db import Candidate, Project, RawDiscovery, RegistrySource, Run, aware, now_utc
 from .network import FetchError, canonical_url
 from .pipeline import Pipeline
 from .schemas import Article
+from .free_budget import BudgetStop
 
 OBVIOUS_NOISE = re.compile(
     r"stipendiya|scholarship|стипенд|siyosiy tayinlov|political appointment|"
@@ -326,7 +327,8 @@ class CatalogPipeline(Pipeline):
                                                 source_name=adapter, title=cached.get("title", ""),
                                                 source_type="legacy_candidate", raw_payload={"candidate_url": url})
                             counts["raw_discoveries"] += 1
-                        action, reason, known_project_id = cheap_decision(session, raw)
+                        action, reason, known_project_id = (("classify", "", None)
+                            if cached.get("_deferred_catalog_entries") else cheap_decision(session, raw))
                         raw_id = raw.id
                         if action != "classify":
                             record_transition(raw, "rejected" if action == "reject" else "processed", reason,
@@ -382,7 +384,12 @@ class CatalogPipeline(Pipeline):
                         result = CatalogResult("NOT_PROJECT", 0.95, reason="outside_archive_window",
                                                analysis_method="deterministic")
                     else:
-                        result = self._classify(article)
+                        if cached.get("_deferred_catalog_entries"):
+                            entries = tuple(CatalogEntry.model_validate(item) for item in cached["_deferred_catalog_entries"])
+                            result = CatalogResult("MULTI", min(item.confidence for item in entries), entries,
+                                                   analysis_method=cached.get("_deferred_analysis_method", "llm"))
+                        else:
+                            result = self._classify(article)
                     if result.entries:
                         counts["project_candidates"] += len(result.entries)
                         source_bucket["project_candidates"] += len(result.entries)
@@ -454,6 +461,8 @@ class CatalogPipeline(Pipeline):
             if not stop_reason:
                 stop_reason = "source_error" if source_errors else "batch_budget_reached" if work else "queue_empty"
             status = "partial" if errors else "completed"
+        except BudgetStop as exc:
+            status, stop_reason = "stopped", str(exc)
         except Exception:
             status = "failed"
             errors.append({"source": "pipeline", "stage": "catalog", "code": "catalog_run_failed"})
@@ -478,7 +487,6 @@ class CatalogPipeline(Pipeline):
                                "remaining_queue": session.scalar(select(func.count()).select_from(Candidate).where(Candidate.status.in_(["queued", "pending", "review_required"])))}
                 report_details = run.details
                 run.duration_seconds = round(monotonic() - began, 2)
-                session.execute(update(Lease).where(Lease.name == "pipeline", Lease.owner == owner)
-                                .values(owner="", expires_at=now_utc()))
+                self.release(session, owner)
         return {"id": run_id, "status": status, "counts": dict(counts), "errors": errors[:100],
                 "details": report_details}

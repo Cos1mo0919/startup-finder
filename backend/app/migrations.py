@@ -227,3 +227,6 @@ def migrate(engine, metadata):
                     "VALUES (:day,:published,:uzbekistan,:global,:github)"), {"day": day, **values})
             conn.execute(text("INSERT INTO schema_migrations(version,applied_at) VALUES(10,:at)"),
                          {"at": datetime.now(timezone.utc).isoformat()})
+        # PostgreSQL-only, idempotent security DDL; no row/history/count changes.
+        from .postgres_security import enable_postgres_rls
+        enable_postgres_rls(conn, metadata)

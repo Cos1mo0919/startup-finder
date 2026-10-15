@@ -1,3 +1,31 @@
+# Render deployment preparation — 2026-10-14
+
+Created render-deploy directly from origin/main fcba079, independently of the
+migration-data branch. Transferred PostgreSQL configuration, schema models and
+manual migration/merge tools without SQLite databases, backups, decisions or
+data reports. Removed inherited reports from the branch tree; original files
+remain available on their historical branches. Main history was not rewritten.
+
+Docker now starts via scripts/start.sh on 0.0.0.0:$PORT; health check uses PORT.
+Existing Node/Vite multi-stage build and FastAPI SPA/assets serving are retained.
+Added idempotent PostgreSQL RLS security migration covering all 22 app tables,
+revoking public/anon/authenticated table access without creating public policies.
+Added explicit schema command and safe first-boot controls; Render Blueprint
+keeps scheduler, automatic migrations and startup data audits disabled.
+
+Validation on the actual GitHub main base: 339 backend tests, Ruff,
+TypeScript/Vite production build and 20 Playwright desktop/mobile tests passed. All test databases are isolated
+temporary SQLite; optional AI keys are explicitly empty in test settings.
+
+No production database operation was run, no schema was applied and no service
+was deployed. Docker build was attempted; elevated retry reached Docker Hub but
+base-image lookup was denied with 403. Thus full image and actual PostgreSQL RLS
+execution remain unverified. The startup contract, data-preserving disabled
+startup, API/SPA/assets, CORS and security SQL are covered by isolated tests.
+
+Historical product status below is retained; data report paths refer to earlier
+branches and are not shipped by render-deploy.
+
 # Project status
 
 ## 2026-10-12 — Boshqa, compact home, 2025 backfill
@@ -625,3 +653,16 @@ international country-filter tab showed only Screens (United States). The
 Global without inventing a country. Telegram
 credentials remain unconfigured. Stage/user acceptance is not implied by this
 technical validation.
+
+## 2026-10-14 — free daily job prepared, not activated
+
+Child branch of render-deploy: bounded daily CLI, durable daily request ledger,
+shared writer lease, persistent owner HIDE/REJECT, private streaming backup,
+manual-only discovery/backup Actions and admin budget display. No production
+connection, migration, discovery, backup or schedule activation performed.
+Offline validation: 360 backend tests, Ruff, TypeScript/Vite build and 22
+Playwright desktop/mobile tests passed. Follow-up budget/backup tests passed.
+A read-only historical snapshot diagnostics process peaked at76MiB; this is
+not a full service memory guarantee. Actual provider/account quotas, Actions
+execution, Supabase backup/restore and deployed memory remain unverified.
+Owner setup and inventory: `docs/FREE_DAILY_OPERATIONS.md`.

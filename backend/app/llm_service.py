@@ -13,6 +13,7 @@ from .catalog import (ClassifierFailure, CatalogResult, PROMPT_PATH,
                       apply_neutral_score_fallback, parse_classifier_response)
 from .db import ProviderHealth, now_utc
 from .network import FetchError, public_dns, safe_url
+from .free_budget import current_budget
 
 PROMPT_VERSION = "catalog_classifier_v3"
 PROVIDER_NAMES = ("gemini", "openrouter", "groq", "openai")
@@ -61,6 +62,8 @@ class OpenAICompatibleProvider:
             raise ProviderFailure("missing_key")
         body = {"model": self.model, "temperature": 0.1, "response_format": {"type": "json_object"},
                 "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]}
+        if current_budget():
+            body["max_tokens"] = current_budget().output_tokens
         try:
             public_dns(self.base_url, {urlsplit(self.base_url).hostname} if self.trusted_egress_proxy else ())
             client = self.client or httpx
@@ -94,6 +97,8 @@ class GeminiProvider:
         body = {"systemInstruction": {"parts": [{"text": system}]},
                 "contents": [{"role": "user", "parts": [{"text": user}]}],
                 "generationConfig": {"temperature": 0.1, "responseMimeType": "application/json"}}
+        if current_budget():
+            body["generationConfig"]["maxOutputTokens"] = current_budget().output_tokens
         try:
             client = self.client or httpx
             response = client.post(
@@ -147,7 +152,10 @@ class LLMService:
 
     @property
     def available(self):
-        return bool(self.settings.llm_enabled and any(provider.configured for provider in self.providers))
+        budget = current_budget()
+        return bool(self.settings.llm_enabled and any(provider.configured and
+                    (not budget or (provider.name in {"gemini", "groq"} and not budget.blocked(provider.name)))
+                    for provider in self.providers))
 
     @property
     def operational(self):
@@ -223,9 +231,14 @@ class LLMService:
         attempts = 0
         self.last_attempt_count = 0
         for provider in self.providers:
+            budget = current_budget()
+            if budget and (provider.name not in {"gemini", "groq"} or budget.blocked(provider.name)):
+                continue
             if not provider.configured or self.failures[provider.name] >= self.settings.llm_circuit_breaker_failures:
                 continue
             for _ in range(1 + self.settings.llm_max_retries_per_provider):
+                if budget:
+                    budget.reserve("llm:" + provider.name)
                 began = monotonic()
                 attempts += 1
                 self.last_attempt_count = attempts
@@ -235,6 +248,8 @@ class LLMService:
                     self._metric(provider.name, "success")
                     return LLMAnalysis(result, provider.name, provider.model, attempts)
                 except ProviderFailure as exc:
+                    if budget and exc.code in {"rate_limited", "quota_exceeded"}:
+                        budget.block(provider.name, exc.code)
                     self._metric(provider.name, exc.code)
                     if exc.code in {"rate_limited", "quota_exceeded", "missing_key"}:
                         break

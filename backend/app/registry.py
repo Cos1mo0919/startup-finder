@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import select
 from .db import RegistrySource, SourceBlock, aware, now_utc
 from .network import safe_url, canonical_url
+from .writer import registry_writer
 
 FREQUENCIES = {5: 60, 4: 180, 3: 480, 2: 1440, 1: 10080}
 
@@ -57,6 +58,7 @@ def load_sources(path):
     return [SourceConfig.model_validate(s) for s in json.loads(path.read_text())]
 
 
+@registry_writer
 def seed_registry(factory, path, update=False):
     configs = load_sources(path)
     added = 0

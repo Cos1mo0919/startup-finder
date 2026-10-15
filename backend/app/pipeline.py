@@ -66,6 +66,10 @@ class Pipeline:
             self.web.close()
 
     def acquire(self, owner, now):
+        from .writer import current_writer, renew_writer
+        if current_writer(self.factory):
+            renew_writer(self.factory)
+            return True
         with self.factory.begin() as session:
             result = session.execute(
                 update(Lease)
@@ -80,6 +84,10 @@ class Pipeline:
             return result.rowcount == 1
 
     def heartbeat(self, owner):
+        from .writer import current_writer, renew_writer
+        if current_writer(self.factory):
+            renew_writer(self.factory)
+            return
         now = now_utc()
         with self.factory.begin() as session:
             result = session.execute(
@@ -90,6 +98,12 @@ class Pipeline:
             if result.rowcount != 1:
                 raise RuntimeError("pipeline_lease_lost")
 
+    def release(self, session, owner):
+        from .writer import current_writer
+        if not current_writer(self.factory):
+            session.execute(update(Lease).where(Lease.name == "pipeline", Lease.owner == owner)
+                            .values(expires_at=now_utc(), owner=""))
+
     def persist(self, analysis, articles, now, allow_shared_source=False, official_evidence=None):
         validate_analysis(analysis, articles)
         # Retain only sources actually cited by validated facts.
@@ -97,6 +111,9 @@ class Pipeline:
         articles = [a for a in articles if canonical_url(a.url) in cited]
         with self.factory.begin() as session:
             project = find_duplicate(session, analysis, [a.url for a in articles], allow_shared_source)
+            if project and project.publication_method == "admin" and project.publication_status != "PUBLISHED":
+                self.last_persist_visible = False
+                return project.id
             created = project is None
             previously_visible = bool(project and project.publication_status == "PUBLISHED")
             if project is None:
@@ -675,11 +692,7 @@ class Pipeline:
                 run.finished_at, run.status = now_utc(), status
                 run.counts, run.errors, run.details = counts.copy(), errors[:100], details
                 run.duration_seconds = round(monotonic() - began, 2)
-                session.execute(
-                    update(Lease)
-                    .where(Lease.name == "pipeline", Lease.owner == owner)
-                    .values(expires_at=now_utc(), owner="")
-                )
+                self.release(session, owner)
         return {"id": run_id, "status": status, "counts": counts, "errors": errors[:100], "details": details}
 
     def mark(self, url, state, reason):

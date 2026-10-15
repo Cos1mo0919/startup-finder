@@ -8,7 +8,16 @@ import { countLabels, errorLabels, statusLabels } from "./labels";
 import { useApi } from "./useApi";
 import { date } from "./utils";
 const stopReasonLabels: Record<string,string> = {
-  daily_publish_limit_reached: "Kunlik 100 ta nashr chegarasiga yetildi",
+  daily_project_target: "Kunlik loyiha maqsadiga yetildi",
+  max_run_seconds: "Ishlash vaqti tugadi",
+  calendar_day_changed: "Toshkentda yangi kun boshlandi",
+  database_size_guard: "Baza hajmi uchun xavfsizlik chegarasi",
+  memory_guard: "Xotira xavfsizlik chegarasi",
+  worker_error: "Ishlovchi xatosi; jurnalni tekshiring",
+  another_writer_active: "Boshqa yozuvchi ishlamoqda",
+  source_batch_complete: "Manbalar paketi tugadi",
+  queue_empty_or_sources_complete: "Navbat yoki manbalar tekshiruvi tugadi",
+  daily_publish_limit_reached: "Kunlik nashr chegarasiga yetildi",
   local_reservation_active: "O‘zbekiston loyihalari uchun joy saqlanmoqda",
   queue_empty: "Ishlanadigan navbat tugadi",
   ai_provider_limit: "AI xizmatlari hozircha mavjud emas yoki limitga yetdi",
@@ -16,6 +25,18 @@ const stopReasonLabels: Record<string,string> = {
   batch_budget_reached: "Bir ishga tushirish limiti tugadi",
   processing_disabled: "Ushbu ishga tushirishda qayta ishlash o‘chirilgan",
 };
+const resourceLabels: Record<string,string> = {
+  pages: "Sahifa so‘rovlari", candidates: "Nomzodlar", "llm:gemini": "Gemini",
+  "llm:groq": "Groq", "llm:openai": "OpenAI", "llm:openrouter": "OpenRouter",
+  "search:brave": "Brave qidiruvi", "search:github": "GitHub qidiruvi",
+};
+function stopLabel(reason?:string) {
+  if (!reason) return "Hali ishga tushmagan";
+  for (const prefix of ["run_limit:", "daily_limit:"]) {
+    if (reason.startsWith(prefix)) return `${prefix === "run_limit:" ? "Ishga tushirish" : "Kunlik"} limiti: ${resourceLabels[reason.slice(prefix.length)] || reason.slice(prefix.length)}`;
+  }
+  return stopReasonLabels[reason] || reason;
+}
 export function StatusPage({adminKey}:{adminKey:string}) {
   const [refresh, setRefresh] = useState(0);
   useEffect(() => {
@@ -52,6 +73,7 @@ export function StatusPage({adminKey}:{adminKey:string}) {
           Yangilash
         </button>
       </div>
+
       <div className="status-metrics">
         {[
           [
@@ -64,7 +86,7 @@ export function StatusPage({adminKey}:{adminKey:string}) {
           ],
           ["Keyingi kunlik ishlov", s.scheduler_enabled ? date(s.next_daily_processing||null, true) : "Jadval o‘chirilgan"],
           ["Jami loyihalar", String(s.total_projects)],
-          ["Bugun nashr etildi", `${s.daily_publication?.published??0}/${s.daily_publication?.limit??100}`],
+          ["Bugun nashr etildi", `${s.free_daily?.published_today??s.daily_publication?.published??0}/${s.free_daily?.target??s.daily_publication?.limit??100}`],
           ["7 kunda", String(s.daily_publication?.week??0)],
           ["Oy davomida", String(s.daily_publication?.month??0)],
           ["Tahlil kutilmoqda", String(s.pending_candidates)],
@@ -86,6 +108,18 @@ export function StatusPage({adminKey}:{adminKey:string}) {
           30 soniyada yangilanadi.
         </p>
       </div>
+      {s.free_daily&&<section className="detail-section"><h2>Bepul kunlik ish</h2>
+        <p>{s.free_daily.day} · Toshkent · Nashr: {s.free_daily.published_today}/{s.free_daily.target}.
+          Oxirgi 24 soatda: {s.free_daily.found_24h} yangi nomzod, {s.free_daily.published_24h} nashr.</p>
+        <p>Oxirgi yakun: {stopLabel(s.free_daily.last_run?.stop_reason)}.</p>
+        <table><thead><tr><th>Resurs</th><th>Bugun / kunlik limit</th><th>24 soatda</th></tr></thead><tbody>
+          {Object.entries(s.free_daily.limits).map(([key,limits])=><tr key={key}><td>{resourceLabels[key]||key}</td>
+            <td>{s.free_daily?.usage_today[key]||0} / {limits[1]}</td><td>{s.free_daily?.usage_24h[key]||0}</td></tr>)}
+        </tbody></table>
+        {s.free_daily.warnings.length>0&&<p role="alert">Diqqat: budjetning kamida 80% sarflandi — {s.free_daily.warnings.join(", ")}</p>}
+        <p>Kun oxirigacha to‘xtatilgan xizmatlar: {Object.entries(s.free_daily.blocked_providers).map(([name,reason])=>`${name}: ${reason}`).join("; ")||"Yo‘q"}.</p>
+        <p>Kunlik rejim xizmatlari: {Object.entries(s.free_daily.providers_enabled).map(([name,enabled])=>`${name}: ${enabled ? "yoqilgan" : "o‘chirilgan"}`).join("; ")||"Hali ishga tushmagan"}.</p>
+      </section>}
       <div className="status-grid">
         <section className="detail-section">
           <h2>

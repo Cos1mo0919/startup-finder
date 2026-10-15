@@ -114,7 +114,7 @@ def test_pipeline_stops_at_daily_limit_and_preserves_queue(settings, factory):
     pipeline.close()
 
 
-def test_admin_republish_does_not_bypass_daily_cap(settings, factory):
+def test_admin_restore_does_not_count_an_old_project_as_a_new_publication(settings, factory):
     settings = settings.model_copy(update={"daily_publish_limit": 1, "daily_uz_limit": 0})
     when = now_utc()
     article = sample_article("Alpha", "https://example.com/alpha")
@@ -127,10 +127,10 @@ def test_admin_republish_does_not_bypass_daily_cap(settings, factory):
         project.visible = False
         project_id = project.id
     with factory.begin() as session:
-        with pytest.raises(DailyLimitReached):
-            catalog_action(session, project_id, "PUBLISH", settings=settings)
+        catalog_action(session, project_id, "PUBLISH", settings=settings)
     with factory() as session:
-        assert session.get(Project, project_id).publication_status == "REVIEW_REQUIRED"
+        assert session.get(Project, project_id).publication_status == "PUBLISHED"
+        assert session.scalar(select(DailyStats.published_count)) == 1
 
 
 def test_scheduled_drain_skips_after_cap(settings, factory):

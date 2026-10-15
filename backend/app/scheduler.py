@@ -1,5 +1,7 @@
 """Continuous source checks plus durable reconciliation and deep-scan checkpoints."""
 
+from .writer import serialized_worker
+
 from datetime import timedelta
 from zoneinfo import ZoneInfo
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -62,6 +64,9 @@ def scan_due(name, checkpoint, now):
     return not checkpoint or not checkpoint.last_attempt_at or aware(checkpoint.last_attempt_at) <= aware(now) - timedelta(hours=1)
 
 
+
+
+@serialized_worker
 def run_deep_scan(settings, factory, name, now=None):
     now = now or now_utc()
     with factory() as session:
