@@ -680,3 +680,16 @@ remains Asia/Tashkent. No new schema, live credentials, production operations or
 schedule activation. Validation:377 backend tests, Ruff, TypeScript/build and22
 browser tests (desktop/mobile). Model-native tokenization/live usage still untested;
 request size is estimated with margin, not an exact tokenizer guarantee.
+
+## 2026-10-15 — run107 diagnostics checkpoint (investigation unfinished)
+
+Added safe outer/inner Run error diagnostics and disposable PostgreSQL CI
+regression cases (3 reject,1 review, then publication;0/5 historical records).
+No production access. Runtime SQL audit found no unguarded SQLite syntax/direct
+JSON DBAPI binding. The actual run107 ProgrammingError cause is not established.
+380 backend tests pass;2 real PostgreSQL cases are skipped locally because no
+server is available. Docker registry403 and PyPI allowlist block installation;
+network draft for pypi.org/files.pythonhosted.org awaits owner publication.
+Owner explicitly authorized committing/pushing diagnostics and the skipped PostgreSQL
+tests to the feature branch before reproduction. No publication fix is claimed.
+See docs/DAILY_POSTGRES_DEBUG.md. Work remains unfinished until real reproduction.
