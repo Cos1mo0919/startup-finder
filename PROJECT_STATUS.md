@@ -666,3 +666,17 @@ A read-only historical snapshot diagnostics process peaked at76MiB; this is
 not a full service memory guarantee. Actual provider/account quotas, Actions
 execution, Supabase backup/restore and deployed memory remain unverified.
 Owner setup and inventory: `docs/FREE_DAILY_OPERATIONS.md`.
+
+## 2026-10-15 — provider token budgets
+
+Groq:500 requests/100000 tokens per rolling24h,30 RPM/8000 TPM, approximate
+5500-token request envelope. Gemini:Flash Lite only,250 requests per Pacific day,
+10 RPM/200000 local TPM, additional1000000-token safety cap. Durable provider
+ledger reserves before HTTP, reconciles provider usage, preserves unknown failed
+attempts and imports old request-only spend conservatively.429 gets at most2
+retries with exponential backoff, Retry-After and persistent minute throttling.
+Admin shows provider windows/token usage/80% warnings. Existing publication day
+remains Asia/Tashkent. No new schema, live credentials, production operations or
+schedule activation. Validation:377 backend tests, Ruff, TypeScript/build and22
+browser tests (desktop/mobile). Model-native tokenization/live usage still untested;
+request size is estimated with margin, not an exact tokenizer guarantee.

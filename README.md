@@ -865,3 +865,9 @@ Baseline до этой миграции — `reports/pipeline-baseline.json`; т
 Render scheduler остаётся выключенным; расписания пока закомментированы.
 Секреты, trial на 5 проектов, лимиты, инвентаризация и ограничения описаны в
 [docs/FREE_DAILY_OPERATIONS.md](docs/FREE_DAILY_OPERATIONS.md).
+
+В bounded job добавлены token budgets: Groq500 запросов/100000 токенов за
+скользящие24 часа, Gemini250 запросов за Pacific-день. Gemini закреплён на
+`gemini-3.1-flash-lite`; Groq по умолчанию `openai/gpt-oss-20b`, выбор через
+`GROQ_MODEL`. Минутные лимиты, безопасное резервирование usage, повторы429 и
+новые Variables описаны в дополнении2026-10-15 к руководству выше.
