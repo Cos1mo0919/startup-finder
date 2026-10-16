@@ -110,6 +110,11 @@ export function StatusPage({adminKey}:{adminKey:string}) {
         </p>
       </div>
       {s.free_daily&&<section className="detail-section"><h2>Bepul kunlik ish</h2>
+        <p>Sahifa rejimi: {s.free_daily.page_mode === "trial" ? "Sinov (trial)" : "Oddiy (daily)"}.</p>
+        {Object.entries(s.free_daily.page_budgets||{}).map(([mode,pages])=><p key={mode}>
+          {mode === "trial" ? "Sinov" : "Oddiy"} sahifa budjeti: {pages.used} / {pages.limits[1]}.
+          Jami urinish: {pages.attempted}; xatoli ishga tushirishlardan qaytarildi: {pages.refunded}.
+        </p>)}
         <p>{s.free_daily.day} · Toshkent · Nashr: {s.free_daily.published_today}/{s.free_daily.target}.
           Oxirgi 24 soatda: {s.free_daily.found_24h} yangi nomzod, {s.free_daily.published_24h} nashr.</p>
         <p>Oxirgi yakun: {stopLabel(s.free_daily.last_run?.stop_reason)}.</p>

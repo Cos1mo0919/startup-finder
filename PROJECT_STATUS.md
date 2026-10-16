@@ -706,3 +706,10 @@ Added separate PostgreSQL16 regression workflow (no production secrets) covering
 review->publication, poisoned ACTIVE pool checkout, post-INSERT rollback and retry.
 Local validation:392 passed,5 PostgreSQL skipped, Ruff/build/22 browser passed.
 Live PostgreSQL/Supabase not accessed; actual PostgreSQL CI results pending.
+
+2026-10-15: isolated trial/daily page ledgers (40/40 vs60/80 defaults),
+failed/interrupted page refunds with physical attempts retained, guarded trial-only
+reset preview/hash/day verification, per-candidate outcomes and read-only legacy
+Run inspection. No production reads/writes or resets performed. Validation:
+403 backend passed,5 disposable-PostgreSQL skipped (network provisioning blocked),
+Ruff, TypeScript/build and22 desktop/mobile browser tests passed.

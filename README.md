@@ -883,3 +883,9 @@ PostgreSQL runtime pool теперь проверяется без перекл�
 независимо от сохранения отчёта. Убран SIGALRM, SQL daily job ограничен timeout.
 Отдельный PostgreSQL16 workflow: `.github/workflows/postgres-regression.yml`.
 Локальные PostgreSQL skip не означают успешного выполнения этих CI-кейсов.
+
+Trial-страницы теперь имеют независимый бюджет 40/запуск и 40/сутки Ташкента
+(`TRIAL_PAGES_PER_RUN`, `TRIAL_PAGES_PER_DAY`); обычный режим — 60/80.
+Failed/interrupted возвращают только локальный расход страниц, сохраняя аудит.
+Диагностика `--inspect-run` и безопасный preview/reset описаны в
+[FREE_DAILY_OPERATIONS.md](docs/FREE_DAILY_OPERATIONS.md#диагностика-и-ручной-сброс-trial).
