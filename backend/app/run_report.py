@@ -10,6 +10,12 @@ def candidate_outcome(factory, url, result):
         row = session.get(Candidate, url)
         status = row.status if row else "missing"
         reason = row.reason if row else "candidate_missing"
+        from .db import RegistrySource
+        from urllib.parse import urlsplit
+        source = session.get(RegistrySource, row.source_id) if row and row.source_id else None
+        source_info = {"name": source.name if source else urlsplit(url).hostname,
+                       "domain": urlsplit(url).hostname,
+                       "page_type": ((row.article or {}).get("page_type") if row else None) or ((source.options or {}).get("page_type") if source else None) or "unknown"}
     stopped = result.get("status") == "stopped"
     stage = (
         "budget_stopped"
@@ -26,6 +32,7 @@ def candidate_outcome(factory, url, result):
     )
     return {
         "candidate_id": candidate_id(url),
+        "source": source_info,
         "run_id": result.get("id"),
         "status": status,
         "stage": stage,
@@ -41,6 +48,23 @@ def inspect_run(factory, identifier):
         if row is None:
             raise ValueError("Run not found")
         recorded = row.details.get("candidate_runs")
+        if recorded:
+            enriched = []
+            for item in recorded:
+                child = session.get(Run, item.get("run_id")) if item.get("run_id") else None
+                update = dict(item)
+                if child:
+                    candidate = session.scalar(select(Candidate).where(Candidate.last_run_id == child.id).limit(1))
+                    if candidate is None:
+                        urls = [error.get("source") for error in child.errors if error.get("stage") == "fetch"]
+                        candidate = session.get(Candidate, urls[0]) if urls else None
+                    if candidate:
+                        update.setdefault("source", candidate_outcome(factory, candidate.url, {"counts": child.counts})["source"])
+                    update["provider_metrics"] = child.details.get("llm_providers", [])
+                    if "timings_ms" not in update:
+                        update["timings_available"] = False
+                enriched.append(update)
+            recorded = enriched
         children = []
         if recorded is None:
             # Old runs lack parent IDs: report this inference explicitly.
@@ -59,6 +83,8 @@ def inspect_run(factory, identifier):
                         "counts": child.counts,
                         "errors": child.errors,
                         "stop_reason": child.details.get("stop_reason"),
+                        "diagnostics": child.details.get("diagnostics"),
+                        "llm_providers": child.details.get("llm_providers", []),
                     }
                 )
         return {
@@ -68,6 +94,7 @@ def inspect_run(factory, identifier):
             "stop_reason": row.details.get("stop_reason"),
             "errors": row.errors,
             "candidate_runs": recorded,
+            "diagnostics_available": any("timings_ms" in item for item in (recorded or [])),
             "legacy_children_inferred": recorded is None,
             "inferred_children": children,
         }

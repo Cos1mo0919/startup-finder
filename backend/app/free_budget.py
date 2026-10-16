@@ -63,6 +63,8 @@ class DailyBudget:
             self.stop("max_run_seconds")
         if self.clock().astimezone(TASHKENT).date().isoformat() != self.day:
             self.stop("calendar_day_changed")
+        from .telemetry import remaining
+        remaining(1)
 
     def check(self, enforce_caps=True):
         self.check_time()
@@ -119,10 +121,13 @@ class DailyBudget:
             self.check_time()
             from .writer import renew_writer
             renew_writer(self.factory)
-            chunk = min(seconds, 30, max(0, self.deadline - self.timer()))
+            from .telemetry import remaining
+            chunk = min(seconds, 30, remaining(30), max(0, self.deadline - self.timer()))
             if chunk <= 0:
                 self.stop("max_run_seconds")
-            sleep(chunk)
+            from .telemetry import span
+            with span("pauses"):
+                sleep(chunk)
             seconds -= chunk
         self.check_time()
 
@@ -147,7 +152,7 @@ class DailyBudget:
                 from datetime import datetime
                 wait = self.min_interval - (self.clock() - aware(datetime.fromisoformat(previous))).total_seconds()
                 if wait > 0:
-                    sleep(min(wait, max(0, self.deadline - self.timer())))
+                    self.wait(wait)
                     self.check()
         with self.factory.begin() as session:
             row = session.scalar(select(SchedulerCheckpoint).where(
@@ -242,7 +247,10 @@ def free_status(session, settings):
             "warnings": [key for key, value in usage.items()
                          if limits.get(key, [0, 0])[1] > 0 and value >= limits[key][1] * 0.8],
             "last_run": {"id": runs[0].id, "status": runs[0].status,
-                         "stop_reason": runs[0].details.get("stop_reason", "running")} if runs else None,
+                         "stop_reason": runs[0].details.get("stop_reason", "running"),
+                         "candidate_runs": runs[0].details.get("candidate_runs", []),
+                         "counts": runs[0].counts,
+                         "before_llm_reasons": runs[0].details.get("before_llm_reasons", {})} if runs else None,
             "found_24h": session.scalar(select(func.count()).select_from(RawDiscovery).where(
                 RawDiscovery.discovered_at >= now - timedelta(hours=24),
                 RawDiscovery.raw_payload["free_daily_run_id"].as_integer().is_not(None))) or 0,

@@ -23,6 +23,12 @@ def current_writer(factory):
 
 
 def renew_writer(factory):
+    from .telemetry import span
+    with span("lock_wait"):
+        return _renew_writer(factory)
+
+
+def _renew_writer(factory):
     value = OWNER.get()
     if not current_writer(factory):
         return

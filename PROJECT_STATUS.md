@@ -713,3 +713,17 @@ reset preview/hash/day verification, per-candidate outcomes and read-only legacy
 Run inspection. No production reads/writes or resets performed. Validation:
 403 backend passed,5 disposable-PostgreSQL skipped (network provisioning blocked),
 Ruff, TypeScript/build and22 desktop/mobile browser tests passed.
+
+2026-10-16: run125 diagnostics/speed preparation, branch free-daily-operations.
+Added candidate stage telemetry, safe provider HTTP/parse/validation/guard outcomes,
+admin detail panels, source text fallbacks, obvious asset/account prefilter,
+7-day repeated-fetch-failure queue penalty and cached/project-first ordering.
+Bounded connect/read/provider caps3/8/15s, cooperative candidate deadline45s;
+trial300s unchanged. Removed artificial Groq output1024 cap within total5500
+reservation, GPT-OSS reasoning_effort=low, preserved gates and keyless behavior.
+Cron still OFF, moved commented daily time to09:00UTC; backup retention7days.
+Validation:427 backend passed,7 disposable-PostgreSQL skipped; Ruff, TypeScript,
+production build,22 desktop/mobile browser passed. PG regression workflow includes
+new diagnostic persistence cases. No production reads/writes/discovery or live
+provider calls. Run125 identities, exact old timings/errors and live throughput
+remain unverified without operator report; CI service results not observed here.

@@ -24,7 +24,7 @@ def estimate_tokens(text):
 def fit_prompt(system, user, cap, output_cap):
     system = " ".join(system.split())
     fixed = estimate_tokens(system) + 128  # Chat framing allowance.
-    output = min(output_cap, 1024 if cap <= 5500 else output_cap, cap - fixed - 128)
+    output = min(output_cap, cap - fixed - 128)
     if output < 256:
         raise ProviderBudgetUnavailable("prompt_exceeds_token_limit")
     available = cap - fixed - output
@@ -264,6 +264,11 @@ class ProviderQuotas:
             if unavailable:
                 raise ProviderBudgetUnavailable("daily_budget_exhausted")
             if wait > 0:
+                from .telemetry import remaining, record
+                if remaining(wait) < wait:
+                    record("provider_waits", provider=provider, reason="minute_window", requested_seconds=round(wait, 2), skipped=True)
+                    raise ProviderBudgetUnavailable("candidate_wait_exceeds_deadline")
+                record("provider_waits", provider=provider, reason="minute_window", requested_seconds=round(wait, 2), skipped=False)
                 budget.wait(wait)
                 continue
             budget.used[key] += 1

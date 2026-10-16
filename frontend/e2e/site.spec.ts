@@ -77,7 +77,7 @@ test("admin daily budgets show usage and warnings without public exposure", asyn
       limits: {requests: 500, tokens: 100000, rpm: 30, tpm: 8000}, warnings: ["tokens"],
       blocked_reason: "", timezone: "rolling_24h", reset_at: "2026-10-15T00:00:00Z"}},
     blocked_providers: {groq: "rate_limited"}, providers_enabled: {gemini: true, groq: true, openai: false},
-    last_run: {id: 99, status: "completed", stop_reason: "daily_limit:llm:gemini"},
+    last_run: {id: 99, status: "completed", stop_reason: "daily_limit:llm:gemini", counts:{reached_llm:1,llm_validated:0,before_llm:2}, before_llm_reasons:{article_body_missing:2}, candidate_runs:[{candidate_id:"fixture",stage:"review_required",reason:"llm_unavailable",source:{name:"Fixture source",domain:"fixture.example",page_type:"project_page"},timings_ms:{robots:10,page_read:20,extraction:5,llm:30,pauses:0,lock_wait:1,total:70},provider_attempts:[{provider:"groq",outcome:"output_truncated",http_status:200,elapsed_ms:30,finish_reason:"length"}]}]},
   } } }));
   await page.goto("/admin");
   await page.getByRole("textbox", { name: "Admin kaliti" }).fill("test-admin-key");
@@ -86,6 +86,10 @@ test("admin daily budgets show usage and warnings without public exposure", asyn
   await expect(panel).toContainText("Nashr: 3/20");
   await expect(panel).toContainText("Sinov sahifa budjeti: 6 / 40");
   await expect(panel).toContainText("8 / 10");
+  await expect(panel).toContainText("LLM ga yetdi: 1");
+  await panel.getByText("Fixture source · review_required · llm_unavailable").click();
+  await expect(panel).toContainText("page_read: 20");
+  await expect(panel).toContainText("output_truncated · HTTP 200");
   await expect(panel.getByRole("alert").first()).toContainText("80%");
   await expect(panel).toContainText("Tokenlar: 80000 / 100000");
   await expect(panel.getByRole("alert").filter({hasText: "groq API"})).toContainText("80%");

@@ -9,7 +9,7 @@ on:
         default: trial
   # Enable only after owner approval and account quota review:
   # schedule:
-  #   - cron: '0 3 * * *' # 08:00 Asia/Tashkent; GitHub may delay scheduled jobs.
+  #   - cron: '0 9 * * *' # 14:00 Asia/Tashkent; after Gemini Pacific midnight in both seasons; GitHub may delay scheduled jobs.
 permissions:
   contents: read
 concurrency:
@@ -20,6 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 48
     env:
+      DAILY_CANDIDATE_TIMEOUT_SECONDS: ${{ vars.DAILY_CANDIDATE_TIMEOUT_SECONDS || '45' }}
       SCHEDULER_ENABLED: 'false'
       DATABASE_AUTO_MIGRATE: 'false'
       STARTUP_DATA_UPDATES_ENABLED: 'false'

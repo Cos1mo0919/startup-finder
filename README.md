@@ -889,3 +889,11 @@ Trial-страницы теперь имеют независимый бюдже
 Failed/interrupted возвращают только локальный расход страниц, сохраняя аудит.
 Диагностика `--inspect-run` и безопасный preview/reset описаны в
 [FREE_DAILY_OPERATIONS.md](docs/FREE_DAILY_OPERATIONS.md#диагностика-и-ручной-сброс-trial).
+
+Trial diagnostics now include per-candidate sources, exclusive stage timings,
+HTTP/provider outcomes and before-LLM reasons in JSON and `/admin`. Bounded jobs
+use a45s cooperative candidate deadline, <=8s page read /3s connect and <=15s
+provider timeout. Read-only `--inspect-run 125` exposes existing evidence, without
+inventing missing historical timing. See [daily operations](docs/FREE_DAILY_OPERATIONS.md).
+Discovery cron remains commented (09:00UTC /14:00Tashkent); encrypted backup
+artifact retention is7 days. Download backups to your own protected storage.

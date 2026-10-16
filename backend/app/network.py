@@ -75,10 +75,34 @@ class WebClient:
         self.robots = {}
         self.last_request = {}
 
+    def _pause(self, seconds):
+        from .telemetry import remaining, span
+        from .free_budget import current_budget
+        remaining(seconds)
+        if remaining(seconds) < seconds:
+            raise FetchError("candidate_timeout")
+        budget = current_budget()
+        if budget:
+            budget.wait(seconds)
+        else:
+            with span("pauses"):
+                time.sleep(seconds)
+
     def close(self):
         self.client.close()
 
     def _fetch(self, url, robots=False):
+        from .telemetry import span, record
+        began = time.monotonic()
+        try:
+            with span("robots" if robots else "page_read"):
+                return self._fetch_inner(url, robots)
+        except FetchError as exc:
+            record("fetch", domain=urlsplit(url).hostname, kind="robots" if robots else "page",
+                   error=str(exc), elapsed_ms=round((time.monotonic() - began) * 1000, 2))
+            raise
+
+    def _fetch_inner(self, url, robots=False):
         for _ in range(5):
             url = safe_url(url)
             host = urlsplit(url).netloc
@@ -89,14 +113,20 @@ class WebClient:
                     self.proxy_dns_verified.add(host)
             wait = max(0, self.last_request.get(host, 0) + 1 - time.monotonic())
             if wait:
-                time.sleep(wait)
+                self._pause(wait)
             self.last_request[host] = time.monotonic()
             try:
                 from .free_budget import current_budget
                 budget = current_budget()
                 if budget:
                     budget.reserve("pages")
-                with self.client.stream("GET", url) as response:
+                from .telemetry import remaining, record
+                timeout = remaining(self.settings.fetch_timeout)
+                if budget:
+                    budget.check_time()
+                    timeout = min(timeout, max(0.001, budget.deadline - budget.timer()))
+                with self.client.stream("GET", url, timeout=httpx.Timeout(timeout, connect=min(3, timeout))) as response:
+                    record("fetch", domain=urlsplit(url).hostname, kind="robots" if robots else "page", http_status=response.status_code)
                     if response.status_code in (301, 302, 303, 307, 308):
                         target = safe_url(urljoin(url, response.headers.get("location", "")))
                         if not robots:
@@ -111,13 +141,15 @@ class WebClient:
                     if content_type and not any(t in content_type for t in ("text/", "xml", "html", "json")):
                         raise FetchError("unsupported_content_type")
                     data = bytearray()
-                    for chunk in response.iter_bytes(chunk_size=16384):
+                    for chunk in response.iter_bytes():
                         if budget:
                             budget.check_time()
                         data.extend(chunk)
                         if len(data) > self.settings.max_page_bytes:
                             raise FetchError("page_too_large")
                     return bytes(data), url
+            except httpx.TimeoutException as exc:
+                raise FetchError("page_timeout") from exc
             except httpx.HTTPError as exc:
                 raise FetchError("network_unavailable") from exc
         raise FetchError("too_many_redirects")
@@ -137,8 +169,22 @@ class WebClient:
         if delay > 60:
             raise FetchError("crawl_delay_too_long")
         if wait:
-            time.sleep(wait)
+            self._pause(wait)
 
     def get(self, url):
+        reason = unsuitable_url(url)
+        if reason:
+            raise FetchError(reason)
         self._check_robots(url)
         return self._fetch(url)
+
+
+def unsuitable_url(url):
+    """Reject only unmistakable assets/account endpoints, before any page spend."""
+    from pathlib import PurePosixPath
+    path = urlsplit(safe_url(url)).path.lower()
+    if PurePosixPath(path).suffix in {".jpg", ".jpeg", ".png", ".gif", ".svg", ".zip", ".mp4", ".woff", ".css", ".js"}:
+        return "non_content_asset"
+    if path.rstrip("/") in {"/login", "/signin", "/signup", "/logout", "/wp-login.php"}:
+        return "account_page"
+    return ""

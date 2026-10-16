@@ -49,7 +49,8 @@ def profile(settings, trial=False):
                "openai_api_key": SecretStr(""), "openrouter_api_key": SecretStr(""),
                "llm_max_retries_per_provider": 0, "max_candidates": 1, "max_event_followups": 0,
                "search_queries_per_source": 1,
-               "fetch_timeout": min(settings.fetch_timeout, 10),
+               "fetch_timeout": min(settings.fetch_timeout, 8),
+               "llm_timeout_seconds": min(settings.llm_timeout_seconds, 15),
                "max_page_bytes": min(settings.max_page_bytes, 500_000)}
     for provider in ("gemini", "groq"):
         if not allowed or not all(limits["llm:" + provider]):
@@ -75,7 +76,15 @@ def next_candidate(factory, seen, llm_ready):
             Candidate.review_decision.not_in(["REJECT", "KEEP_FOR_REVIEW"]))
         if seen:
             query = query.where(Candidate.url.not_in(seen))
+        failures = select(Candidate.source_id.label("source_id"), func.count().label("count")).where(
+            Candidate.status == "error",
+            Candidate.updated_at >= now_utc() - timedelta(days=7),
+            Candidate.reason.in_(["article_body_missing", "http_403", "http_404", "page_timeout"])
+        ).group_by(Candidate.source_id).subquery()
+        query = query.outerjoin(failures, failures.c.source_id == RegistrySource.id)
         return session.scalar(query.order_by(
+            case((failures.c.count >= 3, 0), else_=1).desc(),
+            case((func.length(Candidate.article["text"].as_string()) >= 200, 1), else_=0).desc(),
             case((RegistrySource.source_type.in_(["startup_platform", "university", "hackathon", "accelerator"]), 2),
                  (RegistrySource.id == "show-hn-rss", 2), else_=0).desc(),
             hint.desc(), RegistrySource.priority.desc(), Candidate.updated_at, Candidate.url).limit(1))
@@ -147,9 +156,16 @@ def run_daily(settings, factory, *, trial=False, pipeline_factory=CatalogPipelin
                         budget.reserve("candidates")
                         seen.add(url)
                         counts["attempted"] += 1
-                        result = pipeline.run(discover=False, only_urls=[url], reanalyze=False)
+                        from .telemetry import candidate_trace
+                        with candidate_trace(settings.daily_candidate_timeout_seconds) as trace:
+                            result = pipeline.run(discover=False, only_urls=[url], reanalyze=False)
                         from .run_report import candidate_outcome
-                        outcome = candidate_outcome(factory, url, result)
+                        outcome = {**candidate_outcome(factory, url, result), **trace}
+                        if not any(item.get("request_sent") for item in trace["provider_attempts"]):
+                            counts["before_llm"] += 1
+                            outcome["before_llm_reason"] = (outcome.get("stop_reason") if outcome["stage"] == "budget_stopped" else outcome.get("reason")) or outcome["stage"]
+                        else:
+                            counts["reached_llm"] += 1
                         candidate_runs.append(outcome)
                         counts["pipeline_calls_returned"] += 1
                         if outcome["stage"] in {"published", "duplicate", "rejected", "review_required", "pending"}:
@@ -161,7 +177,7 @@ def run_daily(settings, factory, *, trial=False, pipeline_factory=CatalogPipelin
                         counts["duplicates"] += result.get("counts", {}).get("duplicates", 0)
                         with factory.begin() as session:
                             row = session.get(Run, run_id)
-                            row.details = {**row.details, "candidate_runs": candidate_runs}
+                            row.details = {**row.details, "candidate_runs": candidate_runs, "before_llm_reasons": dict(Counter(item["before_llm_reason"] for item in candidate_runs if item.get("before_llm_reason")))}
                         budget.check()
                         active_url = None
                 drain()
@@ -207,7 +223,7 @@ def run_daily(settings, factory, *, trial=False, pipeline_factory=CatalogPipelin
                     counts["worker_failed"] += 1
                     from .diagnostics import candidate_id
                     candidate_runs.append({"candidate_id": candidate_id(active_url), "stage": "worker_failed",
-                                           "exception_class": type(exc).__name__})
+                                           **locals().get("trace", {}), "exception_class": type(exc).__name__})
             finally:
                 try:
                     if pipeline:
@@ -221,6 +237,9 @@ def run_daily(settings, factory, *, trial=False, pipeline_factory=CatalogPipelin
                     row = session.get(Run, run_id)
                     daily = session.get(DailyStats, budget.day)
                     counts["published"] = max(0, (daily.published_count if daily else 0) - initial)
+                    counts["before_llm"] += 0
+                    counts["reached_llm"] += 0
+                    counts["llm_validated"] = sum(any(attempt.get("outcome") == "success" for attempt in item.get("provider_attempts", [])) for item in candidate_runs)
                     counts["llm_requests"] = sum(value for key, value in budget.used.items() if key.startswith("llm:"))
                     row.counts = dict(counts)
                     row.status = "failed" if stop == "worker_error" else "completed"
@@ -236,7 +255,7 @@ def run_daily(settings, factory, *, trial=False, pipeline_factory=CatalogPipelin
                     row.details = {**row.details, "stop_reason": stop, "usage": dict(budget.used),
                                    "last_error": errors[-1] if errors else None,
                                    "page_budget": page_report,
-                                   "candidate_runs": candidate_runs,
+                                   "candidate_runs": candidate_runs, "before_llm_reasons": dict(Counter(item["before_llm_reason"] for item in candidate_runs if item.get("before_llm_reason"))),
                                    "limits": limits, "target": budget.target, "day": budget.day,
                                    "budget_events": budget.events, "peak_rss_kib": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss}
                     row.details = {**row.details, "remaining_queue": session.scalar(select(func.count()).select_from(Candidate)
@@ -244,7 +263,7 @@ def run_daily(settings, factory, *, trial=False, pipeline_factory=CatalogPipelin
             return {"status": "failed" if stop == "worker_error" else "completed", "run_id": run_id,
                     "stop_reason": stop, "counts": dict(counts), "usage": dict(budget.used),
                     "page_budget": page_report,
-                    "candidate_runs": candidate_runs,
+                    "candidate_runs": candidate_runs, "before_llm_reasons": dict(Counter(item["before_llm_reason"] for item in candidate_runs if item.get("before_llm_reason"))),
                     "peak_rss_kib": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss}
     except WriterBusy:
         return {"status": "busy", "stop_reason": "another_writer_active"}
