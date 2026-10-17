@@ -48,9 +48,15 @@ class DailyBudget:
             row.cursor = {**row.cursor, "limits": limits, "target": target}
         from .page_budget import PageBudget
         self.pages = PageBudget(self, page_mode) if page_mode else None
+        from .candidate_budget import CandidateBudget
+        self.candidates = CandidateBudget(self, page_mode) if page_mode and "candidates" in limits else None
 
     def resource_key(self, resource):
-        return self.pages.key if resource == "pages" and self.pages else state_name(self.day)
+        if resource == "pages" and self.pages:
+            return self.pages.key
+        if resource == "candidates" and self.candidates:
+            return self.candidates.key
+        return state_name(self.day)
 
     def stop(self, reason):
         self.stop_reason = reason
@@ -86,9 +92,9 @@ class DailyBudget:
             state = session.get(SchedulerCheckpoint, state_name(self.day)).cursor
             if enforce_caps:
                 for key, (run_cap, day_cap) in self.limits.items():
-                    if key == "pages" and self.pages:
-                        page_row = session.get(SchedulerCheckpoint, self.pages.key)
-                        spent = page_row.cursor.get("usage", {}).get("pages", 0)
+                    if (key == "pages" and self.pages) or (key == "candidates" and self.candidates):
+                        resource_row = session.get(SchedulerCheckpoint, self.resource_key(key))
+                        spent = resource_row.cursor.get("usage", {}).get(key, 0)
                     else:
                         spent = state.get("usage", {}).get(key, 0)
                     if self.quotas and key.startswith("llm:"):
@@ -162,7 +168,7 @@ class DailyBudget:
                 self.stop("daily_limit:" + resource)
             usage[resource] = usage.get(resource, 0) + 1
             page_fields = {}
-            if resource == "pages" and self.pages:
+            if (resource == "pages" and self.pages) or (resource == "candidates" and self.candidates):
                 key = str(self.run_id)
                 page_fields = {"charges": {**row.cursor.get("charges", {}), key: row.cursor.get("charges", {}).get(key, 0) + 1},
                                "attempts": {**row.cursor.get("attempts", {}), key: row.cursor.get("attempts", {}).get(key, 0) + 1}}
@@ -205,9 +211,10 @@ def free_status(session, settings):
     # Physical page attempts remain visible even when their local allowance was
     # refunded; use the per-run audit so trial/daily ledgers cannot double count.
     from datetime import datetime
-    recent["pages"] = sum(1 for run in runs for event in run.details.get("budget_events", [])
-                          if event.get("resource") == "pages"
-                          and aware(datetime.fromisoformat(event["at"])) >= now - timedelta(hours=24))
+    for resource in ("pages", "candidates"):
+        recent[resource] = sum(1 for run in runs for event in run.details.get("budget_events", [])
+                               if event.get("resource") == resource
+                               and aware(datetime.fromisoformat(event["at"])) >= now - timedelta(hours=24))
     today = session.get(DailyStats, day)
     from .llm_budget import quota_status
     provider_quotas = quota_status(session, now)
@@ -220,7 +227,17 @@ def free_status(session, settings):
                                  "limits": page_row.cursor.get("page_limits", [0, 0]),
                                  "attempted": sum(page_row.cursor.get("attempts", {}).values()),
                                  "refunded": sum(page_row.cursor.get("refunds", {}).values())}
-    selected_mode = data.get("page_mode") or ("trial" if runs and runs[0].details.get("trial") else "daily")
+    selected_mode = ("trial" if runs[0].details.get("trial") else "daily") if runs else data.get("page_mode", "daily")
+    from .candidate_budget import candidate_key
+    candidate_budgets = {}
+    for mode in ("trial", "daily"):
+        candidate_row = session.get(SchedulerCheckpoint, candidate_key(day, mode))
+        if candidate_row:
+            candidate_budgets[mode] = {"used": candidate_row.cursor.get("usage", {}).get("candidates", 0),
+                                       "limits": candidate_row.cursor.get("candidate_limits", [0, 0])}
+    if selected_mode in candidate_budgets:
+        usage = {**usage, "candidates": candidate_budgets[selected_mode]["used"]}
+        limits = {**limits, "candidates": candidate_budgets[selected_mode]["limits"]}
     if selected_mode in page_budgets:
         usage = {**usage, "pages": page_budgets[selected_mode]["used"]}
         limits = {**limits, "pages": page_budgets[selected_mode]["limits"]}
@@ -243,7 +260,7 @@ def free_status(session, settings):
                                      if value["blocked_reason"]}},
             "providers_enabled": data.get("providers_enabled", {}),
             "provider_quotas": provider_quotas,
-            "page_mode": selected_mode, "page_budgets": page_budgets,
+            "page_mode": selected_mode, "page_budgets": page_budgets, "candidate_budgets": candidate_budgets,
             "warnings": [key for key, value in usage.items()
                          if limits.get(key, [0, 0])[1] > 0 and value >= limits[key][1] * 0.8],
             "last_run": {"id": runs[0].id, "status": runs[0].status,

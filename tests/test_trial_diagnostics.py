@@ -98,7 +98,7 @@ def test_http_failures_are_not_retried_and_have_safe_metadata(settings, factory,
 @pytest.mark.parametrize("failure", ["article_body_missing", "invalid_json"])
 def test_daily_candidate_diagnostics_persist_and_surface_in_admin(
     settings, request, fixture_name, failure, monkeypatch
-):
+, offline_daily_preflight):
     factory = request.getfixturevalue(fixture_name)
     article = sample_article()
     with factory.begin() as session:
@@ -159,7 +159,7 @@ def test_daily_candidate_diagnostics_persist_and_surface_in_admin(
         assert free_status(session, settings)["last_run"]["candidate_runs"] == stored
 
 
-def test_asset_rejected_without_fetch_or_llm(settings, factory):
+def test_asset_rejected_without_fetch_or_llm(settings, factory, offline_daily_preflight):
     url = "https://fixture.example/banner.png"
     with factory.begin() as session:
         session.add(Candidate(url=url, status="queued", article={"_queued": True}))

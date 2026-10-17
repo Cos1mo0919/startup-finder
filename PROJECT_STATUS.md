@@ -727,3 +727,15 @@ production build,22 desktop/mobile browser passed. PG regression workflow includ
 new diagnostic persistence cases. No production reads/writes/discovery or live
 provider calls. Run125 identities, exact old timings/errors and live throughput
 remain unverified without operator report; CI service results not observed here.
+
+2026-10-17: keyless daily/trial preflight now records no_llm_provider before
+constructing pipeline or reserving candidates. Mode-specific candidate ledgers
+reconstruct legacy spend; trial caps attempts at3/source (unknown sources by
+host). Added explicit preview/lease/hash/transaction recovery for keyless run148,
+children149–167: validates missing_key/no usage/manual decisions, requeues19,
+refunds20 original-day trial reservations once, keeps audit/evidence/other quotas.
+Recovery NEVER executed against production. New PostgreSQL recovery regression
+included in CI. Offline component fixtures explicitly replace credential preflight;
+new credential tests exercise real guard. Validation:445 backend passed,8 PG skipped,
+Ruff/TypeScript/build/22 browser passed; recovery lock refinements additionally
+passed focused tests. Production recovery results and actual PG CI not verified.

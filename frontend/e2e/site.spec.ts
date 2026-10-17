@@ -70,7 +70,7 @@ test("admin daily budgets show usage and warnings without public exposure", asyn
   const status = await response.json();
   await page.route("**/api/admin/status", route => route.fulfill({ json: { ...status, free_daily: {
     day: "2026-10-14", timezone: "Asia/Tashkent", target: 20, published_today: 3,
-    page_mode: "trial", page_budgets: {trial: {used: 6, limits: [40,40], attempted: 20, refunded: 14}},
+    page_mode: "trial", candidate_budgets:{trial:{used:0,limits:[20,20]},daily:{used:8,limits:[80,120]}}, page_budgets: {trial: {used: 6, limits: [40,40], attempted: 20, refunded: 14}},
     found_24h: 12, published_24h: 3, usage_today: {"llm:gemini": 8}, usage_24h: {"llm:gemini": 9},
     limits: {"llm:gemini": [10,10]}, warnings: ["llm:gemini"],
     provider_quotas: {groq: {requests: 100, tokens: 80000, reported_tokens: 50000, unconfirmed_attempts: 3,
@@ -85,6 +85,8 @@ test("admin daily budgets show usage and warnings without public exposure", asyn
   const panel = page.locator("section").filter({has: page.getByRole("heading", {name: "Bepul kunlik ish"})});
   await expect(panel).toContainText("Nashr: 3/20");
   await expect(panel).toContainText("Sinov sahifa budjeti: 6 / 40");
+  await expect(panel).toContainText("Sinov nomzod budjeti: 0 / 20");
+  await expect(panel).toContainText("Oddiy nomzod budjeti: 8 / 120");
   await expect(panel).toContainText("8 / 10");
   await expect(panel).toContainText("LLM ga yetdi: 1");
   await panel.getByText("Fixture source · review_required · llm_unavailable").click();

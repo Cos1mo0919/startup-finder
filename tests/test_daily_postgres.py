@@ -89,7 +89,7 @@ class OfflineClassifier:
 
 
 @pytest.mark.parametrize("existing", [0, 5])
-def test_daily_trial_postgres_reject_review_then_publish(settings, postgres_factory, existing):
+def test_daily_trial_postgres_reject_review_then_publish(settings, postgres_factory, existing, offline_daily_preflight):
     factory = postgres_factory
     urls = []
     with factory.begin() as session:
@@ -111,7 +111,7 @@ def test_daily_trial_postgres_reject_review_then_publish(settings, postgres_fact
         session.flush()
         baseline = list(session.execute(select(Project.id, Project.published_at)))
         for index in range(5):
-            article = sample_article(name="FixtureCloud", url=f"https://fixture.example/{index}?q=100%25")
+            article = sample_article(name="FixtureCloud", url=f"https://fixture{index // 3}.example/{index}?q=100%25")
             urls.append(article.url)
             session.add(Candidate(url=article.url, article=article.model_dump(mode="json"), status="queued"))
 
@@ -164,7 +164,7 @@ def test_original_psycopg_ping_fails_on_a_real_active_connection(postgres_factor
 
 @pytest.mark.parametrize("fail_publication", [False, True])
 def test_review_to_publication_replaces_active_socket_and_rolls_back(
-    settings, postgres_factory, fail_publication
+    settings, postgres_factory, fail_publication, offline_daily_preflight
 ):
     from sqlalchemy import event, literal
     from psycopg.pq import TransactionStatus

@@ -43,7 +43,7 @@ def test_arbitrary_exception_payload_is_not_logged():
     assert "secret_payload" not in json.dumps(report)
 
 
-def test_worker_persists_safe_driver_error_with_candidate_in_both_runs(settings, factory):
+def test_worker_persists_safe_driver_error_with_candidate_in_both_runs(settings, factory, offline_daily_preflight):
     seed_candidates(factory, ["ProjectWithFailure"])
 
     class FailingService:

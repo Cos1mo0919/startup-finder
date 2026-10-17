@@ -133,7 +133,7 @@ def test_catalog_releases_lease_even_when_run_persistence_fails(settings, factor
         assert session.scalar(select(Lease.name)) == "pipeline"
 
 
-def test_close_failure_releases_outer_lease_and_clears_context(settings, factory):
+def test_close_failure_releases_outer_lease_and_clears_context(settings, factory, offline_daily_preflight):
     seed_candidates(factory, ["FailureFixture"])
 
     def pipeline(config, factory):
@@ -165,7 +165,7 @@ def test_postgres_engine_disables_autocommit_toggling_pre_ping():
         engine.dispose()
 
 
-def test_outer_report_failure_still_releases_lease(settings, factory):
+def test_outer_report_failure_still_releases_lease(settings, factory, offline_daily_preflight):
     seed_candidates(factory, ["OuterReportFailure"])
 
     def fail_report(session, context, objects):

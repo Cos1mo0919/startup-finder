@@ -1,4 +1,4 @@
-"""One bounded, keyless-first daily job. No startup audits or deep enrichment."""
+"""One bounded daily job with LLM preflight. No startup audits or deep enrichment."""
 
 import argparse
 import json
@@ -60,7 +60,13 @@ def profile(settings, trial=False):
     return settings.model_copy(update=updates), limits, min(settings.daily_max_run_seconds, 300) if trial else settings.daily_max_run_seconds
 
 
-def next_candidate(factory, seen, llm_ready):
+def llm_preflight(settings):
+    return bool(settings.free_provider_quotas_confirmed and settings.llm_enabled and
+                ((settings.gemini_api_key.get_secret_value() and settings.gemini_model == "gemini-3.1-flash-lite") or
+                 (settings.groq_api_key.get_secret_value() and settings.groq_model)))
+
+
+def next_candidate(factory, seen, llm_ready, excluded_sources=()):
     # Cheap project/title hints improve yield before source priority/age; only
     # ordering changes. Evidence and classification gates are unchanged.
     with factory() as session:
@@ -76,6 +82,16 @@ def next_candidate(factory, seen, llm_ready):
             Candidate.review_decision.not_in(["REJECT", "KEEP_FOR_REVIEW"]))
         if seen:
             query = query.where(Candidate.url.not_in(seen))
+        if excluded_sources:
+            # Source IDs are authoritative; unregistered URLs share a domain bucket.
+            excluded_ids = [value[3:] for value in excluded_sources if value.startswith("id:")]
+            excluded_domains = [value[7:] for value in excluded_sources if value.startswith("domain:")]
+            if excluded_ids:
+                query = query.where(or_(Candidate.source_id.is_(None), Candidate.source_id.not_in(excluded_ids)))
+            if excluded_domains:
+                # Validated URLs are HTTPS; compare host without query strings.
+                for domain in excluded_domains:
+                    query = query.where(or_(Candidate.source_id.is_not(None), ~Candidate.url.startswith("https://" + domain + "/", autoescape=True)))
         failures = select(Candidate.source_id.label("source_id"), func.count().label("count")).where(
             Candidate.status == "error",
             Candidate.updated_at >= now_utc() - timedelta(days=7),
@@ -120,6 +136,16 @@ def run_daily(settings, factory, *, trial=False, pipeline_factory=CatalogPipelin
                 session.flush()
                 run_id = row.id
                 initial = today_stats(session, settings)["published"]
+            if not llm_preflight(settings):
+                counts = {key: 0 for key in ("attempted", "processed", "pipeline_calls_returned", "published", "rejected",
+                          "review_required", "duplicates", "fetch_failed", "budget_stopped", "no_decision", "worker_failed",
+                          "before_llm", "reached_llm", "llm_validated", "llm_requests")}
+                with factory.begin() as session:
+                    row = session.get(Run, run_id)
+                    row.status, row.finished_at, row.counts = "completed", now_utc(), counts
+                    row.details = {**row.details, "stop_reason": "no_llm_provider", "usage": {}, "candidate_runs": []}
+                return {"status": "completed", "run_id": run_id, "stop_reason": "no_llm_provider",
+                        "counts": counts, "usage": {}, "candidate_runs": [], "before_llm_reasons": {}}
             budget = DailyBudget(factory, limits, settings.daily_publish_limit, seconds, run_id,
                                  min_interval=settings.daily_llm_min_interval_seconds,
                                  output_tokens=settings.daily_llm_max_output_tokens,
@@ -141,6 +167,7 @@ def run_daily(settings, factory, *, trial=False, pipeline_factory=CatalogPipelin
             counts.update({key: 0 for key in ("attempted", "processed", "pipeline_calls_returned", "rejected",
                           "review_required", "duplicates", "published", "fetch_failed", "budget_stopped", "no_decision", "worker_failed")})
             candidate_runs = []
+            source_attempts = Counter()
             active_url = None
             try:
                 budget.check()
@@ -149,13 +176,19 @@ def run_daily(settings, factory, *, trial=False, pipeline_factory=CatalogPipelin
                     nonlocal active_url
                     while True:
                         budget.check()
-                        url = next_candidate(factory, seen, bool(pipeline.llm_service and pipeline.llm_service.available))
+                        url = next_candidate(factory, seen, bool(pipeline.llm_service and pipeline.llm_service.available),
+                                             [key for key, value in source_attempts.items() if value >= 3] if trial else ())
                         if not url:
                             return
+                        from urllib.parse import urlsplit
+                        with factory() as session:
+                            selected = session.get(Candidate, url)
+                            source_bucket = "id:" + selected.source_id if selected.source_id else "domain:" + urlsplit(url).netloc.lower()
                         active_url = url
                         budget.reserve("candidates")
                         seen.add(url)
                         counts["attempted"] += 1
+                        source_attempts[source_bucket] += 1
                         from .telemetry import candidate_trace
                         with candidate_trace(settings.daily_candidate_timeout_seconds) as trace:
                             result = pipeline.run(discover=False, only_urls=[url], reanalyze=False)
@@ -177,7 +210,7 @@ def run_daily(settings, factory, *, trial=False, pipeline_factory=CatalogPipelin
                         counts["duplicates"] += result.get("counts", {}).get("duplicates", 0)
                         with factory.begin() as session:
                             row = session.get(Run, run_id)
-                            row.details = {**row.details, "candidate_runs": candidate_runs, "before_llm_reasons": dict(Counter(item["before_llm_reason"] for item in candidate_runs if item.get("before_llm_reason")))}
+                            row.details = {**row.details, "candidate_runs": candidate_runs, "source_attempts": dict(source_attempts), "before_llm_reasons": dict(Counter(item["before_llm_reason"] for item in candidate_runs if item.get("before_llm_reason")))}
                         budget.check()
                         active_url = None
                 drain()
@@ -250,20 +283,24 @@ def run_daily(settings, factory, *, trial=False, pipeline_factory=CatalogPipelin
                                    "attempted_this_run": budget.used["pages"],
                                    "charged_today": page_state.get("usage", {}).get("pages", 0),
                                    "daily_limit": limits["pages"][1]}
+                    candidate_state = session.get(SchedulerCheckpoint, budget.candidates.key).cursor
+                    candidate_report = {"mode": budget.candidates.mode, "attempted_this_run": budget.used["candidates"],
+                                        "charged_today": candidate_state.get("usage", {}).get("candidates", 0),
+                                        "daily_limit": limits["candidates"][1]}
                     row.finished_at, row.duration_seconds = now_utc(), round(monotonic() - began, 2)
                     row.errors = errors
                     row.details = {**row.details, "stop_reason": stop, "usage": dict(budget.used),
                                    "last_error": errors[-1] if errors else None,
-                                   "page_budget": page_report,
-                                   "candidate_runs": candidate_runs, "before_llm_reasons": dict(Counter(item["before_llm_reason"] for item in candidate_runs if item.get("before_llm_reason"))),
+                                   "page_budget": page_report, "candidate_budget": candidate_report,
+                                   "candidate_runs": candidate_runs, "source_attempts": dict(source_attempts), "before_llm_reasons": dict(Counter(item["before_llm_reason"] for item in candidate_runs if item.get("before_llm_reason"))),
                                    "limits": limits, "target": budget.target, "day": budget.day,
                                    "budget_events": budget.events, "peak_rss_kib": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss}
                     row.details = {**row.details, "remaining_queue": session.scalar(select(func.count()).select_from(Candidate)
                                    .where(Candidate.status.in_(["queued", "pending", "review_required"])))}
             return {"status": "failed" if stop == "worker_error" else "completed", "run_id": run_id,
                     "stop_reason": stop, "counts": dict(counts), "usage": dict(budget.used),
-                    "page_budget": page_report,
-                    "candidate_runs": candidate_runs, "before_llm_reasons": dict(Counter(item["before_llm_reason"] for item in candidate_runs if item.get("before_llm_reason"))),
+                    "page_budget": page_report, "candidate_budget": candidate_report,
+                    "candidate_runs": candidate_runs, "source_attempts": dict(source_attempts), "before_llm_reasons": dict(Counter(item["before_llm_reason"] for item in candidate_runs if item.get("before_llm_reason"))),
                     "peak_rss_kib": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss}
     except WriterBusy:
         return {"status": "busy", "stop_reason": "another_writer_active"}
@@ -273,14 +310,21 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--trial", action="store_true", help="At most five publications, separate 40-page budget, five calls per free LLM, five minutes")
     parser.add_argument("--reset-trial-pages", action="store_true", help="Read-only preview of today's trial page reset")
-    parser.add_argument("--apply", action="store_true", help="Apply trial page reset under writer lease")
+    parser.add_argument("--apply", action="store_true", help="Apply the selected guarded repair under writer lease")
     parser.add_argument("--expect-state", help="Fingerprint from the reset preview; rejects changed counters/day")
+    parser.add_argument("--recover-no-llm-run", type=int, help="Preview keyless trial requeue/refund; no changes without --apply")
+    parser.add_argument("--child-from", type=int)
+    parser.add_argument("--child-to", type=int)
     parser.add_argument("--inspect-run", type=int, help="Read-only candidate-stage diagnostics for a prior run")
     args = parser.parse_args()
-    if sum((args.trial, args.reset_trial_pages, args.inspect_run is not None)) > 1:
-        parser.error("Choose only one of --trial, --reset-trial-pages, --inspect-run")
-    if (args.apply or args.expect_state) and not args.reset_trial_pages:
-        parser.error("--apply/--expect-state require --reset-trial-pages")
+    if sum((args.trial, args.reset_trial_pages, args.inspect_run is not None, args.recover_no_llm_run is not None)) > 1:
+        parser.error("Choose only one of --trial, --reset-trial-pages, --inspect-run, --recover-no-llm-run")
+    if (args.apply or args.expect_state) and not (args.reset_trial_pages or args.recover_no_llm_run is not None):
+        parser.error("--apply/--expect-state require --reset-trial-pages or --recover-no-llm-run")
+    if (args.child_from is not None or args.child_to is not None) and args.recover_no_llm_run is None:
+        parser.error("--child-from/--child-to require --recover-no-llm-run")
+    if args.recover_no_llm_run is not None and (args.child_from is None or args.child_to is None):
+        parser.error("Recovery requires --child-from and --child-to")
     if args.apply and not args.expect_state:
         parser.error("--apply requires --expect-state from the read-only preview")
     try:
@@ -292,6 +336,10 @@ def main():
                 from .page_budget import reset_trial_pages
                 result = reset_trial_pages(factory, apply=args.apply, expected=args.expect_state,
                                            limits=(settings.trial_pages_per_run, settings.trial_pages_per_day))
+            elif args.recover_no_llm_run is not None:
+                from .no_llm_recovery import recover_no_llm
+                result = recover_no_llm(factory, args.recover_no_llm_run, args.child_from, args.child_to,
+                                        apply=args.apply, expected=args.expect_state)
             elif args.inspect_run is not None:
                 from .run_report import inspect_run
                 result = inspect_run(factory, args.inspect_run)
@@ -300,11 +348,14 @@ def main():
             print(json.dumps(result, ensure_ascii=False))
         finally:
             engine.dispose()
-        return 0 if args.reset_trial_pages or args.inspect_run is not None else int(result.get("status") == "failed")
+        return 0 if args.reset_trial_pages or args.inspect_run is not None or args.recover_no_llm_run is not None else int(result.get("status") == "failed")
     except Exception as exc:
         message = {"status": "failed", "error": safe_error(exc, function="free_daily.main")}
-        if args.reset_trial_pages:
-            message["hint"] = "Reset not applied. Repeat the read-only preview and use its current --expect-state."
+        from .no_llm_recovery import RecoveryError
+        if isinstance(exc, RecoveryError):
+            message["recovery_error"] = str(exc)
+        if args.reset_trial_pages or args.recover_no_llm_run is not None:
+            message["hint"] = "Repair not applied. Repeat the read-only preview and use its current --expect-state."
         print(json.dumps(message), file=sys.stderr)
         return 1
 

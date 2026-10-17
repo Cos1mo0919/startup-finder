@@ -68,7 +68,9 @@ workflow он всегда отключён. Основной путь бесп�
 
 По умолчанию `FREE_PROVIDER_QUOTAS_CONFIRMED=false`: Gemini/Groq не вызываются,
 даже если ключи заданы. Включать `true` можно только после проверки аккаунтов и
-моделей. Без LLM generic RSS уходит на рассмотрение. Публиковать детерминированно
+моделей. Bounded free_daily без разрешённого настроенного LLM теперь завершается
+с no_llm_provider ДО выбора кандидатов. В общем catalog pipeline (вне bounded job)
+без LLM generic RSS остаётся на рассмотрении. Публиковать детерминированно
 может только существующий разрешённый adapter+page_type из
 `config/trusted_catalog_pages.json`.
 Не добавляйте доверие источникам ради количества. В текущей конфигурации может
@@ -76,10 +78,11 @@ workflow он всегда отключён. Основной путь бесп�
 
 Учёт сохраняется до сетевого запроса. Страницы имеют отдельные дневные записи
 `free_pages:trial:YYYY-MM-DD` и `free_pages:daily:YYYY-MM-DD`; сутки —
-00:00–24:00 Asia/Tashkent. Общие остальные счётчики остаются в
-`free_daily:YYYY-MM-DD`. Страницы failed/interrupted запусков возвращаются в
+00:00–24:00 Asia/Tashkent. Кандидаты имеют отдельные free_candidates:trial/daily ledger;
+остальные общие счётчики остаются в `free_daily:YYYY-MM-DD`. Страницы failed/interrupted запусков возвращаются в
 локальный бюджет страниц; реальные попытки и история сохраняются. Расход LLM,
-токенов, поиска, кандидатов и публикаций не возвращается. Завершённый bounded
+токенов, поиска, кандидатов и публикаций автоматически не возвращается
+(для missing_key кандидатов есть отдельная ручная recovery ниже). Завершённый bounded
 запуск (включая daily_limit:pages) сохраняет расход. При первом использовании
 нового ledger он восстанавливается из старых Run, исключая failed/interrupted;
 прерванные процессы также сверяются при следующем запуске. Это не отменяет
@@ -216,7 +219,8 @@ peak сохраняется в Run.details; проверяйте trial. Офла
    закреплён на `gemini-3.1-flash-lite`.
    При необходимости лимиты из таблицы (можно снижать, не повышать вслепую).
    Отсутствующие variables имеют defaults. `DAILY_PROJECT_TARGET=20` опционален.
-   Для абсолютно keyless trial оставить confirmation=false, ожидая review/0 публикаций.
+   При confirmation=false или отсутствии обоих ключей trial завершится с
+   no_llm_provider и0 попыток: это проверка preflight, не оценка классификатора.
 4. Render Environment: оставить все три safety flags=false; тот же
    `DATABASE_URL`, свой `ADMIN_API_KEY`. Для нового admin budget блока нужен
    проверенный deployment этой версии. Не включать встроенный scheduler.
@@ -530,3 +534,78 @@ Pacific midnight и летом (07:00 UTC), и зимой (08:00 UTC). Weekly cr
 SQLite временный; два новых варианта проверяют сохранение диагностики на
 одноразовой PostgreSQL16 через postgres-regression workflow. Без локального
 IZLANISH_TEST_PG_PORT они явно skipped, не считаются успешно выполненными.
+
+
+## Keyless fail-fast, отдельные кандидаты и восстановление run148 (2026-10-17)
+
+В free_daily (trial **и** daily) обязательны LLM_ENABLED=true,
+FREE_PROVIDER_QUOTAS_CONFIRMED=true и хотя бы один настроенный Gemini/Groq ключ
+с разрешённой моделью и положительным бюджетом. Иначе stop_reason=no_llm_provider,
+attempted=0, usage={}, candidate_runs=[]; сохраняется только Run аудита. Очередь,
+raw discoveries, исходные статусы, счётчики кандидатов/страниц не меняются; pipeline
+даже не создаётся. Наличие ключа не доказывает его действительность: HTTP401 и
+другие провайдерские ошибки остаются отдельной диагностикой. Ключи/флаги должны
+быть в той среде, где запущена команда (Codespace не получает Cloud secrets сам).
+
+Кандидаты теперь имеют отдельные ledger:
+free_candidates:trial:YYYY-MM-DD и free_candidates:daily:YYYY-MM-DD,
+сутки Asia/Tashkent. Стандартные пределы trial20/20, daily80/120 не повышены;
+меняется разделение расхода. Первое создание восстанавливает **весь** прошлый
+расход своего режима из Run. Failed-кандидаты автоматически не возвращаются;
+адресный возврат missing_key выполняется только ручной командой ниже. Старая
+общая запись остаётся историей и больше не определяет candidate gate нового кода.
+Обновите все запускающие daily CLI экземпляры, не смешивайте старые и новые writers.
+JSON содержит candidate_budget.mode/attempted_this_run/charged_today/daily_limit;
+/admin показывает оба бюджета кандидатов, а24h — физические попытки, не net возврат.
+LLM/token quotas и публикации не разделяются и не сбрасываются этим изменением.
+
+Trial выбирает максимум3 кандидата на один source_id за запуск, включая ошибки
+и остановленные попытки. Для кандидатов без source_id используется домен.
+Достигнув трёх, продолжает выбирать другие источники; оставшиеся записи первого
+не меняют статус и не теряются. Source quality/project-first ordering сохраняется.
+Daily этого ограничения3 не имеет. JSON source_attempts показывает распределение.
+
+### Ручная recovery: только просмотр, затем явный apply
+
+Эти команды **оператор запускает сам** в обновлённом checkout из корня репозитория.
+Они предназначены именно для root run148 и дочерних149–167. Боевой запуск здесь
+не выполнялся. Ожидается19 кандидатов review_required и20 резервирований root;
+двадцатый кандидат, остановленный до обработки, уже queued и не переписывается.
+
+```bash
+# Только просмотр, без изменения БД и без захвата writer lease:
+.venv/bin/python -m backend.app.free_daily --recover-no-llm-run 148 --child-from 149 --child-to 167
+# После проверки вывода заменить HASH на его expected_state:
+.venv/bin/python -m backend.app.free_daily --recover-no-llm-run 148 --child-from 149 --child-to 167 --apply --expect-state HASH
+```
+
+В preview: requeue_count=19, refund_candidates=20, budget_day, today,
+refund_today, candidates_before/after, candidate_ids и expected_state. Отчёт не
+печатает URLs, source text или ключи. Если исходный день уже прошёл, refund_today=0:
+20 возвращаются в ИСХОДНЫЙ trial-день, сегодняшняя квота не увеличивается.
+
+Проверяются completed trial родителя, нулевой LLM/token расход, точная принадлежность
+дочерних записей родителю, missing_key обоих провайдеров без request_sent,
+актуальный review_required + llm_unavailable и отсутствие проектов/ручных решений.
+Неизвестные, изменённые, опубликованные или вручную рассмотренные записи не
+перезаписываются; recovery_error объясняет отказ. Нельзя менять ID/range ради обхода.
+
+Apply захватывает общий writer lease и выполняет всё одной транзакцией. Хеш
+включает текущую ташкентскую дату, ledger, Run/child/Candidate/RawDiscovery значения;
+изменение после preview отменяет операцию. Candidate становится queued,
+RawDiscovery — pending, истории статусов дополняются, attempts/evidence и старые
+Run остаются. Проверяется фактическое число обновлённых кандидатов и net-счётчик;
+ошибка откатывает изменения. Refund привязан к root148, не вычитает20 из чужих
+запусков. Повторный apply — already_applied без повторного возврата. Pages,
+LLM/tokens, daily candidate budget, публикации и backup не затрагиваются.
+
+После восстановления сначала задайте ключи и confirmation в Codespace, иначе
+trial снова остановится с no_llm_provider (уже без расхода). Проверка успеха
+предыдущего раздела остаётся: completed сам по себе не означает валидные анализы.
+
+Тесты preflight не используют ключи/сеть. Компонентные тесты с injected offline
+классификаторами явно подменяют только credential preflight через fixture;
+реальные условия отсутствующих ключей/confirmation проверяются отдельно без неё.
+Recovery проверяется на временном SQLite и в CI на disposable PostgreSQL16;
+также проверяются stale hash/day, ручные решения, rollback, идемпотентность,
+разделение ledger и разнообразие trial источников.

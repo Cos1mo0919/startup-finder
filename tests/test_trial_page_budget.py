@@ -109,7 +109,7 @@ def test_reset_preview_does_not_create_ledger(factory):
         assert session.get(SchedulerCheckpoint, page_key(result["day"], "trial")) is None
 
 
-def test_fetch_failure_is_not_reported_as_processed_or_a_decision(settings, factory):
+def test_fetch_failure_is_not_reported_as_processed_or_a_decision(settings, factory, offline_daily_preflight):
     seed_candidates(factory, ["BlockedFixture"])
 
     class FailingDiscovery(FakeDiscovery):
@@ -134,7 +134,7 @@ def test_fetch_failure_is_not_reported_as_processed_or_a_decision(settings, fact
     assert result["page_budget"]["charged_today"] == 1
 
 
-def test_failed_worker_pages_refunded_and_reported(settings, factory):
+def test_failed_worker_pages_refunded_and_reported(settings, factory, offline_daily_preflight):
     seed_candidates(factory, ["CrashFixture"])
 
     class CrashDiscovery(FakeDiscovery):
@@ -181,7 +181,7 @@ def test_returned_call_without_selected_work_is_not_a_processed_candidate(settin
     assert result["stage"] == "no_decision" and result["status"] == "review_required"
 
 
-def test_fetch_budget_stop_is_separate_from_completed_decisions(settings, factory):
+def test_fetch_budget_stop_is_separate_from_completed_decisions(settings, factory, offline_daily_preflight):
     seed_candidates(factory, ["BudgetFixture"])
 
     class StoppedDiscovery(FakeDiscovery):

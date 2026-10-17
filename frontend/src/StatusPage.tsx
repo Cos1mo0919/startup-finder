@@ -32,6 +32,7 @@ const resourceLabels: Record<string,string> = {
   "tokens:groq": "Groq tokenlari", "tokens:gemini": "Gemini tokenlari",
 };
 function stopLabel(reason?:string) {
+  if(reason==="no_llm_provider") return "LLM provayder sozlanmagan yoki kvotalar tasdiqlanmagan";
   if (!reason) return "Hali ishga tushmagan";
   for (const prefix of ["run_limit:", "daily_limit:"]) {
     if (reason.startsWith(prefix)) return `${prefix === "run_limit:" ? "Ishga tushirish" : "Kunlik"} limiti: ${resourceLabels[reason.slice(prefix.length)] || reason.slice(prefix.length)}`;
@@ -114,6 +115,9 @@ export function StatusPage({adminKey}:{adminKey:string}) {
         {Object.entries(s.free_daily.page_budgets||{}).map(([mode,pages])=><p key={mode}>
           {mode === "trial" ? "Sinov" : "Oddiy"} sahifa budjeti: {pages.used} / {pages.limits[1]}.
           Jami urinish: {pages.attempted}; xatoli ishga tushirishlardan qaytarildi: {pages.refunded}.
+        </p>)}
+        {Object.entries(s.free_daily.candidate_budgets||{}).map(([mode,budget])=><p key={mode}>
+          {mode === "trial" ? "Sinov" : "Oddiy"} nomzod budjeti: {budget.used} / {budget.limits[1]}.
         </p>)}
         <p>{s.free_daily.day} · Toshkent · Nashr: {s.free_daily.published_today}/{s.free_daily.target}.
           Oxirgi 24 soatda: {s.free_daily.found_24h} yangi nomzod, {s.free_daily.published_24h} nashr.</p>
