@@ -754,3 +754,18 @@ skipped, Ruff/TypeScript/build/22 browser passed; final lease/telemetry refineme
 covered by focused checks. Added PG regression cases to CI; actual CI not observed.
 Live latency and compact prompt quality remain unmeasured. Changes on feature
 free-daily-operations only; no scheduler activation or schema/data migration.
+
+## Publication checkpoint regression — 2026-10-17
+
+Corrected the PostgreSQL regression expectation: validated classification commits
+queued continuation before publication; a rolled-back INSERT preserves that
+checkpoint. Added no-repeat-LLM continuation assertions and bounded retries
+(5/10 minutes; three failures then publication_retry_exhausted review).
+Both queue selection and explicit URL processing enforce eligibility before work;
+missing-key recovery rules are unchanged. Production database was not accessed.
+Local and CI validation results are reported with the final commit separately.
+
+Validation: backend 461 passed / 11 disposable-PostgreSQL skips; the dedicated
+regression command 70 passed / 11 PostgreSQL skips; Ruff, TypeScript/Vite build,
+and 22 Playwright tests passed. GitHub API access is Forbidden in this Cloud
+session, so the three remote CI outcomes must not be claimed as observed here.

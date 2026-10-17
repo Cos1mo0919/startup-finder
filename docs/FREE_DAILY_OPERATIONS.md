@@ -755,3 +755,24 @@ worker failures. Публикаций может быть0 при валидны
 коды business rules, SQL timing, checkout ACTIVE safety и trial600 cap.
 PostgreSQL-варианты запускаются postgres-regression на disposable service16;
 без локального сервиса они skipped, CI outcome отдельно не подтверждён.
+
+### Publication rollback and bounded continuation
+
+A validated LLM response is committed in `Candidate.article._validated_catalog_result`
+**before** the publication transaction. This deliberately changes an old
+`review_required / llm_unavailable` candidate to `queued`; a later INSERT failure
+rolls back the project, not the checkpoint. Continuation validates that saved
+result again and does not call the LLM again.
+
+Publication failures retain that checkpoint and append status history. Existing
+JSON metadata `_publication_retry` records failures and the next UTC attempt.
+The first and second failures wait 5 and 10 minutes respectively. The third sets
+`review_required / publication_retry_exhausted` for operator investigation.
+Neither the daily selector nor explicit pipeline URL processing selects deferred
+or exhausted retries; skipped candidates consume no candidate budget. Each actual
+retry remains charged normally. A failed transaction is rolled back and pipeline
+leases are released, including when retry bookkeeping itself fails.
+
+`recover-no-llm-run` remains restricted to its original missing-key evidence and
+state hash; it does not reset publication failures or checkpoint retry limits.
+No production recovery or data operation is part of this code fix.

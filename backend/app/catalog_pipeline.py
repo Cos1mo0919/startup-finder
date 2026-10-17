@@ -265,6 +265,8 @@ class CatalogPipeline(Pipeline):
                         Candidate.status.in_(["pending", "review_required"]), review_due)
                 if only_urls:
                     query = select(Candidate)
+                from .publication_retry import eligible
+                query = query.where(*eligible())
                 if only_source:
                     query = query.where(Candidate.source_id == only_source)
                 if archive_window and not only_urls:
@@ -513,7 +515,15 @@ class CatalogPipeline(Pipeline):
             status, stop_reason = "stopped", str(exc)
         except Exception as exc:
             status = "failed"
+            from .publication_retry import record_failure
             from .safe_errors import safe_error
+            if locals().get("url"):
+                try:
+                    record_failure(self.factory, url, exc, run_id)
+                except Exception as retry_error:
+                    # Keep the original publication failure and still release leases.
+                    errors.append({"stage": "publication_retry_bookkeeping",
+                                   **safe_error(retry_error, function="publication_retry.record_failure", candidate_url=url)})
             errors.append({"source": "pipeline", "stage": "catalog",
                            **safe_error(exc, function="catalog_pipeline.run", candidate_url=locals().get("url"))})
             raise

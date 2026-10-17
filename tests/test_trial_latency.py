@@ -290,3 +290,70 @@ def test_trial_evaluation_requires_completed_decisions_not_publication_quota(res
     from backend.app.free_daily import trial_evaluation
 
     assert trial_evaluation(result) == expected
+
+
+@pytest.mark.parametrize("db_fixture", ["factory", "postgres_factory"])
+def test_publication_failures_back_off_then_require_review_without_repeated_llm(settings, request, db_fixture):
+    from sqlalchemy import event, func
+    from backend.app.db import Lease, now_utc
+    from backend.app.free_daily import next_candidate
+    from backend.app.publication_retry import MAX_FAILURES
+
+    factory = request.getfixturevalue(db_fixture)
+    article = seed(factory)
+    result = parse_classifier_response(project_payload(), article.title + "\n" + article.text)
+    calls = []
+
+    class Service:
+        available = operational = True
+        last_attempt_count = 0
+
+        def analyze_source(self, article):
+            calls.append(1)
+            assert len(calls) == 1, "Retry must reuse validated checkpoint"
+            return LLMAnalysis(result, "gemini", "fixture-model", 1)
+
+        def status(self):
+            return []
+
+    def pipeline(settings, factory):
+        return CatalogPipeline(settings, factory, FakeDiscovery([]), llm_service=Service())
+
+    def fail_publication(session, context):
+        if any(isinstance(row, Project) for row in session.identity_map.values()):
+            raise RuntimeError("Offline publication failure")
+
+    event.listen(factory, "after_flush_postexec", fail_publication)
+    try:
+        for attempt in range(1, MAX_FAILURES + 1):
+            failed = run_daily(config(settings), factory, trial=True, pipeline_factory=pipeline)
+            assert failed["status"] == "failed"
+            with factory() as session:
+                row = session.get(Candidate, article.url)
+                retry = row.article["_publication_retry"]
+                assert retry["failures"] == attempt
+                assert row.article["_validated_catalog_result"]["classification"] == "PROJECT"
+                assert session.scalar(select(func.count()).select_from(Project)) == 0
+                assert session.get(Lease, "pipeline").owner == ""
+                assert len([x for x in row.status_history if x["analysis_method"] == "publication_retry"]) == attempt
+                if attempt == MAX_FAILURES:
+                    assert row.status == "review_required"
+                    assert row.reason == "publication_retry_exhausted"
+                else:
+                    from datetime import datetime
+                    assert datetime.fromisoformat(retry["next_attempt_at"]) > now_utc()
+            assert next_candidate(factory, set(), True) is None
+            skipped = run_daily(config(settings), factory, trial=True, pipeline_factory=pipeline)
+            assert skipped["counts"]["attempted"] == 0
+            assert skipped["usage"].get("candidates", 0) == 0
+            # Explicit processing also respects retry eligibility, not just daily selection.
+            direct = pipeline(config(settings), factory).run(discover=False, only_urls=[article.url], reanalyze=False)
+            assert direct["counts"]["auto_published"] == 0
+            if attempt < MAX_FAILURES:
+                with factory.begin() as session:
+                    row = session.get(Candidate, article.url)
+                    retry = {**row.article["_publication_retry"], "next_attempt_at": "2000-01-01T00:00:00+00:00"}
+                    row.article = {**row.article, "_publication_retry": retry}
+        assert calls == [1]
+    finally:
+        event.remove(factory, "after_flush_postexec", fail_publication)

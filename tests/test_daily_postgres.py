@@ -16,6 +16,7 @@ from backend.app.connection_pool import runtime_engine
 from backend.app.free_daily import run_daily
 from backend.app.llm_service import LLMAnalysis
 from tests.conftest import FakeDiscovery, sample_article
+from tests.test_catalog_v31 import project_payload
 
 
 @pytest.fixture
@@ -80,6 +81,8 @@ class OfflineClassifier:
                 confidence=0.95,
                 country="Uzbekistan",
                 description_uz="FixtureCloud talabalar arizalarini bir joyda qabul qiladi va kundalik ishni tezlashtiradi",
+                **{key: value for key, value in project_payload().items()
+                   if key in {"scores", "score_evidence", "score_reasons"}},
             )
             result = CatalogResult("PROJECT", 0.95, (entry,))
         return LLMAnalysis(result, "gemini", "offline-fixture", 1)
@@ -185,9 +188,11 @@ def test_review_to_publication_replaces_active_socket_and_rolls_back(
             )
         )
     poisoned = []
+    llm_calls = []
 
     class Reclassify(OfflineClassifier):
         def analyze_source(self, article):
+            llm_calls.append(article.url)
             # Reproduce a connection returned after an interrupted command, exactly
             # before catalog_pipeline.run opens its publication transaction.
             def poison(driver, record):
@@ -230,12 +235,22 @@ def test_review_to_publication_replaces_active_socket_and_rolls_back(
         if fail_publication:
             assert result["status"] == "failed"
             assert session.scalar(select(func.count()).select_from(Project)) == 0
-            assert session.get(Candidate, article.url).status == "review_required"
+            candidate = session.get(Candidate, article.url)
+            assert candidate.status == "queued"
+            assert candidate.reason == "publication_retry_scheduled"
+            assert candidate.article["_validated_catalog_result"]["classification"] == "PROJECT"
+            assert candidate.article["_publication_retry"]["failures"] == 1
         else:
             assert result["status"] == "completed", session.get(Run, result["run_id"]).errors
             assert session.get(Candidate, article.url).status == "published"
             assert session.scalar(select(Project)).publication_status == "PUBLISHED"
     if fail_publication:
+        from backend.app.free_daily import next_candidate
+        assert next_candidate(factory, set(), True) is None
+        with factory.begin() as session:
+            candidate = session.get(Candidate, article.url)
+            retry = {**candidate.article["_publication_retry"], "next_attempt_at": "2000-01-01T00:00:00+00:00"}
+            candidate.article = {**candidate.article, "_publication_retry": retry}
         retried = run_daily(
             settings.model_copy(update={"llm_batch_delay_seconds": 0}),
             factory,
@@ -243,6 +258,12 @@ def test_review_to_publication_replaces_active_socket_and_rolls_back(
             pipeline_factory=pipeline,
         )
         assert retried["status"] == "completed" and retried["counts"]["published"] == 1
+        assert llm_calls == [article.url]
+        with factory() as session:
+            candidate = session.get(Candidate, article.url)
+            assert candidate.status == "published"
+            assert candidate.status_history
+            assert "_validated_catalog_result" not in candidate.article
     # Checkout probe and session rollback leave the next borrower clean.
     with engine.connect() as connection:
         assert connection.connection.driver_connection.info.transaction_status == TransactionStatus.IDLE

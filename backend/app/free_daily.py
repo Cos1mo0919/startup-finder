@@ -80,6 +80,8 @@ def next_candidate(factory, seen, llm_ready, excluded_sources=()):
                  or_(Candidate.updated_at <= now_utc() - timedelta(hours=6),
                      (Candidate.reason == "llm_unavailable") & (Candidate.analysis_mode == "deterministic")))),
             Candidate.review_decision.not_in(["REJECT", "KEEP_FOR_REVIEW"]))
+        from .publication_retry import eligible
+        query = query.where(*eligible())
         if seen:
             query = query.where(Candidate.url.not_in(seen))
         if excluded_sources:

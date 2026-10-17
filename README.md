@@ -912,3 +912,7 @@ candidate timeouts have a dedicated stage/counter. Diagnostic override
 deadline remains. `trial_evaluation=passed` means five validated and processed
 candidates without timeouts/worker failure, regardless of publication count.
 See [daily latency operations](docs/FREE_DAILY_OPERATIONS.md#run169-разложение-latency-и-сохранение-результата).
+
+Publication rollback preserves the validated LLM checkpoint. Retries reuse it
+without another provider call, wait 5/10 minutes, and stop after three failures
+with `publication_retry_exhausted`. See [daily operations](docs/FREE_DAILY_OPERATIONS.md).
