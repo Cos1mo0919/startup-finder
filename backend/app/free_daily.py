@@ -14,8 +14,8 @@ from sqlalchemy import case, func, or_, select
 from .catalog_pipeline import CatalogPipeline
 from .config import Settings
 from .daily import today_stats
-from .db import Candidate, DailyStats, RegistrySource, Run, make_db, now_utc
-from .free_budget import ACTIVE, BudgetStop, DailyBudget
+from .db import Candidate, DailyStats, RegistrySource, Run, SchedulerCheckpoint, make_db, now_utc
+from .free_budget import ACTIVE, BudgetStop, DailyBudget, state_name
 from .llm_budget import policies
 from .network import canonical_url
 from .raw_discovery import ingest_raw
@@ -59,7 +59,56 @@ def profile(settings, trial=False):
     return settings.model_copy(update=updates), limits, min(settings.daily_max_run_seconds, 300) if trial else settings.daily_max_run_seconds
 
 
-def next_candidate(factory, seen, llm_ready):
+def llm_provider_ready(settings):
+    """Trials require a confirmed free quota and at least one configured free provider."""
+    return bool(settings.free_provider_quotas_confirmed and (
+        settings.gemini_api_key.get_secret_value() or settings.groq_api_key.get_secret_value()
+    ))
+
+
+def candidate_budget_key(day, mode):
+    if mode not in {"trial", "daily"}:
+        raise ValueError("Invalid candidate budget mode")
+    return f"free_candidates:{mode}:{day}"
+
+
+class ModeDailyBudget(DailyBudget):
+    """DailyBudget with independent trial/daily candidate ledgers, mirroring pages."""
+    def __init__(self, *args, candidate_mode, **kwargs):
+        self.candidate_mode = candidate_mode
+        super().__init__(*args, **kwargs)
+        with self.factory.begin() as session:
+            key = candidate_budget_key(self.day, candidate_mode)
+            row = session.get(SchedulerCheckpoint, key)
+            if row is None:
+                session.add(SchedulerCheckpoint(name=key, cursor={"usage": {}, "events": []}))
+
+    def resource_key(self, resource):
+        if resource == "candidates":
+            return candidate_budget_key(self.day, self.candidate_mode)
+        return super().resource_key(resource)
+
+    def check(self, enforce_caps=True):
+        super().check(enforce_caps=False)
+        if not enforce_caps:
+            return
+        with self.factory() as session:
+            for key, (run_cap, day_cap) in self.limits.items():
+                if self.quotas and key.startswith("llm:"):
+                    continue
+                provider = key.removeprefix("llm:")
+                shared = session.get(SchedulerCheckpoint, state_name(self.day)).cursor
+                if shared.get("blocked", {}).get(provider):
+                    continue
+                row = session.get(SchedulerCheckpoint, self.resource_key(key))
+                spent = (row.cursor if row else {}).get("usage", {}).get(key, 0)
+                if run_cap > 0 and self.used[key] >= run_cap:
+                    self.stop("run_limit:" + key)
+                if day_cap > 0 and spent >= day_cap:
+                    self.stop("daily_limit:" + key)
+
+
+def next_candidate(factory, seen, llm_ready, source_counts=None, per_source_cap=None):
     # Cheap project/title hints improve yield before source priority/age; only
     # ordering changes. Evidence and classification gates are unchanged.
     with factory() as session:
@@ -75,6 +124,11 @@ def next_candidate(factory, seen, llm_ready):
             Candidate.review_decision.not_in(["REJECT", "KEEP_FOR_REVIEW"]))
         if seen:
             query = query.where(Candidate.url.not_in(seen))
+        if source_counts is not None and per_source_cap:
+            saturated = [source for source, count in source_counts.items()
+                         if source is not None and count >= per_source_cap]
+            if saturated:
+                query = query.where(or_(Candidate.source_id.is_(None), Candidate.source_id.not_in(saturated)))
         return session.scalar(query.order_by(
             case((RegistrySource.source_type.in_(["startup_platform", "university", "hackathon", "accelerator"]), 2),
                  (RegistrySource.id == "show-hn-rss", 2), else_=0).desc(),
@@ -101,6 +155,12 @@ def ingest_links(factory, source, links):
 
 def run_daily(settings, factory, *, trial=False, pipeline_factory=CatalogPipeline):
     settings, limits, seconds = profile(settings, trial)
+    # Classification is mandatory for this bounded worker. Do not touch the queue
+    # or candidate counters when the free providers cannot actually be called.
+    if not llm_provider_ready(settings):
+        return {"status": "completed", "run_id": None, "stop_reason": "no_llm_provider",
+                "counts": {"attempted": 0, "processed": 0, "review_required": 0, "llm_requests": 0},
+                "usage": {}, "candidate_runs": []}
     try:
         scope = writer_scope(factory, seconds=seconds + 300, mark_interrupted=True)
         with scope:
@@ -111,18 +171,17 @@ def run_daily(settings, factory, *, trial=False, pipeline_factory=CatalogPipelin
                 session.flush()
                 run_id = row.id
                 initial = today_stats(session, settings)["published"]
-            budget = DailyBudget(factory, limits, settings.daily_publish_limit, seconds, run_id,
+            mode = "trial" if trial else "daily"
+            budget = ModeDailyBudget(factory, limits, settings.daily_publish_limit, seconds, run_id,
                                  min_interval=settings.daily_llm_min_interval_seconds,
                                  output_tokens=settings.daily_llm_max_output_tokens,
                                  max_database_bytes=settings.daily_max_database_bytes,
                                  max_rss_mb=settings.daily_max_rss_mb,
-                                 page_mode="trial" if trial else "daily",
+                                 page_mode=mode, candidate_mode=mode,
                                  provider_policies=policies(settings))
             with factory.begin() as session:
-                from .db import SchedulerCheckpoint
-                from .free_budget import state_name
                 row = session.get(SchedulerCheckpoint, state_name(budget.day))
-                row.cursor = {**row.cursor, "page_mode": "trial" if trial else "daily", "providers_enabled": {
+                row.cursor = {**row.cursor, "page_mode": mode, "candidate_mode": mode, "providers_enabled": {
                     "gemini": bool(settings.gemini_api_key.get_secret_value()),
                     "groq": bool(settings.groq_api_key.get_secret_value()),
                     "openai": False, "openrouter": False,
@@ -133,6 +192,7 @@ def run_daily(settings, factory, *, trial=False, pipeline_factory=CatalogPipelin
                           "review_required", "duplicates", "published", "fetch_failed", "budget_stopped", "no_decision", "worker_failed")})
             candidate_runs = []
             active_url = None
+            trial_sources = Counter()
             try:
                 budget.check()
                 pipeline = pipeline_factory(settings, factory)
@@ -140,12 +200,17 @@ def run_daily(settings, factory, *, trial=False, pipeline_factory=CatalogPipelin
                     nonlocal active_url
                     while True:
                         budget.check()
-                        url = next_candidate(factory, seen, bool(pipeline.llm_service and pipeline.llm_service.available))
+                        url = next_candidate(factory, seen, bool(pipeline.llm_service and pipeline.llm_service.available),
+                                             trial_sources if trial else None, 3 if trial else None)
                         if not url:
                             return
                         active_url = url
+                        with factory() as session:
+                            source_id = session.get(Candidate, url).source_id
                         budget.reserve("candidates")
                         seen.add(url)
+                        if trial:
+                            trial_sources[source_id] += 1
                         counts["attempted"] += 1
                         result = pipeline.run(discover=False, only_urls=[url], reanalyze=False)
                         from .run_report import candidate_outcome
@@ -161,7 +226,8 @@ def run_daily(settings, factory, *, trial=False, pipeline_factory=CatalogPipelin
                         counts["duplicates"] += result.get("counts", {}).get("duplicates", 0)
                         with factory.begin() as session:
                             row = session.get(Run, run_id)
-                            row.details = {**row.details, "candidate_runs": candidate_runs}
+                            row.details = {**row.details, "candidate_runs": candidate_runs,
+                                           "trial_source_counts": dict(trial_sources) if trial else {}}
                         budget.check()
                         active_url = None
                 drain()
@@ -225,17 +291,20 @@ def run_daily(settings, factory, *, trial=False, pipeline_factory=CatalogPipelin
                     row.counts = dict(counts)
                     row.status = "failed" if stop == "worker_error" else "completed"
                     refunded = budget.pages.refund(session) if row.status == "failed" else 0
-                    from .db import SchedulerCheckpoint
                     page_state = session.get(SchedulerCheckpoint, budget.pages.key).cursor
                     page_report = {"mode": budget.pages.mode, "refunded": refunded,
                                    "attempted_this_run": budget.used["pages"],
                                    "charged_today": page_state.get("usage", {}).get("pages", 0),
                                    "daily_limit": limits["pages"][1]}
+                    candidate_state = session.get(SchedulerCheckpoint, candidate_budget_key(budget.day, mode)).cursor
+                    candidate_report = {"mode": mode, "attempted_this_run": budget.used["candidates"],
+                                        "charged_today": candidate_state.get("usage", {}).get("candidates", 0),
+                                        "daily_limit": limits["candidates"][1]}
                     row.finished_at, row.duration_seconds = now_utc(), round(monotonic() - began, 2)
                     row.errors = errors
                     row.details = {**row.details, "stop_reason": stop, "usage": dict(budget.used),
                                    "last_error": errors[-1] if errors else None,
-                                   "page_budget": page_report,
+                                   "page_budget": page_report, "candidate_budget": candidate_report,
                                    "candidate_runs": candidate_runs,
                                    "limits": limits, "target": budget.target, "day": budget.day,
                                    "budget_events": budget.events, "peak_rss_kib": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss}
@@ -243,7 +312,7 @@ def run_daily(settings, factory, *, trial=False, pipeline_factory=CatalogPipelin
                                    .where(Candidate.status.in_(["queued", "pending", "review_required"])))}
             return {"status": "failed" if stop == "worker_error" else "completed", "run_id": run_id,
                     "stop_reason": stop, "counts": dict(counts), "usage": dict(budget.used),
-                    "page_budget": page_report,
+                    "page_budget": page_report, "candidate_budget": candidate_report,
                     "candidate_runs": candidate_runs,
                     "peak_rss_kib": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss}
     except WriterBusy:
