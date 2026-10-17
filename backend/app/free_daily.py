@@ -22,6 +22,7 @@ from .raw_discovery import ingest_raw
 from .registry import due, record_check
 from .writer import WriterBusy, writer_scope
 from .safe_errors import safe_error
+from .source_yield import recent_yield
 
 
 def profile(settings, trial=False):
@@ -66,7 +67,22 @@ def llm_preflight(settings):
                  (settings.groq_api_key.get_secret_value() and settings.groq_model)))
 
 
-def next_candidate(factory, seen, llm_ready, excluded_sources=()):
+def llm_run_remaining(service, budget):
+    if service is None:
+        return False
+    status = service.status()
+    names = [item["name"] for item in status if item.get("configured")]
+    if not status and service.available:  # Offline injected classifiers.
+        names = ["gemini", "groq"]
+    if not names:
+        return True  # Credential fail-fast is handled before draining; preserve injected keyless adapters.
+    healthy = {item["name"] for item in status if item.get("healthy", True)} if status else set(names)
+    return any(name in {"gemini", "groq"} and name in healthy
+               and budget.used["llm:" + name] < budget.limits["llm:" + name][0]
+               and not budget.blocked(name) for name in names)
+
+
+def next_candidate(factory, seen, llm_ready, excluded_sources=(), poor_sources=(), with_source=False):
     # Cheap project/title hints improve yield before source priority/age; only
     # ordering changes. Evidence and classification gates are unchanged.
     with factory() as session:
@@ -81,7 +97,8 @@ def next_candidate(factory, seen, llm_ready, excluded_sources=()):
                      (Candidate.reason == "llm_unavailable") & (Candidate.analysis_mode == "deterministic")))),
             Candidate.review_decision.not_in(["REJECT", "KEEP_FOR_REVIEW"]))
         from .publication_retry import eligible
-        query = query.where(*eligible())
+        from .llm_retry import eligible as llm_retry_eligible
+        query = query.where(*eligible(), *llm_retry_eligible())
         if seen:
             query = query.where(Candidate.url.not_in(seen))
         if excluded_sources:
@@ -100,12 +117,17 @@ def next_candidate(factory, seen, llm_ready, excluded_sources=()):
             Candidate.reason.in_(["article_body_missing", "http_403", "http_404", "page_timeout"])
         ).group_by(Candidate.source_id).subquery()
         query = query.outerjoin(failures, failures.c.source_id == RegistrySource.id)
-        return session.scalar(query.order_by(
+        if with_source:
+            query = query.add_columns(Candidate.source_id)
+        query = query.order_by(
+            case((Candidate.source_id.in_(poor_sources), 0), else_=1).desc(),
+            case(((Candidate.status == "review_required") & (Candidate.reason == "llm_unavailable"), 1), else_=0).desc(),
             case((failures.c.count >= 3, 0), else_=1).desc(),
             case((func.length(Candidate.article["text"].as_string()) >= 200, 1), else_=0).desc(),
             case((RegistrySource.source_type.in_(["startup_platform", "university", "hackathon", "accelerator"]), 2),
                  (RegistrySource.id == "show-hn-rss", 2), else_=0).desc(),
-            hint.desc(), RegistrySource.priority.desc(), Candidate.updated_at, Candidate.url).limit(1))
+            hint.desc(), RegistrySource.priority.desc(), Candidate.updated_at, Candidate.url).limit(1)
+        return session.execute(query).first() if with_source else session.scalar(query)
 
 
 def ingest_links(factory, source, links):
@@ -142,6 +164,13 @@ def run_daily(settings, factory, *, trial=False, pipeline_factory=CatalogPipelin
     began = monotonic()
     trace["began"] = began
     try:
+        from sqlalchemy import literal
+        with phase("initialization"):
+            with factory() as session:
+                session.connection()  # Checkout/connect excluded from the SELECT timing.
+                probe = monotonic()
+                session.scalar(select(literal(1)))
+                trace["database"]["select_1_ms"] = round((monotonic() - probe) * 1000, 2)
         _, _, seconds = profile(settings, trial)
         with phase("initialization"):
             try:
@@ -216,6 +245,9 @@ def _run_daily(settings, factory, *, trial=False, pipeline_factory=CatalogPipeli
             try:
                 budget.check()
                 pipeline = pipeline_factory(settings, factory)
+                with factory() as session:
+                    source_yield = recent_yield(session)
+                poor_sources = [item["source_id"] for item in source_yield if item["deprioritized"] and item["source_id"]]
                 from .telemetry import phase
                 from functools import wraps
                 def timed_phase(name):
@@ -231,15 +263,21 @@ def _run_daily(settings, factory, *, trial=False, pipeline_factory=CatalogPipeli
                     nonlocal active_url
                     while True:
                         budget.check()
+                        if not llm_run_remaining(pipeline.llm_service, budget):
+                            status = pipeline.llm_service.status() if pipeline.llm_service else []
+                            configured = [item["name"] for item in status if item.get("configured")] or ["gemini", "groq"]
+                            reason = "llm_run_budget_reached" if all(budget.used["llm:" + name] >= budget.limits["llm:" + name][0] for name in configured if name in {"gemini", "groq"}) else "llm_provider_budget_reached"
+                            if status and not any(item.get("configured") and item.get("healthy", True) for item in status):
+                                reason = "no_healthy_llm_provider"
+                            budget.stop(reason)
                         with phase("queue_selection"):
-                            url = next_candidate(factory, seen, bool(pipeline.llm_service and pipeline.llm_service.available),
-                                                 [key for key, value in source_attempts.items() if value >= 3] if trial else ())
-                        if not url:
+                            selected = next_candidate(factory, seen, bool(pipeline.llm_service and pipeline.llm_service.available),
+                                                 [key for key, value in source_attempts.items() if value >= 3] if trial else (), poor_sources, with_source=True)
+                        if not selected:
                             return
                         from urllib.parse import urlsplit
-                        with factory() as session:
-                            selected = session.get(Candidate, url)
-                            source_bucket = "id:" + selected.source_id if selected.source_id else "domain:" + urlsplit(url).netloc.lower()
+                        url, selected_source_id = selected
+                        source_bucket = "id:" + selected_source_id if selected_source_id else "domain:" + urlsplit(url).netloc.lower()
                         active_url = url
                         budget.reserve("candidates")
                         seen.add(url)
@@ -348,11 +386,13 @@ def _run_daily(settings, factory, *, trial=False, pipeline_factory=CatalogPipeli
                                             "daily_limit": limits["candidates"][1]}
                         row.finished_at, row.duration_seconds = now_utc(), round(monotonic() - began, 2)
                         row.errors = errors
+                        final_yield = recent_yield(session, current=candidate_runs)
                         row.details = {**row.details, **run_diagnostics(setup_timings),
                                        "trial_evaluation": trial_evaluation({"status": row.status, "counts": dict(counts)}) if trial else None,
                                        "stop_reason": stop, "usage": dict(budget.used),
                                        "last_error": errors[-1] if errors else None,
                                        "page_budget": page_report, "candidate_budget": candidate_report,
+                                       "source_yield": final_yield,
                                        "candidate_runs": candidate_runs, "source_attempts": dict(source_attempts), "before_llm_reasons": dict(Counter(item["before_llm_reason"] for item in candidate_runs if item.get("before_llm_reason"))),
                                        "limits": limits, "target": budget.target, "day": budget.day,
                                        "budget_events": budget.events, "peak_rss_kib": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss}
@@ -360,7 +400,7 @@ def _run_daily(settings, factory, *, trial=False, pipeline_factory=CatalogPipeli
                                        .where(Candidate.status.in_(["queued", "pending", "review_required"])))}
             return {"status": "failed" if stop == "worker_error" else "completed", "run_id": run_id,
                     "stop_reason": stop, "counts": dict(counts), "usage": dict(budget.used),
-                    "page_budget": page_report, "candidate_budget": candidate_report,
+                    "page_budget": page_report, "candidate_budget": candidate_report, "source_yield": final_yield,
                     "candidate_runs": candidate_runs, "source_attempts": dict(source_attempts), "before_llm_reasons": dict(Counter(item["before_llm_reason"] for item in candidate_runs if item.get("before_llm_reason"))),
                     "peak_rss_kib": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss}
     except WriterBusy:

@@ -82,6 +82,9 @@ def db_record(kind, elapsed_ms):
             continue
         stats = trace.setdefault("database", {"sql_queries": 0, "commits": 0, "rollbacks": 0, "checkout_probes": 0, "elapsed_ms": 0, "by_component": {}})
         stats[kind] = stats.get(kind, 0) + 1
+        if kind == "sql_queries":
+            stats["query_elapsed_ms"] = round(stats.get("query_elapsed_ms", 0) + elapsed_ms, 2)
+            stats["average_query_ms"] = round(stats["query_elapsed_ms"] / stats["sql_queries"], 2)
         stats["elapsed_ms"] = round(stats["elapsed_ms"] + elapsed_ms, 2)
         part = stats["by_component"].setdefault(DB_COMPONENT.get(), {"sql_queries": 0, "elapsed_ms": 0})
         if kind == "sql_queries":
@@ -164,6 +167,11 @@ def instrument_database(engine):
     for method, kind in (("do_commit", "commits"), ("do_rollback", "rollbacks")):
         original = getattr(engine.dialect, method)
         def wrapped(connection, _original=original, _kind=kind):
+            if _kind == "rollbacks" and engine.dialect.name == "postgresql":
+                from psycopg.pq import TransactionStatus
+                driver = getattr(connection, "driver_connection", connection)
+                if driver.info.transaction_status == TransactionStatus.IDLE:
+                    return  # No wire round trip or fictitious rollback counter.
             began = monotonic()
             try:
                 with span("db_transaction"):

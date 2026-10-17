@@ -916,3 +916,8 @@ See [daily latency operations](docs/FREE_DAILY_OPERATIONS.md#run169-разлож
 Publication rollback preserves the validated LLM checkpoint. Retries reuse it
 without another provider call, wait 5/10 minutes, and stop after three failures
 with `publication_retry_exhausted`. See [daily operations](docs/FREE_DAILY_OPERATIONS.md).
+
+Daily/trial workers stop before candidate selection when every configured LLM
+provider reaches its run allowance (`llm_run_budget_reached`). Bounded unavailable
+review retries, recent source yield and database RTT/average SQL diagnostics are
+explained in [free daily operations](docs/FREE_DAILY_OPERATIONS.md).

@@ -21,7 +21,7 @@ def _clean_postgres_checkout(connection, record, proxy):
             connection.rollback()
         from time import monotonic
         info = getattr(record, "info", {})
-        if status == TransactionStatus.IDLE and monotonic() - info.get("last_checked", -100) < 10:
+        if status == TransactionStatus.IDLE and monotonic() - info.get("last_checked", -100) < 120:
             return
         from .telemetry import db_record
         db_record("checkout_probes", 0)

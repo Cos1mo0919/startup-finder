@@ -38,6 +38,7 @@ class DailyBudget:
         self.max_database_bytes, self.max_rss_mb = max_database_bytes, max_rss_mb
         self.stop_reason = ""
         self._size_checked_at = -100.0
+        self._checked_at = -100.0
         from .llm_budget import ProviderQuotas
         self.quotas = ProviderQuotas(self, provider_policies) if provider_policies else None
         self.request_output_tokens = output_tokens
@@ -79,6 +80,10 @@ class DailyBudget:
         renew_writer(self.factory)
         if process_resource.getrusage(process_resource.RUSAGE_SELF).ru_maxrss >= self.max_rss_mb * 1024:
             self.stop("memory_guard")
+        # Advisory guards are cached briefly under the shared writer lease. Every
+        # reservation still locks/rechecks its durable ledger before HTTP.
+        if self.timer() - self._checked_at < 10:
+            return
         from .db import DailyStats
         with self.factory() as session:
             if self.timer() - self._size_checked_at >= 10:
@@ -92,6 +97,7 @@ class DailyBudget:
             today = session.get(DailyStats, self.day)
             if today and today.published_count >= self.target:
                 self.stop("daily_project_target")
+            self._checked_at = self.timer()
             if enforce_caps:
                 names = {state_name(self.day), *(self.resource_key(key) for key in self.limits)}
                 states = {row.name: row.cursor for row in session.scalars(select(SchedulerCheckpoint).where(SchedulerCheckpoint.name.in_(names)))}
@@ -177,14 +183,16 @@ class DailyBudget:
                           "last_requests": {**row.cursor.get("last_requests", {}), resource: self.clock().isoformat()},
                           "events": [*row.cursor.get("events", []), {"at": self.clock().isoformat(), "resource": resource}][-2000:]}
             row.last_attempt_at = self.clock()
+            # Same transaction as the reservation; commit still precedes HTTP.
+            from .db import Run
+            run = session.get(Run, self.run_id)
+            usage_snapshot = dict(self.used)
+            usage_snapshot[resource] = usage_snapshot.get(resource, 0) + 1
+            event = {"at": self.clock().isoformat(), "resource": resource}
+            if run:
+                run.details = {**run.details, "usage": usage_snapshot, "budget_events": [*self.events, event]}
         self.used[resource] += 1
-        self.events.append({"at": self.clock().isoformat(), "resource": resource})
-        # No URLs, prompts, payloads or credentials are written to budget logs.
-        from .db import Run
-        with self.factory.begin() as session:
-            row = session.get(Run, self.run_id)
-            if row:
-                row.details = {**row.details, "usage": dict(self.used), "budget_events": self.events}
+        self.events.append(event)
 
 
 def free_status(session, settings):
@@ -251,7 +259,8 @@ def free_status(session, settings):
                   if aware(datetime.fromisoformat(event["at"])) >= now - timedelta(hours=24)]
         recent["llm:" + provider] = len(events)
         recent["tokens:" + provider] = sum(event["tokens"] for event in events)
-    return {"day": day, "timezone": "Asia/Tashkent", "target": data.get("target", settings.daily_project_target),
+    from .source_yield import recent_yield
+    return {"source_yield": recent_yield(session), "day": day, "timezone": "Asia/Tashkent", "target": data.get("target", settings.daily_project_target),
             "published_today": today.published_count if today else 0,
             "usage_today": usage, "usage_24h": dict(recent), "limits": limits,
             "blocked_providers": {**{name: reason for name, reason in data.get("blocked", {}).items()

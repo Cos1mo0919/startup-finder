@@ -769,3 +769,21 @@ Validation: backend 461 passed / 11 disposable-PostgreSQL skips; the dedicated
 regression command 70 passed / 11 PostgreSQL skips; Ruff, TypeScript/Vite build,
 and 22 Playwright tests passed. GitHub API access is Forbidden in this Cloud
 session, so the three remote CI outcomes must not be claimed as observed here.
+
+## Trial 174 follow-up — 2026-10-17
+
+Added pre-selection LLM run-budget exhaustion, delayed/limited unavailable-review
+retries, source-yield diagnostics and advisory source ordering. Reduced repeated
+budget reads, idle rollback/probe traffic, eager dedup loads and publication flushes;
+kept durable pre-HTTP quota ledgers, writer leases and classification checkpoints.
+Added safe schema field/type diagnostics and one time-budgeted timeout retry.
+Production Supabase was not accessed. Current trial history was not edited.
+
+Local validation: 470 backend tests passed, 14 disposable-PostgreSQL scenarios
+skipped because no temporary PostgreSQL is installed in this Cloud environment.
+Ruff, TypeScript/Vite production build and 22 Playwright tests passed. New budget,
+retry and publication-query-count PostgreSQL cases are included in the dedicated
+postgres-regression workflow; Stage 1 already runs them via the full suite.
+GitHub Actions API returned Forbidden, including after retry, so remote green
+statuses are not observable/confirmed from this environment. No live provider
+quality or production latency comparison was performed.
