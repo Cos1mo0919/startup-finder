@@ -7,13 +7,13 @@ from .diagnostics import candidate_id
 
 def candidate_outcome(factory, url, result):
     with factory() as session:
-        row = session.get(Candidate, url)
+        from .db import RegistrySource
+        pair = session.execute(select(Candidate, RegistrySource).outerjoin(RegistrySource, RegistrySource.id == Candidate.source_id).where(Candidate.url == url)).first()
+        row, source = pair if pair else (None, None)
         status = row.status if row else "missing"
         reason = row.reason if row else "candidate_missing"
-        from .db import RegistrySource
         from urllib.parse import urlsplit
-        source = session.get(RegistrySource, row.source_id) if row and row.source_id else None
-        source_info = {"name": source.name if source else urlsplit(url).hostname,
+        source_info = {"id": row.source_id if row else None, "name": source.name if source else urlsplit(url).hostname,
                        "domain": urlsplit(url).hostname,
                        "page_type": ((row.article or {}).get("page_type") if row else None) or ((source.options or {}).get("page_type") if source else None) or "unknown"}
     stopped = result.get("status") == "stopped"

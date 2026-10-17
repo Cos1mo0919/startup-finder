@@ -11,3 +11,5 @@ confidence measures identity/extraction certainty, not quality:0.9-1 explicit su
 NOT_PROJECT JSON: {"classification":"NOT_PROJECT","confidence":0.0,"reason":"short English reason"}.
 PROJECT JSON fields: classification,name,aliases[],creator,official_url,country,sector,project_type,stage,what_it_does,description_uz,scores:{clarity,real_product,novelty,potential},score_reasons:{clarity,real_product,novelty,potential},score_evidence:{novelty:boolean,potential:boolean},confidence.
 MULTI JSON: {"classification":"MULTI","entries":[objects with every PROJECT field except classification],"confidence":0.0}.
+
+Types are mandatory: aliases is an array of source-backed strings (use [] when absent, never null); scores are integer numbers 1-10, not strings or nested score/reason objects; score_reasons values are strings; score_evidence values are JSON booleans. Only creator, official_url and country may be null. Put an exact source name in name, not a translated or inferred name. Use stage=unknown and sector=Other for unknown values, never null. Do not wrap JSON in a result/data/project object.

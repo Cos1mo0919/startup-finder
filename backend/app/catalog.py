@@ -6,12 +6,14 @@ import json
 import re
 from dataclasses import dataclass
 from difflib import SequenceMatcher
+from itertools import chain
 from pathlib import Path
 from urllib.parse import urlsplit
 
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy import select
+from sqlalchemy.orm import lazyload
 
 from .config import ROOT
 from .db import Project, Source
@@ -85,9 +87,10 @@ class CatalogResult:
 
 
 class ClassifierFailure(Exception):
-    def __init__(self, code, rule_code=None):
+    def __init__(self, code, rule_code=None, schema_issues=None):
         super().__init__(code)
         self.rule_code = rule_code or code
+        self.schema_issues = schema_issues or []
 
 
 def words(text: str) -> list[str]:
@@ -153,8 +156,15 @@ def parse_classifier_response(payload: dict, source_text: str) -> CatalogResult:
         for entry in entries:
             validate_entry(entry, source_text)
         return CatalogResult(kind, confidence, entries)
-    except (KeyError, TypeError, ValueError, ValidationError) as exc:
-        raise ClassifierFailure("invalid_json_schema") from exc
+    except ValidationError as exc:
+        # Only known schema field paths and machine error types, never input/value/message.
+        allowed = set(CatalogEntry.model_fields) | set(CatalogScores.model_fields) | {"novelty", "potential"}
+        issues = [{"field": ".".join(str(part) if isinstance(part, int) or part in allowed else "unknown"
+                                     for part in error["loc"]), "type": error["type"][:60]}
+                  for error in exc.errors(include_url=False, include_input=False)[:12]]
+        raise ClassifierFailure("invalid_json_schema", schema_issues=issues) from exc
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ClassifierFailure("invalid_json_schema", schema_issues=[{"field": "confidence_or_entries", "type": type(exc).__name__}]) from exc
 
 
 def apply_neutral_score_fallback(payload: dict) -> dict:
@@ -285,7 +295,8 @@ def duplicate_decision(session, entry: CatalogEntry, source_url: str):
             return project, None
     incoming_domain = urlsplit(entry.official_url).hostname if entry.official_url else None
     uncertain = None
-    for project in session.scalars(select(Project).execution_options(yield_per=50)):
+    persisted = session.scalars(select(Project).options(lazyload(Project.sources), lazyload(Project.evidence_records)).execution_options(yield_per=50))
+    for project in chain(persisted, (row for row in session.new if isinstance(row, Project))):
         existing = {project.normalized_project_name, *(normalize(alias) for alias in project.aliases)}
         same_name = bool(names & existing or compact & {re.sub(r"\W", "", name) for name in existing})
         same_domain = bool(incoming_domain and project.main_url and urlsplit(project.main_url).hostname == incoming_domain)

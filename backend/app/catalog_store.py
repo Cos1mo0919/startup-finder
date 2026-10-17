@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from hashlib import sha256
 from urllib.parse import urlsplit
+from uuid import uuid4
 
 from sqlalchemy import select
 
@@ -145,6 +146,7 @@ def save_catalog_result(session, article, result: CatalogResult, when=None, sett
         description = _description(entry, result.analysis_method)
         if created:
             project = Project(
+                id=str(uuid4()), sources=[], evidence_records=[],
                 name=entry.name, normalized_project_name=normalize(entry.name),
                 creator=entry.creator or "", organization="", country=entry.country or "",
                 city="", event="", main_url=_primary_url(entry, url),
@@ -161,7 +163,6 @@ def save_catalog_result(session, article, result: CatalogResult, when=None, sett
                 publication_status="DISCOVERED", publication_reason="",
             )
             session.add(project)
-            session.flush()
         previous_status = project.publication_status
         published_before = previous_status == "PUBLISHED" or any(
             item.get("value") in {"PUBLISHED", "AUTO_PUBLISHED"} for item in project.status_history or [])
@@ -208,7 +209,7 @@ def save_catalog_result(session, article, result: CatalogResult, when=None, sett
         project.classification_history = history(project.classification_history, "PROJECT", result.analysis_method, reason, when)
         if created or previous_status != project.publication_status:
             project.status_history = history(project.status_history, state, result.analysis_method, reason, when)
-        source = session.scalar(select(Source).where(Source.project_id == project.id, Source.url == url))
+        source = None if created else next((source for source in project.sources if source.url == url), None)
         if source is None:
             project.sources.append(Source(url=url, publisher=article.publisher, kind=article.kind,
                                           source_id=article.source_id, published_at=article.published_at or when,

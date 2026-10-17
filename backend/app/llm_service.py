@@ -355,6 +355,17 @@ class LLMService:
                 except ProviderFailure as exc:
                     diagnostic.update(outcome=exc.code, exception_class=type(exc).__name__)
                     self._metric(provider.name, exc.code)
+                    if managed and exc.code == "timeout" and attempt == 0 and attempt < retries:
+                        # One retry only, and only when a whole request can fit.
+                        from .telemetry import ACTIVE_TRACE
+                        trace = ACTIVE_TRACE.get()
+                        available_seconds = min(budget.deadline - budget.timer(),
+                                                trace["deadline"] - monotonic() if trace and "deadline" in trace else float("inf"))
+                        if (available_seconds >= self.settings.llm_timeout_seconds + 1 and
+                                budget.used["llm:" + provider.name] < budget.limits["llm:" + provider.name][0]):
+                            budget.wait(1)
+                            continue
+                        diagnostic["retry_skipped"] = "deadline_or_run_budget"
                     if managed and exc.code == "rate_limited" and attempt < retries and exc.retry_after <= 60:
                         delay = max(exc.retry_after, self.settings.llm_rate_limit_backoff_seconds * 2 ** attempt)
                         if remaining(delay) >= delay:
@@ -367,7 +378,8 @@ class LLMService:
                         break
                 except (ClassifierFailure, ValueError) as exc:
                     failure = "business_validation_failed" if isinstance(exc, ClassifierFailure) and str(exc) not in {"invalid_json_schema", "invalid_classification", "invalid_enum"} else "schema_validation_failed"
-                    diagnostic.update(outcome=failure, exception_class=type(exc).__name__, rule_code=business_rule_code(exc))
+                    diagnostic.update(outcome=failure, exception_class=type(exc).__name__, rule_code=business_rule_code(exc),
+                                      schema_issues=getattr(exc, "schema_issues", []))
                     self._metric(provider.name, failure)
                 finally:
                     diagnostic.update(http_status=getattr(provider, "last_http_status", None),

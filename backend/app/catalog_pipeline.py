@@ -220,6 +220,8 @@ class CatalogPipeline(Pipeline):
                 # Telegram and future adapters may insert raw rows independently
                 # of web discovery. Materialize a Candidate without losing payload.
                 pending_raw = select(RawDiscovery).where(RawDiscovery.status == "pending")
+                if only_urls:
+                    pending_raw = pending_raw.where(RawDiscovery.source_url.in_([canonical_url(url) for url in only_urls]))
                 if only_source:
                     pending_raw = pending_raw.where(RawDiscovery.source_adapter == only_source)
                 if not process:
@@ -266,7 +268,8 @@ class CatalogPipeline(Pipeline):
                 if only_urls:
                     query = select(Candidate)
                 from .publication_retry import eligible
-                query = query.where(*eligible())
+                from .llm_retry import eligible as llm_retry_eligible
+                query = query.where(*eligible(), *llm_retry_eligible())
                 if only_source:
                     query = query.where(Candidate.source_id == only_source)
                 if archive_window and not only_urls:
@@ -285,7 +288,9 @@ class CatalogPipeline(Pipeline):
                     (Candidate.url.contains(f"/{scope[0][:4]}/"), 1),
                     else_=0,
                 ) if scope else None
-                if process:
+                if process and only_urls:
+                    rows = list(session.scalars(query.limit(self.settings.max_candidates)))
+                elif process:
                     # One candidate per source each round prevents a large Global archive
                     # from starving smaller Uzbekistan feeds during hourly processing.
                     ranked = select(
@@ -432,7 +437,7 @@ class CatalogPipeline(Pipeline):
                         source_bucket["project_candidates"] += len(result.entries)
                     from .telemetry import finishing_decision
                     with finishing_decision():
-                        with self.factory.begin() as session:
+                        with self.factory.begin() as session, session.no_autoflush:
                             candidate = session.get(Candidate, url)
                             candidate.article = {**article.model_dump(mode="json"),
                                                  "_catalog_entries": [entry.model_dump(mode="json") for entry in result.entries]}
@@ -442,6 +447,10 @@ class CatalogPipeline(Pipeline):
                             candidate.processing_version = 8
                             candidate.analysis_mode = result.analysis_method
                             outcomes = save_catalog_result(session, article, result, now, self.settings)
+                            if candidate.reason == "llm_unavailable" and result.analysis_method == "llm_failed":
+                                from .llm_retry import unavailable
+                                unavailable(candidate, cached, now)
+                                candidate.status_history = history(candidate.status_history, "REVIEW_REQUIRED", "retry_policy", candidate.reason, now)
                             raw = session.get(RawDiscovery, raw_id)
                             record_transition(raw, "processed" if candidate.status == "published" else
                                               "rejected" if candidate.status == "rejected" else "review_required",
@@ -464,6 +473,11 @@ class CatalogPipeline(Pipeline):
                                 raw.llm_attempt_count += self.llm_service.last_attempt_count
                                 raw.classifier_prompt_version = PROMPT_VERSION
                                 raw.analyzed_at = now
+                    if outcomes.get("auto_published"):
+                        from .free_budget import current_budget
+                        budget = current_budget()
+                        if budget:
+                            budget._checked_at = -100.0  # Publication changes the target guard.
                     for key, value in outcomes.items():
                         counts[key] += value
                         source_bucket[key] += value

@@ -9,6 +9,9 @@ import { useApi } from "./useApi";
 import { date } from "./utils";
 const stopReasonLabels: Record<string,string> = {
   daily_project_target: "Kunlik loyiha maqsadiga yetildi",
+  no_healthy_llm_provider: "LLM provayderlari xatolardan keyin vaqtincha to‘xtatildi",
+  llm_provider_budget_reached: "LLM provayderlarining kvotasi vaqtincha mavjud emas",
+  llm_run_budget_reached: "Ushbu ishga tushirish uchun LLM budjeti tugadi",
   max_run_seconds: "Ishlash vaqti tugadi",
   calendar_day_changed: "Toshkentda yangi kun boshlandi",
   database_size_guard: "Baza hajmi uchun xavfsizlik chegarasi",
@@ -126,7 +129,7 @@ export function StatusPage({adminKey}:{adminKey:string}) {
         {s.free_daily.last_run?.trial_evaluation&&<p>Sinov natijasi: {s.free_daily.last_run.trial_evaluation}.</p>}
         {s.free_daily.last_run?.run_phases_ms&&<p>Ish bosqichlari (ms): {Object.entries(s.free_daily.last_run.run_phases_ms).map(([key,value])=>`${key}: ${value}`).join(" · ")}</p>}
         {s.free_daily.last_run?.setup_timings_ms&&<p>Tayyorlash (ms): {Object.entries(s.free_daily.last_run.setup_timings_ms).map(([key,value])=>`${key}: ${value??"o‘lchanmagan"}`).join(" · ")}</p>}
-        {s.free_daily.last_run?.run_database&&<p>Jami SQL: {s.free_daily.last_run.run_database.sql_queries}; baza: {s.free_daily.last_run.run_database.elapsed_ms} ms.</p>}
+        {s.free_daily.last_run?.run_database&&<p>Jami SQL: {s.free_daily.last_run.run_database.sql_queries}; baza: {s.free_daily.last_run.run_database.elapsed_ms} ms. SELECT 1: {s.free_daily.last_run.run_database.select_1_ms??"o‘lchanmagan"} ms; o‘rtacha SQL: {s.free_daily.last_run.run_database.average_query_ms??"o‘lchanmagan"} ms.</p>}
         {s.free_daily.last_run?.candidate_runs?.map(item=><details key={item.candidate_id}>
           <summary>{item.source?.name||item.candidate_id} · {item.stage} · {item.reason}</summary>
           <p>{item.source?.domain} · {item.source?.page_type}</p>
@@ -134,9 +137,13 @@ export function StatusPage({adminKey}:{adminKey:string}) {
           {item.database&&<><p>SQL: {item.database.sql_queries}; baza: {item.database.elapsed_ms} ms; commit: {item.database.commits}; rollback: {item.database.rollbacks}.</p>
             {Object.entries(item.database.by_component).map(([name,part])=><p key={name}>{name}: SQL {part.sql_queries} · {part.elapsed_ms} ms</p>)}</>}
           {item.provider_waits?.map((wait,index)=><p key={index}>{wait.provider}: {wait.reason} · {wait.requested_seconds} s · {wait.skipped?"kutish o‘tkazildi":"kutildi"}</p>)}
-          {item.provider_attempts?.map((attempt,index)=><p key={index}>{attempt.provider}: {attempt.outcome} · HTTP {attempt.http_status??"—"} · {attempt.elapsed_ms??0} ms · {attempt.finish_reason||""} · {attempt.exception_class||""} {attempt.rule_code||""} {attempt.reason||attempt.local_reason||""}</p>)}
+          {item.provider_attempts?.map((attempt,index)=><p key={index}>{attempt.provider}: {attempt.outcome} · HTTP {attempt.http_status??"—"} · {attempt.elapsed_ms??0} ms · {attempt.finish_reason||""} · {attempt.exception_class||""} {attempt.rule_code||""} {attempt.reason||attempt.local_reason||""} {attempt.schema_issues?.map(issue=>`${issue.field}: ${issue.type}`).join("; ")}</p>)}
           {item.extraction?.map((step,index)=><p key={index}>Matn: {step.method} · {step.words} so‘z · {step.reason||""}</p>)}
         </details>)}
+        {!!s.free_daily.source_yield?.length&&<><h3>Manbalar samaradorligi · oxirgi 20 ish / 7 kun</h3>
+          <table><thead><tr><th>Manba</th><th>Nomzod</th><th>Nashr</th><th>Rad etilgan</th><th>LLM mavjud emas</th><th>Navbat</th></tr></thead><tbody>
+            {s.free_daily.source_yield.map(source=><tr key={source.source_id||source.domain}><td>{source.name}</td><td>{source.counts.candidates}</td><td>{source.counts.published}</td><td>{source.counts.rejected}</td><td>{source.counts.llm_unavailable}</td><td>{source.deprioritized?"Ustuvorlik pasaytirildi":"Oddiy"}</td></tr>)}
+          </tbody></table></>}
         <table><thead><tr><th>Resurs</th><th>Bugun / kunlik limit</th><th>24 soatda</th></tr></thead><tbody>
           {Object.entries(s.free_daily.limits).map(([key,limits])=><tr key={key}><td>{resourceLabels[key]||key}</td>
             <td>{s.free_daily?.usage_today[key]||0} / {limits[1]}</td><td>{s.free_daily?.usage_24h[key]||0}</td></tr>)}

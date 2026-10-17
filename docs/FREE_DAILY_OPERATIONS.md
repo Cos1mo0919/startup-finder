@@ -776,3 +776,66 @@ leases are released, including when retry bookkeeping itself fails.
 `recover-no-llm-run` remains restricted to its original missing-key evidence and
 state hash; it does not reset publication failures or checkpoint retry limits.
 No production recovery or data operation is part of this code fix.
+
+### LLM run exhaustion, reviews and database latency (2026-10-17)
+
+Before selecting/reserving the next candidate, the worker checks configured
+Gemini/Groq per-run counters. When no configured provider has requests left it
+stops with `llm_run_budget_reached`. Remaining candidate status/history/budget
+are untouched. Durable quota reservation still locks and commits the ledger
+before **each** HTTP attempt. Temporary provider/daily blocks use
+`llm_provider_budget_reached`, not the per-run exhaustion label.
+
+Historical `review_required / llm_unavailable` rows are eligible when providers
+are configured, ordinarily after six hours; old deterministic/keyless reviews
+can be retried immediately when keys appear. Due reviews receive a queue boost
+within their source-priority tier (the trial three-per-source cap still applies).
+Following actual failed LLM analysis, `_llm_retry` preserves a failure counter
+and UTC due date: retry after six hours, then twelve hours. Three failures leave
+`review_required / llm_retry_exhausted` for manual investigation. Exhausted or
+not-yet-due rows are filtered before candidate charging. Existing history remains;
+no old run is edited or automatically refunded. Guarded `recover-no-llm-run`
+continues to apply only to its verified missing-key case.
+
+Database checkout checks connection transaction state on every borrow; unfinished
+ACTIVE/UNKNOWN sockets are still discarded. The SELECT probe now runs at most
+once per physical connection per 120 seconds (previously ten). PostgreSQL idle
+rollbacks are skipped. Advisory size/target/counter reads are cached for ten
+seconds under the shared writer lease and invalidated after publication. Actual
+reservations always lock/recheck the authoritative resource ledger, and publication
+still uses its atomic conditional UPDATE. Candidate reservation and its run audit
+share one transaction. Network/LLM calls never hold the publication transaction.
+The validated-result checkpoint remains a separate durable transaction.
+
+Publication changes are flushed together in one transaction; new IDs are assigned
+before writing, dedup also checks pending projects in MULTI responses, and sources /
+evidence are not eagerly loaded for every project in the dedup scan. Explicit-URL
+processing no longer ranks/reloads the whole queue or materializes unrelated raw
+rows. Queue selection and outcome reporting reuse joined source metadata.
+A disposable SQLite/PostgreSQL regression limits the simple publication fixture's
+`decision_write` component to 16 SQL statements and checks evidence/relationships.
+This is not a production latency benchmark.
+
+Run JSON and /admin include `run_database.select_1_ms` (warm checkout, simple SQL
+round trip), `query_elapsed_ms`, and `average_query_ms` (SQL execution only;
+`elapsed_ms` also includes transaction/connect overhead). Initial connection / probe
+cost remains in run timing. `source_yield` summarizes the last 20 daily/trial runs
+within seven days: candidates, publications, rejections, reviews, llm_unavailable,
+fetch failures. After ten candidates and zero publications a source is softly
+ordered later. It remains enabled and can still run. Counters describe attempts,
+not unique candidates. Legacy reports without source metadata cannot be attributed.
+
+Gemini/Groq requests in this worker still time out at min(LLM_TIMEOUT_SECONDS,15s),
+additionally bounded by candidate/run remaining time. A timeout gets at most one
+retry, only if retry policy permits, a whole request plus one-second delay can fit,
+and a per-run request remains. That retry reserves its own quota before HTTP.
+429 retries retain their existing bounded backoff; quota and health gates apply.
+Groq remains `openai/gpt-oss-20b` by default / GROQ_MODEL; no model or account quota
+change is made. GPT-OSS already uses reasoning_effort=low and JSON-object mode.
+The compact prompt now explicitly specifies array/nullable/score/enum types.
+Schema failures expose `provider_attempts[].schema_issues` containing allowlisted
+field paths and error types, never raw replies, input values or validation messages.
+`unsupported_project_name` remains a business rejection; it is not auto-corrected
+into an unsupported name. Strict provider JSON-schema mode is not enabled without
+verifying model support and accounting for the schema's additional token overhead.
+Old `invalid_json_schema` events cannot reveal their failed fields retroactively.
