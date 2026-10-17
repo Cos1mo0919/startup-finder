@@ -32,6 +32,7 @@ const resourceLabels: Record<string,string> = {
   "tokens:groq": "Groq tokenlari", "tokens:gemini": "Gemini tokenlari",
 };
 function stopLabel(reason?:string) {
+  if(reason==="no_llm_provider") return "LLM provayder sozlanmagan yoki kvotalar tasdiqlanmagan";
   if (!reason) return "Hali ishga tushmagan";
   for (const prefix of ["run_limit:", "daily_limit:"]) {
     if (reason.startsWith(prefix)) return `${prefix === "run_limit:" ? "Ishga tushirish" : "Kunlik"} limiti: ${resourceLabels[reason.slice(prefix.length)] || reason.slice(prefix.length)}`;
@@ -115,9 +116,20 @@ export function StatusPage({adminKey}:{adminKey:string}) {
           {mode === "trial" ? "Sinov" : "Oddiy"} sahifa budjeti: {pages.used} / {pages.limits[1]}.
           Jami urinish: {pages.attempted}; xatoli ishga tushirishlardan qaytarildi: {pages.refunded}.
         </p>)}
+        {Object.entries(s.free_daily.candidate_budgets||{}).map(([mode,budget])=><p key={mode}>
+          {mode === "trial" ? "Sinov" : "Oddiy"} nomzod budjeti: {budget.used} / {budget.limits[1]}.
+        </p>)}
         <p>{s.free_daily.day} · Toshkent · Nashr: {s.free_daily.published_today}/{s.free_daily.target}.
           Oxirgi 24 soatda: {s.free_daily.found_24h} yangi nomzod, {s.free_daily.published_24h} nashr.</p>
         <p>Oxirgi yakun: {stopLabel(s.free_daily.last_run?.stop_reason)}.</p>
+        {s.free_daily.last_run?.counts&&<p>LLM ga yetdi: {s.free_daily.last_run.counts.reached_llm??0}; tahlil tasdiqlandi: {s.free_daily.last_run.counts.llm_validated??0}; LLM gacha to‘xtadi: {s.free_daily.last_run.counts.before_llm??0}. {Object.entries(s.free_daily.last_run.before_llm_reasons||{}).map(([reason,count])=>`${reason}: ${count}`).join(" · ")}</p>}
+        {s.free_daily.last_run?.candidate_runs?.map(item=><details key={item.candidate_id}>
+          <summary>{item.source?.name||item.candidate_id} · {item.stage} · {item.reason}</summary>
+          <p>{item.source?.domain} · {item.source?.page_type}</p>
+          {item.timings_ms ? <p>Bosqich vaqti (ms): {Object.entries(item.timings_ms).map(([name,value])=>`${name}: ${value}`).join(" · ")}</p> : <p>Bosqich vaqti saqlanmagan.</p>}
+          {item.provider_attempts?.map((attempt,index)=><p key={index}>{attempt.provider}: {attempt.outcome} · HTTP {attempt.http_status??"—"} · {attempt.elapsed_ms??0} ms · {attempt.finish_reason||""} · {attempt.exception_class||""} {attempt.reason||attempt.local_reason||""}</p>)}
+          {item.extraction?.map((step,index)=><p key={index}>Matn: {step.method} · {step.words} so‘z · {step.reason||""}</p>)}
+        </details>)}
         <table><thead><tr><th>Resurs</th><th>Bugun / kunlik limit</th><th>24 soatda</th></tr></thead><tbody>
           {Object.entries(s.free_daily.limits).map(([key,limits])=><tr key={key}><td>{resourceLabels[key]||key}</td>
             <td>{s.free_daily?.usage_today[key]||0} / {limits[1]}</td><td>{s.free_daily?.usage_24h[key]||0}</td></tr>)}

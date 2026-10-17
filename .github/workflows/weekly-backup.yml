@@ -39,7 +39,7 @@ jobs:
         with:
           name: encrypted-postgres-backup
           path: data/backups/*.gpg
-          retention-days: 1
+          retention-days: 7
           if-no-files-found: error
       - name: Remove runner dump files
         if: always()

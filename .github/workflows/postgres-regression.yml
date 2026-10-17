@@ -6,6 +6,8 @@ on:
       - 'backend/app/**'
       - 'tests/test_daily_postgres.py'
       - 'tests/test_connection_hygiene.py'
+      - 'tests/test_trial_diagnostics.py'
+      - 'tests/test_no_llm_recovery.py'
       - '.github/workflows/postgres-regression.yml'
 permissions:
   contents: read
@@ -38,4 +40,4 @@ jobs:
       - run: pip install uv==0.12.19
       - run: uv sync --frozen
       - name: PostgreSQL review to publication and transaction cleanup
-        run: .venv/bin/pytest -q -rs tests/test_daily_postgres.py tests/test_connection_hygiene.py
+        run: .venv/bin/pytest -q -rs tests/test_daily_postgres.py tests/test_connection_hygiene.py tests/test_trial_diagnostics.py tests/test_no_llm_recovery.py

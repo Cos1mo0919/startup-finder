@@ -713,3 +713,29 @@ reset preview/hash/day verification, per-candidate outcomes and read-only legacy
 Run inspection. No production reads/writes or resets performed. Validation:
 403 backend passed,5 disposable-PostgreSQL skipped (network provisioning blocked),
 Ruff, TypeScript/build and22 desktop/mobile browser tests passed.
+
+2026-10-16: run125 diagnostics/speed preparation, branch free-daily-operations.
+Added candidate stage telemetry, safe provider HTTP/parse/validation/guard outcomes,
+admin detail panels, source text fallbacks, obvious asset/account prefilter,
+7-day repeated-fetch-failure queue penalty and cached/project-first ordering.
+Bounded connect/read/provider caps3/8/15s, cooperative candidate deadline45s;
+trial300s unchanged. Removed artificial Groq output1024 cap within total5500
+reservation, GPT-OSS reasoning_effort=low, preserved gates and keyless behavior.
+Cron still OFF, moved commented daily time to09:00UTC; backup retention7days.
+Validation:427 backend passed,7 disposable-PostgreSQL skipped; Ruff, TypeScript,
+production build,22 desktop/mobile browser passed. PG regression workflow includes
+new diagnostic persistence cases. No production reads/writes/discovery or live
+provider calls. Run125 identities, exact old timings/errors and live throughput
+remain unverified without operator report; CI service results not observed here.
+
+2026-10-17: keyless daily/trial preflight now records no_llm_provider before
+constructing pipeline or reserving candidates. Mode-specific candidate ledgers
+reconstruct legacy spend; trial caps attempts at3/source (unknown sources by
+host). Added explicit preview/lease/hash/transaction recovery for keyless run148,
+children149–167: validates missing_key/no usage/manual decisions, requeues19,
+refunds20 original-day trial reservations once, keeps audit/evidence/other quotas.
+Recovery NEVER executed against production. New PostgreSQL recovery regression
+included in CI. Offline component fixtures explicitly replace credential preflight;
+new credential tests exercise real guard. Validation:445 backend passed,8 PG skipped,
+Ruff/TypeScript/build/22 browser passed; recovery lock refinements additionally
+passed focused tests. Production recovery results and actual PG CI not verified.

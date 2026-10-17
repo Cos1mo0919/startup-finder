@@ -133,7 +133,7 @@ def seed_candidates(factory, names):
             session.add(Candidate(url=page.url, article=page.model_dump(mode="json"), status="queued"))
 
 
-def test_daily_goal_is_shared_across_restarts_and_backlog_is_preserved(settings, factory, monkeypatch):
+def test_daily_goal_is_shared_across_restarts_and_backlog_is_preserved(settings, factory, monkeypatch, offline_daily_preflight):
     monkeypatch.setattr("backend.app.free_budget.sleep", lambda _: None)
     settings = settings.model_copy(update={"daily_project_target": 2})
     seed_candidates(factory, ["AtlasGarden", "NimbusPay", "VectorScan"])
@@ -148,7 +148,7 @@ def test_daily_goal_is_shared_across_restarts_and_backlog_is_preserved(settings,
     assert again["stop_reason"] == "daily_project_target"
 
 
-def test_request_cap_stops_pipeline_without_rejecting_the_remaining_candidate(settings, factory):
+def test_request_cap_stops_pipeline_without_rejecting_the_remaining_candidate(settings, factory, offline_daily_preflight):
     settings = settings.model_copy(update={"daily_gemini_requests_per_run": 1, "daily_gemini_requests_per_day": 1})
     seed_candidates(factory, ["AtlasGarden", "NimbusPay"])
     result = run_daily(settings, factory, pipeline_factory=publishing_pipeline)
@@ -183,7 +183,7 @@ def test_admin_decision_survives_repeated_analysis_and_a_different_source(settin
         assert cheap_decision(session, raw)[:2] == ("reject", "admin_decision_preserved")
 
 
-def test_one_writer_blocks_other_workers_and_admin_actions(settings, factory):
+def test_one_writer_blocks_other_workers_and_admin_actions(settings, factory, offline_daily_preflight):
     from backend.app.admin_alerts import send_alerts
     with writer_scope(factory) as owner:
         assert current_writer(factory) == owner
@@ -234,7 +234,7 @@ def test_raw_ingestion_is_idempotent_and_queue_hint_prioritizes_concrete_project
     assert next_candidate(factory, set(), False).endswith('/app')
 
 
-def test_multi_page_defers_remaining_projects_without_losing_them_or_calling_llm_again(settings, factory):
+def test_multi_page_defers_remaining_projects_without_losing_them_or_calling_llm_again(settings, factory, offline_daily_preflight):
     budget = make_budget(factory, target=1)
     page = sample_article(name="AtlasGarden")
     entries = tuple(CatalogEntry(name=name, confidence=0.9,
@@ -295,7 +295,7 @@ def test_real_web_client_counts_robots_and_blocks_additional_requests(settings, 
         web.close()
 
 
-def test_source_failure_does_not_stop_next_source_and_raw_is_persisted(settings, factory):
+def test_source_failure_does_not_stop_next_source_and_raw_is_persisted(settings, factory, offline_daily_preflight):
     with factory.begin() as session:
         for identifier in ('bad', 'good'):
             session.add(RegistrySource(id=identifier, name=identifier, url=f'https://{identifier}.example/',

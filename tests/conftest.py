@@ -81,3 +81,13 @@ class FakeDiscovery:
 class FakeAnalyzer:
     def analyze(self, articles):
         return sample_analysis(articles[0])
+
+
+@pytest.fixture
+def offline_daily_preflight(monkeypatch):
+    """Injected offline classifiers stand in for configured providers in component tests.
+
+    Credential/preflight behavior is tested separately without this fixture.
+    No real key or external provider call is introduced into these tests.
+    """
+    monkeypatch.setattr("backend.app.free_daily.llm_preflight", lambda settings: True)

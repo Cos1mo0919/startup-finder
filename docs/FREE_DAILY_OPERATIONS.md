@@ -20,7 +20,7 @@
 | Уведомления админу | каждые 30 минут | `TELEGRAM_BOT_TOKEN`, `ADMIN_TELEGRAM_CHAT_ID` | Выключены; наблюдение через `/admin` |
 | Startup-аудиты / registry / синхронизация | при старте, если явно разрешено | PostgreSQL; чтение и исправления данных | `STARTUP_DATA_UPDATES_ENABLED=false`; CLI не запускает startup-аудиты |
 | Схема / RLS | при старте, если разрешено | PostgreSQL | `DATABASE_AUTO_MIGRATE=false`; только отдельная ручная maintenance-команда |
-| Новый bounded discovery | ручной Actions; закомментирован daily 03:00 UTC = 08:00 Ташкент | `DATABASE_URL`, опционально Gemini/Groq | До 45 минут работы, Actions timeout 48 минут |
+| Новый bounded discovery | ручной Actions; закомментирован daily 09:00 UTC = 14:00 Ташкент | `DATABASE_URL`, опционально Gemini/Groq | До 45 минут работы, Actions timeout 48 минут |
 | pg_dump | ручной Actions; закомментирован Sunday 02:00 UTC | `DATABASE_URL`, `BACKUP_ENCRYPTION_PASSPHRASE` | До 180 секунд дампа / 20 MiB, job timeout 10 минут |
 
 При включении старого встроенного scheduler его задачи НЕ становятся автоматически
@@ -68,7 +68,9 @@ workflow он всегда отключён. Основной путь бесп�
 
 По умолчанию `FREE_PROVIDER_QUOTAS_CONFIRMED=false`: Gemini/Groq не вызываются,
 даже если ключи заданы. Включать `true` можно только после проверки аккаунтов и
-моделей. Без LLM generic RSS уходит на рассмотрение. Публиковать детерминированно
+моделей. Bounded free_daily без разрешённого настроенного LLM теперь завершается
+с no_llm_provider ДО выбора кандидатов. В общем catalog pipeline (вне bounded job)
+без LLM generic RSS остаётся на рассмотрении. Публиковать детерминированно
 может только существующий разрешённый adapter+page_type из
 `config/trusted_catalog_pages.json`.
 Не добавляйте доверие источникам ради количества. В текущей конфигурации может
@@ -76,10 +78,11 @@ workflow он всегда отключён. Основной путь бесп�
 
 Учёт сохраняется до сетевого запроса. Страницы имеют отдельные дневные записи
 `free_pages:trial:YYYY-MM-DD` и `free_pages:daily:YYYY-MM-DD`; сутки —
-00:00–24:00 Asia/Tashkent. Общие остальные счётчики остаются в
-`free_daily:YYYY-MM-DD`. Страницы failed/interrupted запусков возвращаются в
+00:00–24:00 Asia/Tashkent. Кандидаты имеют отдельные free_candidates:trial/daily ledger;
+остальные общие счётчики остаются в `free_daily:YYYY-MM-DD`. Страницы failed/interrupted запусков возвращаются в
 локальный бюджет страниц; реальные попытки и история сохраняются. Расход LLM,
-токенов, поиска, кандидатов и публикаций не возвращается. Завершённый bounded
+токенов, поиска, кандидатов и публикаций автоматически не возвращается
+(для missing_key кандидатов есть отдельная ручная recovery ниже). Завершённый bounded
 запуск (включая daily_limit:pages) сохраняет расход. При первом использовании
 нового ledger он восстанавливается из старых Run, исключая failed/interrupted;
 прерванные процессы также сверяются при следующем запуске. Это не отменяет
@@ -188,7 +191,7 @@ yield; default 20 сохраняет желаемый потолок, не об�
 прочие репозитории. Trial job обычно ≤5 минут обработки плюс install; общий
 Actions timeout остаётся48 минут. CI timeout15 минут на запуск, артефакты ошибок
 1 день. Не считать это автоматически доступным лимитом аккаунта.
-Зашифрованный dump ≤20 MiB плюс небольшая служебная надбавка, retention1 день:
+Зашифрованный dump ≤20 MiB плюс небольшая служебная надбавка, retention7 дней:
 это НЕ долгосрочное хранение — скачивайте его в своё защищённое хранилище.
 
 Память: HTTP body ≤500000 bytes; ответы LLM ограничены; диагностика не загружает
@@ -216,7 +219,8 @@ peak сохраняется в Run.details; проверяйте trial. Офла
    закреплён на `gemini-3.1-flash-lite`.
    При необходимости лимиты из таблицы (можно снижать, не повышать вслепую).
    Отсутствующие variables имеют defaults. `DAILY_PROJECT_TARGET=20` опционален.
-   Для абсолютно keyless trial оставить confirmation=false, ожидая review/0 публикаций.
+   При confirmation=false или отсутствии обоих ключей trial завершится с
+   no_llm_provider и0 попыток: это проверка preflight, не оценка классификатора.
 4. Render Environment: оставить все три safety flags=false; тот же
    `DATABASE_URL`, свой `ADMIN_API_KEY`. Для нового admin budget блока нужен
    проверенный deployment этой версии. Не включать встроенный scheduler.
@@ -250,7 +254,7 @@ peak сохраняется в Run.details; проверяйте trial. Офла
 Ошибка/превышение удаляет неполный файл. Это копия application public schema,
 НЕ всей Supabase платформы auth/storage/ролей. Workflow выполняется только в
 private repository, шифрует AES256 через GPG, удаляет plaintext и сохраняет
-приватный `.gpg` artifact на1 день. В репозиторий/образ dump не входит.
+приватный `.gpg` artifact на7 дней. В репозиторий/образ dump не входит.
 
 Скачайте artifact, расшифруйте интерактивно (не передавать фразу в аргументе):
 
@@ -365,8 +369,8 @@ configured; bounded профиль закрепляет эту модель да
 Это НЕ точный model-specific tokenizer;5500 — приблизительный предохранитель.
 Служебные правила сохраняются, убираются лишние пробелы; обрезается только
 копия source текста, отправляемая модели. Если одни правила не помещаются,
-запрос не выполняется. Groq output ограничен1024 токенами (либо меньшим
-заданным лимитом); Gemini сохраняет общий output cap. Превышение модели,
+запрос не выполняется. Groq и Gemini используют заданный output cap (по умолчанию2048),
+сохраняя общий лимит input+output. Старый принудительный Groq cap1024 удалён. Превышение модели,
 reasoning и особенности её tokenizer могут отличаться: usage API уточняет
 расход. Usage отсутствует/timeout/429/крах — полный резерв остаётся списанным.
 Минутный резерв после успешного ответа не уменьшается, чтобы не нарушить TPM.
@@ -400,3 +404,208 @@ Trial ограничивает запросы за запуск до5, но не
 SELECT1/rollback до передачи соединения приложению. SQLite не меняется.
 Отдельная PostgreSQL CI-проверка: `.github/workflows/postgres-regression.yml`.
 Подробности/непроверенные пункты — `docs/DAILY_POSTGRES_DEBUG.md`.
+
+
+## Run125: тайминги и диагностика trial (2026-10-16)
+
+Боевой run125 и источники из Supabase в этой среде не читались. По предоставленному
+отчёту известно: 4 попытки, 2 article_body_missing, 1 review llm_unavailable,
+1 budget_stopped/max_run_seconds, по одному запросу Gemini/Groq. Названия,
+домены, HTTP-ответы и длительность отдельных этапов в предоставленных данных
+отсутствуют. Нельзя объявить эти два случая JS/403/paywall или приписать Groq
+reasoning truncation без сохранённого ответа/диагностики. 331 секунду нельзя
+разложить на этапы задним числом. Расход запроса/токенов означает резерв/попытку,
+а не валидный ответ классификатора.
+
+Оператор может выполнить **только чтение**, после получения кода ветки:
+
+```bash
+.venv/bin/python -m backend.app.free_daily --inspect-run 125
+```
+
+Команда дополняет старые candidate_runs названием источника, доменом и типом
+страницы, когда удаётся связать Candidate/дочерний Run. Показывает сохранённые
+provider_metrics (накопительные метрики сервиса, не HTTP-лог отдельной попытки). Для старых записей без instrumentation: timings_available=false;
+это не нулевая длительность. Если связь не сохранилась, источник остаётся
+неизвестным. Новые fetch_failed тоже сохраняют last_run_id для этой связи.
+
+### Новые поля отчёта и /admin
+
+Каждый candidate_runs содержит source {name,domain,page_type}, timings_ms:
+robots, page_read, extraction, llm, pauses, lock_wait, total, other.
+Измерения вложенных этапов исключают двойной учёт. total охватывает дочерний
+pipeline, other — не размеченные операции/DB/запись результата; время внешнего
+discovery, финального отчёта и закрытия соединений не входит в candidate total.
+lock_wait — elapsed обращения к lease/его продления, включая выполнение SQL;
+это не серверная статистика PostgreSQL pg_locks. Секреты, query strings,
+заголовки, prompts и текст ответа LLM не сохраняются в telemetry.
+
+fetch содержит домен, HTTP-статус, тип robots/page, безопасный код ошибки.
+extraction содержит способ, число слов, selector_missing, encoding_replacements.
+Наличие script/paywall даёт диагностическую гипотезу js_shell/paywall_detected,
+а не доказательство блокировки. HTTP403/404/429 и page_timeout имеют собственные
+коды и не маскируются как article_body_missing. Редиректы видны по HTTP3xx
+и последующим доменам; доступа в обход robots/paywall/403 нет.
+
+provider_attempts содержит provider/model, request_sent, http_status (null если
+ответа не было), outcome, exception_class при ошибке, finish_reason, elapsed_ms.
+Причины: timeout, rate_limited, quota_exceeded, provider_error, invalid_json,
+empty_response, output_truncated, schema_validation_failed,
+business_validation_failed, missing_key, circuit_open, local_block/local_budget.
+Локальная причина содержит тип квоты/лимита без ключа. provider_waits показывает
+минутные ожидания и пропуск ожидания, которое не помещается в deadline кандидата.
+HTTP200 с invalid_json/schema_validation_failed всё равно заканчивается fallback;
+если все провайдеры не дали валидного анализа, итоговый reason остаётся
+llm_unavailable, а конкретная причина теперь доступна рядом.
+
+Groq GPT-OSS получает reasoning_effort=low. Общий приблизительный предел запроса
+5500 токенов сохраняется: увеличение доступного output до2048 сокращает input,
+а не увеличивает общий резерв. JSON берётся только из content, не из reasoning;
+finish_reason=length / Gemini MAX_TOKENS дают output_truncated, повреждённый JSON
+не «чинится» выдуманными полями. Gemini объединяет все не-thought text parts.
+На invalid JSON, schema failure, 403/404 нет бессмысленных повторов. Управляемые
+повторы429 остаются ограниченными и пропускаются, если пауза не помещается.
+Реальная эффективность этих настроек на run125 не измерена.
+
+### Скорость и выбор кандидатов
+
+В bounded профиле connect <=3s, read <=8s, LLM <=15s на провайдера; значения
+уменьшаются до оставшегося времени кандидата/запуска. Отдельный
+DAILY_CANDIDATE_TIMEOUT_SECONDS=45 (настраивается) ограничивает кооперативную
+работу кандидата. Истечение даёт candidate_timeout, не обрывает остальные
+кандидаты. Trial остаётся <=300 секунд работы; завершение транзакций/cleanup,
+DNS и системные задержки могут выйти за предел. Это не жёсткое прерывание
+psycopg/SIGALRM. После deadline новые кандидаты не стартуют.
+
+Пять кандидатов по45s оставляют примерно75s из300s на discovery и накладные
+расходы; это расчёт, не обещание пяти успешных LLM-анализов. Кэш robots сохраняется.
+Убран лишний llm_batch_delay в bounded job: минутные/суточные квоты и обязательные
+provider-паузы действуют независимо. Безнадёжные HTTP403/404 не повторяются.
+
+Очередь сначала понижает источники с >=3 fetch_failed за7 дней (body missing,
+403/404, timeout), затем предпочитает сохранённый текст >=200 символов,
+project-first источники, project hints, приоритет и возраст. Источники не
+блокируются/удаляются, провалы не превращаются в публикации. Исторические записи
+сохраняются; штраф исчезает после окна7 дней. Группировка ошибок одним SQL
+подзапросом избегает сканирования всей истории для каждого кандидата.
+
+Readability-подобный fallback использует плотный prose-блок, затем доступные
+JSON-LD/og:description/meta description; выбирается наиболее содержательный
+реальный фрагмент с >=8 словами. Даты и доказательства не выдумываются.
+Сломанный body_selector больше не отвергает страницу, если fallback нашёл текст.
+Любой извлечённый фрагмент проходит прежнюю классификацию/quality gate;
+Show HN с <50 словами по-прежнему требует дополнительного извлечения.
+Очевидные assets/login endpoints отбрасываются до robots/страницы/LLM.
+Неоднозначные product/landing/короткие страницы по URL не отбрасываются.
+
+Параллельное чтение пока не включено. Без отдельной синхронизации оно создаёт
+риски для атомарного page budget, последовательных provider quotas и crawl-delay.
+Если новые измерения покажут, что узкое место именно чтение, следующий шаг —
+небольшой prefetch pool с общим throttler и последовательным LLM, а не несколько
+независимых pipeline workers. До измерений не обещаем ускорение на боевых URL.
+
+### Как оценить следующий trial
+
+status=completed и worker_failed=0 означают отсутствие аварии, но сами по себе
+не доказывают качество trial. Смотрите:
+
+- counts.reached_llm: кандидаты, для которых действительно начат provider attempt;
+- counts.llm_validated: кандидаты с успешной валидацией хотя бы одного ответа;
+- counts.before_llm и before_llm_reasons: отсев/остановки до запроса;
+- published/rejected/review_required: итоговые решения, не число запросов;
+- candidate_runs[].provider_attempts[].outcome=success: успешный анализ;
+- fetch_failed/budget_stopped/worker_failed, llm_unavailable и output_truncated:
+  причины неполной оценки.
+
+Цель проверки пяти кандидатов: reached_llm>=5 и llm_validated>=5, worker_failed=0,
+нет llm_unavailable для этих пяти. published может быть0: пять корректных
+NOT_PROJECT — технически успешная оценка, а не повод ослабить quality gate.
+max_run_seconds при меньшем числе анализов — частичный, не успешный прогон.
+В /admin → Bepul kunlik ish раскрывайте каждого кандидата: источник, тип,
+тайминги, extraction и provider HTTP/outcome; сверяйте counts и net40/40 budget.
+Старые Run без таймингов не получают выдуманные значения.
+
+Cron discovery **закомментирован**: 09:00 UTC =14:00 Asia/Tashkent, после Gemini
+Pacific midnight и летом (07:00 UTC), и зимой (08:00 UTC). Weekly cron тоже
+закомментирован. Encrypted backup artifact хранится7 дней, исходный dump <=20MiB;
+скачивайте его в своё защищённое хранилище, Actions не заменяет долговременный backup.
+
+Тесты не используют production DATABASE_URL: HTTP/provider ответы подменены,
+SQLite временный; два новых варианта проверяют сохранение диагностики на
+одноразовой PostgreSQL16 через postgres-regression workflow. Без локального
+IZLANISH_TEST_PG_PORT они явно skipped, не считаются успешно выполненными.
+
+
+## Keyless fail-fast, отдельные кандидаты и восстановление run148 (2026-10-17)
+
+В free_daily (trial **и** daily) обязательны LLM_ENABLED=true,
+FREE_PROVIDER_QUOTAS_CONFIRMED=true и хотя бы один настроенный Gemini/Groq ключ
+с разрешённой моделью и положительным бюджетом. Иначе stop_reason=no_llm_provider,
+attempted=0, usage={}, candidate_runs=[]; сохраняется только Run аудита. Очередь,
+raw discoveries, исходные статусы, счётчики кандидатов/страниц не меняются; pipeline
+даже не создаётся. Наличие ключа не доказывает его действительность: HTTP401 и
+другие провайдерские ошибки остаются отдельной диагностикой. Ключи/флаги должны
+быть в той среде, где запущена команда (Codespace не получает Cloud secrets сам).
+
+Кандидаты теперь имеют отдельные ledger:
+free_candidates:trial:YYYY-MM-DD и free_candidates:daily:YYYY-MM-DD,
+сутки Asia/Tashkent. Стандартные пределы trial20/20, daily80/120 не повышены;
+меняется разделение расхода. Первое создание восстанавливает **весь** прошлый
+расход своего режима из Run. Failed-кандидаты автоматически не возвращаются;
+адресный возврат missing_key выполняется только ручной командой ниже. Старая
+общая запись остаётся историей и больше не определяет candidate gate нового кода.
+Обновите все запускающие daily CLI экземпляры, не смешивайте старые и новые writers.
+JSON содержит candidate_budget.mode/attempted_this_run/charged_today/daily_limit;
+/admin показывает оба бюджета кандидатов, а24h — физические попытки, не net возврат.
+LLM/token quotas и публикации не разделяются и не сбрасываются этим изменением.
+
+Trial выбирает максимум3 кандидата на один source_id за запуск, включая ошибки
+и остановленные попытки. Для кандидатов без source_id используется домен.
+Достигнув трёх, продолжает выбирать другие источники; оставшиеся записи первого
+не меняют статус и не теряются. Source quality/project-first ordering сохраняется.
+Daily этого ограничения3 не имеет. JSON source_attempts показывает распределение.
+
+### Ручная recovery: только просмотр, затем явный apply
+
+Эти команды **оператор запускает сам** в обновлённом checkout из корня репозитория.
+Они предназначены именно для root run148 и дочерних149–167. Боевой запуск здесь
+не выполнялся. Ожидается19 кандидатов review_required и20 резервирований root;
+двадцатый кандидат, остановленный до обработки, уже queued и не переписывается.
+
+```bash
+# Только просмотр, без изменения БД и без захвата writer lease:
+.venv/bin/python -m backend.app.free_daily --recover-no-llm-run 148 --child-from 149 --child-to 167
+# После проверки вывода заменить HASH на его expected_state:
+.venv/bin/python -m backend.app.free_daily --recover-no-llm-run 148 --child-from 149 --child-to 167 --apply --expect-state HASH
+```
+
+В preview: requeue_count=19, refund_candidates=20, budget_day, today,
+refund_today, candidates_before/after, candidate_ids и expected_state. Отчёт не
+печатает URLs, source text или ключи. Если исходный день уже прошёл, refund_today=0:
+20 возвращаются в ИСХОДНЫЙ trial-день, сегодняшняя квота не увеличивается.
+
+Проверяются completed trial родителя, нулевой LLM/token расход, точная принадлежность
+дочерних записей родителю, missing_key обоих провайдеров без request_sent,
+актуальный review_required + llm_unavailable и отсутствие проектов/ручных решений.
+Неизвестные, изменённые, опубликованные или вручную рассмотренные записи не
+перезаписываются; recovery_error объясняет отказ. Нельзя менять ID/range ради обхода.
+
+Apply захватывает общий writer lease и выполняет всё одной транзакцией. Хеш
+включает текущую ташкентскую дату, ledger, Run/child/Candidate/RawDiscovery значения;
+изменение после preview отменяет операцию. Candidate становится queued,
+RawDiscovery — pending, истории статусов дополняются, attempts/evidence и старые
+Run остаются. Проверяется фактическое число обновлённых кандидатов и net-счётчик;
+ошибка откатывает изменения. Refund привязан к root148, не вычитает20 из чужих
+запусков. Повторный apply — already_applied без повторного возврата. Pages,
+LLM/tokens, daily candidate budget, публикации и backup не затрагиваются.
+
+После восстановления сначала задайте ключи и confirmation в Codespace, иначе
+trial снова остановится с no_llm_provider (уже без расхода). Проверка успеха
+предыдущего раздела остаётся: completed сам по себе не означает валидные анализы.
+
+Тесты preflight не используют ключи/сеть. Компонентные тесты с injected offline
+классификаторами явно подменяют только credential preflight через fixture;
+реальные условия отсутствующих ключей/confirmation проверяются отдельно без неё.
+Recovery проверяется на временном SQLite и в CI на disposable PostgreSQL16;
+также проверяются stale hash/day, ручные решения, rollback, идемпотентность,
+разделение ledger и разнообразие trial источников.

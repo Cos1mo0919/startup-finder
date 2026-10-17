@@ -130,7 +130,7 @@ def test_groq_does_not_reset_at_tashkent_midnight(settings, factory):
 def test_prompt_fits_without_mutating_source_or_dropping_rules():
     system, article = PROMPT_PATH.read_text(), "Text of a real product. " * 2000
     reduced, user, tokens, output = fit_prompt(system, article, 5500, 2048)
-    assert tokens <= 5500 and len(user) < len(article) and 256 <= output <= 1024
+    assert tokens <= 5500 and len(user) < len(article) and 256 <= output <= 2048
     assert reduced.split() == system.split()
     with pytest.raises(ProviderBudgetUnavailable):
         fit_prompt("x" * 30000, article, 5500, 2048)
@@ -196,7 +196,7 @@ def test_actual_usage_captured_by_both_http_adapters_and_output_is_bounded(monke
 
         body = json.loads(request.content)
         if "groq" in request.url.host:
-            assert body["max_tokens"] == 1024
+            assert body["max_tokens"] == 2048
             return httpx.Response(
                 200,
                 json={
@@ -214,7 +214,7 @@ def test_actual_usage_captured_by_both_http_adapters_and_output_is_bounded(monke
 
     token = ACTIVE.set(budget)
     try:
-        budget.request_output_tokens = 1024
+        budget.request_output_tokens = 2048
         for provider in [
             GroqProvider("test", "openai/gpt-oss-20b", httpx.Client(transport=httpx.MockTransport(reply))),
             GeminiProvider(

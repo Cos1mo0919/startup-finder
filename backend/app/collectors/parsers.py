@@ -30,7 +30,13 @@ def parse_feed(raw):
     return entries
 
 
-def parse_article(raw, url, publisher="", kind="unknown", feed_date=None, options=None):
+def parse_article(*args, **kwargs):
+    from ..telemetry import span
+    with span("extraction"):
+        return _parse_article(*args, **kwargs)
+
+
+def _parse_article(raw, url, publisher="", kind="unknown", feed_date=None, options=None):
     options = options or {}
     soup = BeautifulSoup(raw, "html.parser")
     title_meta = soup.find("meta", property="og:title")
@@ -111,7 +117,26 @@ def parse_article(raw, url, publisher="", kind="unknown", feed_date=None, option
                 image = None
         except FetchError:
             pass
+    from ..telemetry import record
     language = soup.html.get("lang", "") if soup.html else ""
+    structured = []
+    for script in soup.find_all("script", type="application/ld+json"):
+        try:
+            nodes = json.loads(script.string or "")
+            nodes = nodes if isinstance(nodes, list) else [nodes]
+            for node in nodes:
+                if isinstance(node, dict):
+                    for item in [node, *node.get("@graph", [])]:
+                        if isinstance(item, dict):
+                            value = item.get("articleBody") or item.get("description")
+                            if isinstance(value, str):
+                                structured.append(BeautifulSoup(value, "html.parser").get_text(" ", strip=True))
+        except (ValueError, TypeError):
+            pass
+    metadata = [tag.get("content", "") for tag in soup.select('meta[property="og:description"], meta[name="description"]')]
+    js_shell = bool(soup.find("script", src=True))
+    paywall = bool(soup.select('[class*="paywall"], [id*="paywall"]'))
+    selector_missing = bool(options.get("body_selector") and not soup.select_one(options["body_selector"]))
     for tag in soup(["script", "style", "nav", "footer", "header", "aside", "form"]):
         tag.decompose()
     body = (
@@ -126,10 +151,22 @@ def parse_article(raw, url, publisher="", kind="unknown", feed_date=None, option
         for element in body.select(selector):
             element.decompose()
     text = " ".join(body.stripped_strings)[:24000]
-    if options.get("body_selector") and not soup.select_one(options["body_selector"]):
-        raise FetchError("article_body_missing")
-    if not text.strip():
-        raise FetchError("article_body_missing")
+    method = "configured_or_semantic_body"
+    if selector_missing or len(text.split()) < 8:
+        # Use dense prose blocks, not menus, for selector drift. Metadata is
+        # source evidence only; it never bypasses classifier/publication gates.
+        prose = max((tag.get_text(" ", strip=True) for tag in body.find_all(["article", "section", "div", "p"])
+                     if len(tag.find_all("a")) <= 5), key=len, default="")
+        choices = [("json_ld", value) for value in structured] + [("prose_fallback", prose)] + [("meta_description", value) for value in metadata]
+        usable = [(name, value) for name, value in choices if len(value.split()) >= 8]
+        if usable:
+            method, text = max(usable, key=lambda item: len(item[1]))
+            text = text[:24000]
+        elif selector_missing or not text.strip() or ((paywall or js_shell) and len(text.split()) < 8):
+            reason = "paywall_detected" if paywall else "js_shell" if js_shell and len(text.split()) < 8 else "selector_missing" if selector_missing else "empty_text"
+            record("extraction", method="none", reason=reason, words=len(text.split()))
+            raise FetchError("article_body_missing")
+    record("extraction", method=method, words=len(text.split()), selector_missing=selector_missing, encoding_replacements=text.count("\ufffd"))
     # Preserve attributed hyperlinks for official/project/creator link extraction.
     links = []
     for anchor in body.find_all("a", href=True)[:50]:

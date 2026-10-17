@@ -59,6 +59,8 @@ class CatalogPipeline(Pipeline):
                 return self.last_llm_analysis.result
             except LLMUnavailable:
                 llm_attempted = True
+        if self.llm_service and not llm_attempted and not self.llm_service.available:
+            self.llm_service.record_unavailable()
         try:
             entry = deterministic_entry(article, self.trusted_path)
         except ClassifierFailure as exc:
@@ -67,6 +69,12 @@ class CatalogPipeline(Pipeline):
             return CatalogResult("PROJECT", entry.confidence, (entry,), analysis_method="deterministic")
         return CatalogResult("NEEDS_EXTRACTION", 0.5, reason="llm_unavailable",
                              analysis_method="llm_failed" if llm_attempted else "deterministic")
+
+    @staticmethod
+    def _diagnostics():
+        from .telemetry import ACTIVE_TRACE
+        trace = ACTIVE_TRACE.get()
+        return {key: value for key, value in (trace or {}).items() if key not in {"deadline", "_spans"}}
 
     def _enrich(self, now, counts, errors):
         if not (self.settings.ai_key and self.classifier) and not (self.llm_service and self.llm_service.available):
@@ -330,6 +338,10 @@ class CatalogPipeline(Pipeline):
                         action, reason, known_project_id = (("classify", "", None)
                             if cached.get("_deferred_catalog_entries") else cheap_decision(session, raw))
                         raw_id = raw.id
+                        from .network import unsuitable_url
+                        unsuitable = unsuitable_url(cached.get("_fetch_url", url))
+                        if action == "classify" and unsuitable:
+                            action, reason = "reject", unsuitable
                         if action != "classify":
                             record_transition(raw, "rejected" if action == "reject" else "processed", reason,
                                               known_project_id, now)
@@ -354,6 +366,8 @@ class CatalogPipeline(Pipeline):
                         continue
                     if not cached.get("_queued") and cached.get("text"):
                         article = Article.model_validate(cached)
+                        from .telemetry import record
+                        record("extraction", method="cached_source", words=len(article.text.split()))
                     else:
                         with self.factory() as session:
                             stored_raw = session.get(RawDiscovery, raw_id)
@@ -428,7 +442,11 @@ class CatalogPipeline(Pipeline):
                         stop_reason = "daily_publish_limit_reached"
                         break
                     if self.last_llm_analysis and self.settings.llm_batch_delay_seconds:
-                        sleep(self.settings.llm_batch_delay_seconds)
+                        from .free_budget import current_budget
+                        if not current_budget():
+                            sleep(self.settings.llm_batch_delay_seconds)
+                        # Bounded daily jobs already enforce provider spacing;
+                        # an extra post-analysis delay does not improve limits.
                 except DailyLimitReached as exc:
                     stop_reason = exc.reason
                     break
@@ -436,6 +454,7 @@ class CatalogPipeline(Pipeline):
                     with self.factory.begin() as session:
                         candidate = session.get(Candidate, url)
                         candidate.status, candidate.reason = "error", str(exc)
+                        candidate.last_run_id = run_id
                         candidate.attempts += 1
                         candidate.processing_version = 8
                         candidate.updated_at = now
@@ -489,6 +508,7 @@ class CatalogPipeline(Pipeline):
                                        "published": counts["auto_published"],
                                        "daily_publication": today_stats(session, self.settings),
                                        "llm_providers": self.llm_service.status() if self.llm_service else [],
+                                       "diagnostics": self._diagnostics(),
                                        "remaining_queue": session.scalar(select(func.count()).select_from(Candidate).where(Candidate.status.in_(["queued", "pending", "review_required"])))}
                         report_details = run.details
                         run.duration_seconds = round(monotonic() - began, 2)
