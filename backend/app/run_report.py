@@ -22,6 +22,8 @@ def candidate_outcome(factory, url, result):
         if stopped
         else "no_decision"
         if not result.get("counts", {}).get("candidates", 0)
+        else "timeout"
+        if reason == "candidate_timeout"
         else "fetch_failed"
         if status == "error"
         else "duplicate"

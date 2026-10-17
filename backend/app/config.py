@@ -87,6 +87,7 @@ class Settings(BaseSettings):
     reanalysis_delay_seconds: float = Field(default=0.2, ge=0, le=10)
     llm_batch_delay_seconds: float = Field(default=1.0, ge=0, le=30)
     reanalysis_failure_limit: int = Field(default=3, ge=1, le=20)
+    trial_max_run_seconds: int = Field(default=300, ge=30, le=600)
     daily_candidate_timeout_seconds: float = Field(default=45, ge=5, le=180)
     fetch_timeout: float = Field(default=15, ge=1, le=60)
     max_page_bytes: int = Field(default=2_000_000, ge=1000, le=5_000_000)

@@ -18,7 +18,7 @@ from .raw_discovery import cheap_decision, ingest_raw, record_transition
 from .dates import parse_date
 from .dates import TASHKENT
 from .db import Candidate, Project, RawDiscovery, RegistrySource, Run, aware, now_utc
-from .network import FetchError, canonical_url
+from .network import CandidateTimeout, FetchError, canonical_url
 from .pipeline import Pipeline
 from .schemas import Article
 from .free_budget import BudgetStop
@@ -336,7 +336,7 @@ class CatalogPipeline(Pipeline):
                                                 source_type="legacy_candidate", raw_payload={"candidate_url": url})
                             counts["raw_discoveries"] += 1
                         action, reason, known_project_id = (("classify", "", None)
-                            if cached.get("_deferred_catalog_entries") else cheap_decision(session, raw))
+                            if cached.get("_deferred_catalog_entries") or cached.get("_validated_catalog_result") else cheap_decision(session, raw))
                         raw_id = raw.id
                         from .network import unsuitable_url
                         unsuitable = unsuitable_url(cached.get("_fetch_url", url))
@@ -398,41 +398,70 @@ class CatalogPipeline(Pipeline):
                         result = CatalogResult("NOT_PROJECT", 0.95, reason="outside_archive_window",
                                                analysis_method="deterministic")
                     else:
-                        if cached.get("_deferred_catalog_entries"):
+                        if cached.get("_validated_catalog_result"):
+                            from .catalog import parse_classifier_response
+                            saved = cached["_validated_catalog_result"]
+                            result = parse_classifier_response(saved, article.title + "\n" + article.text)
+                            from .telemetry import record
+                            record("continuation", outcome="validated_result_reused", provider=saved.get("provider"))
+                        elif cached.get("_deferred_catalog_entries"):
                             entries = tuple(CatalogEntry.model_validate(item) for item in cached["_deferred_catalog_entries"])
                             result = CatalogResult("MULTI", min(item.confidence for item in entries), entries,
                                                    analysis_method=cached.get("_deferred_analysis_method", "llm"))
                         else:
                             result = self._classify(article)
+                    if self.last_llm_analysis:
+                        # No deadline checks before this checkpoint: a validated response
+                        # must survive expiry during post-HTTP accounting or publication.
+                        from .telemetry import db_work
+                        with db_work("validated_checkpoint"):
+                            with self.factory.begin() as session:
+                                stored = session.get(Candidate, url)
+                                stored.article = {**article.model_dump(mode="json"), "_validated_catalog_result": {
+                                    "classification": result.classification, "confidence": result.confidence,
+                                    "entries": [entry.model_dump(mode="json") for entry in result.entries],
+                                    **(result.entries[0].model_dump(mode="json") if result.classification == "PROJECT" and result.entries else {}),
+                                    "reason": result.reason, "provider": self.last_llm_analysis.provider,
+                                    "model": self.last_llm_analysis.model, "prompt_version": self.last_llm_analysis.prompt_version,
+                                    "attempt_count": self.last_llm_analysis.attempt_count}}
+                                stored.status, stored.reason = "queued", "validated_result_pending_commit"
                     if result.entries:
                         counts["project_candidates"] += len(result.entries)
                         source_bucket["project_candidates"] += len(result.entries)
-                    with self.factory.begin() as session:
-                        candidate = session.get(Candidate, url)
-                        candidate.article = {**article.model_dump(mode="json"),
-                                             "_catalog_entries": [entry.model_dump(mode="json") for entry in result.entries]}
-                        candidate.attempts += 1
-                        candidate.updated_at = now
-                        candidate.last_run_id = run_id
-                        candidate.processing_version = 8
-                        candidate.analysis_mode = result.analysis_method
-                        outcomes = save_catalog_result(session, article, result, now, self.settings)
-                        raw = session.get(RawDiscovery, raw_id)
-                        record_transition(raw, "processed" if candidate.status == "published" else
-                                          "rejected" if candidate.status == "rejected" else "review_required",
-                                          candidate.reason, (candidate.project_ids or [None])[0], now)
-                        raw.candidate_url = url
-                        raw.raw_payload = {**(raw.raw_payload or {}), "project_ids": candidate.project_ids or []}
-                        if self.last_llm_analysis:
-                            raw.llm_provider = self.last_llm_analysis.provider
-                            raw.llm_model = self.last_llm_analysis.model
-                            raw.llm_attempt_count += self.last_llm_analysis.attempt_count
-                            raw.classifier_prompt_version = self.last_llm_analysis.prompt_version
-                            raw.analyzed_at = now
-                        elif self.llm_service and self.llm_service.last_attempt_count:
-                            raw.llm_attempt_count += self.llm_service.last_attempt_count
-                            raw.classifier_prompt_version = PROMPT_VERSION
-                            raw.analyzed_at = now
+                    from .telemetry import finishing_decision
+                    with finishing_decision():
+                        with self.factory.begin() as session:
+                            candidate = session.get(Candidate, url)
+                            candidate.article = {**article.model_dump(mode="json"),
+                                                 "_catalog_entries": [entry.model_dump(mode="json") for entry in result.entries]}
+                            candidate.attempts += 1
+                            candidate.updated_at = now
+                            candidate.last_run_id = run_id
+                            candidate.processing_version = 8
+                            candidate.analysis_mode = result.analysis_method
+                            outcomes = save_catalog_result(session, article, result, now, self.settings)
+                            raw = session.get(RawDiscovery, raw_id)
+                            record_transition(raw, "processed" if candidate.status == "published" else
+                                              "rejected" if candidate.status == "rejected" else "review_required",
+                                              candidate.reason, (candidate.project_ids or [None])[0], now)
+                            raw.candidate_url = url
+                            raw.raw_payload = {**(raw.raw_payload or {}), "project_ids": candidate.project_ids or []}
+                            if self.last_llm_analysis:
+                                raw.llm_provider = self.last_llm_analysis.provider
+                                raw.llm_model = self.last_llm_analysis.model
+                                raw.llm_attempt_count += self.last_llm_analysis.attempt_count
+                                raw.classifier_prompt_version = self.last_llm_analysis.prompt_version
+                                raw.analyzed_at = now
+                            elif cached.get("_validated_catalog_result"):
+                                saved = cached["_validated_catalog_result"]
+                                raw.llm_provider, raw.llm_model = saved.get("provider", ""), saved.get("model", "")
+                                raw.classifier_prompt_version = saved.get("prompt_version", PROMPT_VERSION)
+                                raw.llm_attempt_count = max(raw.llm_attempt_count, saved.get("attempt_count", 0))
+                                raw.analyzed_at = now
+                            elif self.llm_service and self.llm_service.last_attempt_count:
+                                raw.llm_attempt_count += self.llm_service.last_attempt_count
+                                raw.classifier_prompt_version = PROMPT_VERSION
+                                raw.analyzed_at = now
                     for key, value in outcomes.items():
                         counts[key] += value
                         source_bucket[key] += value
@@ -453,14 +482,14 @@ class CatalogPipeline(Pipeline):
                 except FetchError as exc:
                     with self.factory.begin() as session:
                         candidate = session.get(Candidate, url)
-                        candidate.status, candidate.reason = "error", str(exc)
+                        candidate.status, candidate.reason = ("pending" if isinstance(exc, CandidateTimeout) else "error"), str(exc)
                         candidate.last_run_id = run_id
                         candidate.attempts += 1
                         candidate.processing_version = 8
                         candidate.updated_at = now
                         if raw_id is not None:
                             record_transition(session.get(RawDiscovery, raw_id), "failed", str(exc), when=now)
-                    errors.append({"source": url, "stage": "fetch", "code": str(exc)})
+                    errors.append({"source": url, "stage": "processing" if isinstance(exc, CandidateTimeout) else "fetch", "code": str(exc)})
                     source_bucket["errors"] += 1
                 except (ClassifierFailure, ValueError) as exc:
                     reason = str(exc)

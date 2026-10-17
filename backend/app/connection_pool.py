@@ -6,6 +6,12 @@ from psycopg.pq import TransactionStatus
 
 
 def clean_postgres_checkout(connection, record, proxy):
+    from .telemetry import span
+    with span("db_checkout"):
+        return _clean_postgres_checkout(connection, record, proxy)
+
+
+def _clean_postgres_checkout(connection, record, proxy):
     # Never try rollback/autocommit changes while libpq has a command in flight.
     status = connection.info.transaction_status
     if status in (TransactionStatus.ACTIVE, TransactionStatus.UNKNOWN) or connection.closed:
@@ -13,12 +19,22 @@ def clean_postgres_checkout(connection, record, proxy):
     try:
         if status != TransactionStatus.IDLE:
             connection.rollback()
+        from time import monotonic
+        info = getattr(record, "info", {})
+        if status == TransactionStatus.IDLE and monotonic() - info.get("last_checked", -100) < 10:
+            return
+        from .telemetry import db_record
+        db_record("checkout_probes", 0)
+        probe_began = monotonic()
         with connection.cursor() as cursor:
             cursor.execute("SELECT 1")
             cursor.fetchone()
         # SELECT begins a transaction in normal psycopg mode. End only this
         # checkout probe, BEFORE SQLAlchemy hands the connection to application code.
         connection.rollback()
+        db_record("sql_queries", (monotonic() - probe_began) * 1000)
+        db_record("rollbacks", 0)
+        info["last_checked"] = monotonic()
     except (OperationalError, InterfaceError) as error:
         raise exc.DisconnectionError("PostgreSQL checkout probe failed") from error
     except BaseException as error:
@@ -50,4 +66,6 @@ def runtime_engine(parsed, *, statement_timeout_ms=None, **options):
                 connection.commit()
 
         event.listen(engine, "checkout", clean_postgres_checkout)
+    from .telemetry import instrument_database
+    instrument_database(engine)
     return engine

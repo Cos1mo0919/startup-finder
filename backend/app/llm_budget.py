@@ -140,13 +140,18 @@ def legacy_reservations(session, provider, now, policy):
 class ProviderQuotas:
     def __init__(self, budget, provider_policies):
         self.budget, self.policies = budget, provider_policies
+        self._readiness = {}
 
     def blocked(self, provider):
-        with self.budget.factory() as session:
-            row = session.get(SchedulerCheckpoint, "llm_quota:" + provider)
-            return snapshot(row.cursor, provider, self.budget.clock())["blocked_reason"] if row else None
+        if provider not in self._readiness:
+            with self.budget.factory() as session:
+                row = session.get(SchedulerCheckpoint, "llm_quota:" + provider)
+                self._readiness[provider] = dict(row.cursor) if row else {}
+        # Readiness is advisory under the shared writer lease; reserve always locks/rechecks DB.
+        return snapshot(self._readiness[provider], provider, self.budget.clock())["blocked_reason"]
 
     def block(self, provider, reason):
+        self._readiness.pop(provider, None)
         now = self.budget.clock()
         with self.budget.factory.begin() as session:
             row = session.get(SchedulerCheckpoint, "llm_quota:" + provider)
@@ -166,6 +171,11 @@ class ProviderQuotas:
             }
 
     def reserve(self, provider, tokens):
+        from .telemetry import db_work
+        with db_work("quota_before_http"):
+            return self._reserve(provider, tokens)
+
+    def _reserve(self, provider, tokens):
         budget, policy = self.budget, self.policies[provider]
         key = "llm:" + provider
         if budget.used[key] >= budget.limits[key][0]:
@@ -173,14 +183,13 @@ class ProviderQuotas:
         if tokens > min(policy["request_tokens"], policy["tpm"]):
             raise ProviderBudgetUnavailable("prompt_exceeds_token_limit")
         while True:
-            budget.check()
+            budget.check(enforce_caps=False)
             now = budget.clock()
             with budget.factory.begin() as session:
-                row = session.scalar(
-                    select(SchedulerCheckpoint)
-                    .where(SchedulerCheckpoint.name == "llm_quota:" + provider)
-                    .with_for_update()
-                )
+                from .free_budget import state_name
+                pair = {item.name: item for item in session.scalars(select(SchedulerCheckpoint).where(
+                    SchedulerCheckpoint.name.in_(["llm_quota:" + provider, state_name(budget.day)])).with_for_update())}
+                row = pair.get("llm_quota:" + provider)
                 if row is None:
                     row = SchedulerCheckpoint(
                         name="llm_quota:" + provider,
@@ -196,6 +205,7 @@ class ProviderQuotas:
                     state["requests"] >= policy["requests"] or state["tokens"] + tokens > policy["tokens"]
                 )
                 wait = 0
+                wait_kind = "minimum_interval"
                 if unavailable:
                     row.cursor = {
                         **data,
@@ -213,6 +223,7 @@ class ProviderQuotas:
                         len(recent) >= policy["rpm"]
                         or sum(e["reserved_tokens"] for e in recent) + tokens > policy["tpm"]
                     ):
+                        wait_kind = "rpm" if len(recent) >= policy["rpm"] else "tpm_reserved_tokens"
                         wait = max(
                             0,
                             (
@@ -242,7 +253,7 @@ class ProviderQuotas:
                         row.cursor = {"events": [*retained, event], "policy": policy}
                         from .free_budget import state_name
 
-                        daily = session.get(SchedulerCheckpoint, state_name(budget.day))
+                        daily = pair[state_name(budget.day)]
                         usage = dict(daily.cursor.get("usage", {}))
                         usage[key] = usage.get(key, 0) + 1
                         token_key = "tokens:" + provider
@@ -261,15 +272,18 @@ class ProviderQuotas:
                                 },
                             ][-2000:],
                         }
+            self._readiness[provider] = dict(row.cursor)
             if unavailable:
                 raise ProviderBudgetUnavailable("daily_budget_exhausted")
             if wait > 0:
                 from .telemetry import remaining, record
                 if remaining(wait) < wait:
-                    record("provider_waits", provider=provider, reason="minute_window", requested_seconds=round(wait, 2), skipped=True)
+                    record("provider_waits", provider=provider, reason=wait_kind, requested_seconds=round(wait, 2), skipped=True)
                     raise ProviderBudgetUnavailable("candidate_wait_exceeds_deadline")
-                record("provider_waits", provider=provider, reason="minute_window", requested_seconds=round(wait, 2), skipped=False)
-                budget.wait(wait)
+                record("provider_waits", provider=provider, reason=wait_kind, requested_seconds=round(wait, 2), skipped=False)
+                from .telemetry import db_work
+                with db_work("provider_window_wait"):
+                    budget.wait(wait)
                 continue
             budget.used[key] += 1
             budget.used["tokens:" + provider] += tokens
@@ -284,20 +298,27 @@ class ProviderQuotas:
             )
             return identifier
 
-    def reconcile(self, provider, identifier, usage):
+    def reconcile(self, provider, identifier, usage, after=None):
+        from .telemetry import db_work
+        with db_work("quota_after_http"):
+            return self._reconcile(provider, identifier, usage, after)
+
+    def _reconcile(self, provider, identifier, usage, after):
         if (
             not isinstance(usage, dict)
             or not isinstance(usage.get("total_tokens"), int)
             or usage["total_tokens"] < 0
         ):
+            if after:
+                with self.budget.factory.begin() as session:
+                    after(session)
             return
         delta = 0
         with self.budget.factory.begin() as session:
-            row = session.scalar(
-                select(SchedulerCheckpoint)
-                .where(SchedulerCheckpoint.name == "llm_quota:" + provider)
-                .with_for_update()
-            )
+            from .free_budget import state_name
+            pair = {item.name: item for item in session.scalars(select(SchedulerCheckpoint).where(
+                SchedulerCheckpoint.name.in_(["llm_quota:" + provider, state_name(self.budget.day)])).with_for_update())}
+            row = pair["llm_quota:" + provider]
             events = [dict(event) for event in row.cursor.get("events", [])]
             for event in events:
                 if event["id"] == identifier:
@@ -308,7 +329,7 @@ class ProviderQuotas:
                     event["usage"] = usage
                     from .free_budget import state_name
 
-                    daily = session.get(SchedulerCheckpoint, state_name(self.budget.day))
+                    daily = pair[state_name(self.budget.day)]
                     counts = dict(daily.cursor.get("usage", {}))
                     counts["tokens:" + provider] = counts.get("tokens:" + provider, 0) + delta
                     daily_events = [dict(item) for item in daily.cursor.get("events", [])]
@@ -317,6 +338,9 @@ class ProviderQuotas:
                             item["amount"] = usage["total_tokens"]
                     daily.cursor = {**daily.cursor, "usage": counts, "events": daily_events}
             row.cursor = {**row.cursor, "events": events}
+            self._readiness[provider] = dict(row.cursor)
+            if after:
+                after(session)
         self.budget.used["tokens:" + provider] += delta
         for event in self.budget.events:
             if event.get("reservation_id") == identifier:

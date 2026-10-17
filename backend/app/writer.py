@@ -11,6 +11,7 @@ from sqlalchemy import or_, update
 from .db import Lease, now_utc
 
 OWNER = ContextVar("izlanish_writer", default=None)
+LAST_RENEWAL = ContextVar("writer_last_renewal", default=None)
 
 
 class WriterBusy(RuntimeError):
@@ -23,8 +24,8 @@ def current_writer(factory):
 
 
 def renew_writer(factory):
-    from .telemetry import span
-    with span("lock_wait"):
+    from .telemetry import span, db_work
+    with db_work("lease"), span("lock_wait"):
         return _renew_writer(factory)
 
 
@@ -33,11 +34,15 @@ def _renew_writer(factory):
     if not current_writer(factory):
         return
     now = now_utc()
+    previous = LAST_RENEWAL.get()
+    if previous and previous[0] == value[1] and (now - previous[1]).total_seconds() < min(10, value[2] / 3):
+        return
     with factory.begin() as session:
         changed = session.execute(update(Lease).where(Lease.name == "pipeline", Lease.owner == value[1],
                                   Lease.expires_at > now).values(expires_at=now + timedelta(seconds=value[2]))).rowcount
     if not changed:
         raise WriterBusy("writer_lease_lost")
+    LAST_RENEWAL.set((value[1], now))
 
 
 @contextmanager

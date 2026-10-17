@@ -37,6 +37,7 @@ class DailyBudget:
         self.min_interval, self.output_tokens = min_interval, output_tokens
         self.max_database_bytes, self.max_rss_mb = max_database_bytes, max_rss_mb
         self.stop_reason = ""
+        self._size_checked_at = -100.0
         from .llm_budget import ProviderQuotas
         self.quotas = ProviderQuotas(self, provider_policies) if provider_policies else None
         self.request_output_tokens = output_tokens
@@ -80,21 +81,24 @@ class DailyBudget:
             self.stop("memory_guard")
         from .db import DailyStats
         with self.factory() as session:
-            if session.bind.dialect.name == "postgresql":
-                size = session.scalar(text("SELECT pg_database_size(current_database())"))
-            else:
-                size = session.scalar(text("PRAGMA page_count")) * session.scalar(text("PRAGMA page_size"))
-            if size >= self.max_database_bytes:
-                self.stop("database_size_guard")
+            if self.timer() - self._size_checked_at >= 10:
+                if session.bind.dialect.name == "postgresql":
+                    size = session.scalar(text("SELECT pg_database_size(current_database())"))
+                else:
+                    size = session.scalar(text("PRAGMA page_count")) * session.scalar(text("PRAGMA page_size"))
+                if size >= self.max_database_bytes:
+                    self.stop("database_size_guard")
+                self._size_checked_at = self.timer()
             today = session.get(DailyStats, self.day)
             if today and today.published_count >= self.target:
                 self.stop("daily_project_target")
-            state = session.get(SchedulerCheckpoint, state_name(self.day)).cursor
             if enforce_caps:
+                names = {state_name(self.day), *(self.resource_key(key) for key in self.limits)}
+                states = {row.name: row.cursor for row in session.scalars(select(SchedulerCheckpoint).where(SchedulerCheckpoint.name.in_(names)))}
+                state = states[state_name(self.day)]
                 for key, (run_cap, day_cap) in self.limits.items():
                     if (key == "pages" and self.pages) or (key == "candidates" and self.candidates):
-                        resource_row = session.get(SchedulerCheckpoint, self.resource_key(key))
-                        spent = resource_row.cursor.get("usage", {}).get(key, 0)
+                        spent = states[self.resource_key(key)].get("usage", {}).get(key, 0)
                     else:
                         spent = state.get("usage", {}).get(key, 0)
                     if self.quotas and key.startswith("llm:"):
@@ -147,10 +151,6 @@ class DailyBudget:
         run_limit, day_limit = self.limits[resource]
         if self.used[resource] >= run_limit:
             self.stop("run_limit:" + resource)
-        with self.factory() as session:
-            state = session.get(SchedulerCheckpoint, self.resource_key(resource)).cursor
-            if state.get("usage", {}).get(resource, 0) >= day_limit:
-                self.stop("daily_limit:" + resource)
         if resource.startswith("llm:"):
             with self.factory() as session:
                 previous = session.get(SchedulerCheckpoint, self.resource_key(resource)).cursor.get("last_requests", {}).get(resource)
@@ -267,7 +267,11 @@ def free_status(session, settings):
                          "stop_reason": runs[0].details.get("stop_reason", "running"),
                          "candidate_runs": runs[0].details.get("candidate_runs", []),
                          "counts": runs[0].counts,
-                         "before_llm_reasons": runs[0].details.get("before_llm_reasons", {})} if runs else None,
+                         "before_llm_reasons": runs[0].details.get("before_llm_reasons", {}),
+                         "run_phases_ms": runs[0].details.get("run_phases_ms", {}),
+                         "run_database": runs[0].details.get("run_database"),
+                         "trial_evaluation": runs[0].details.get("trial_evaluation"),
+                         "setup_timings_ms": runs[0].details.get("setup_timings_ms", {})} if runs else None,
             "found_24h": session.scalar(select(func.count()).select_from(RawDiscovery).where(
                 RawDiscovery.discovered_at >= now - timedelta(hours=24),
                 RawDiscovery.raw_payload["free_daily_run_id"].as_integer().is_not(None))) or 0,

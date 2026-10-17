@@ -739,3 +739,18 @@ included in CI. Offline component fixtures explicitly replace credential preflig
 new credential tests exercise real guard. Validation:445 backend passed,8 PG skipped,
 Ruff/TypeScript/build/22 browser passed; recovery lock refinements additionally
 passed focused tests. Production recovery results and actual PG CI not verified.
+
+2026-10-17 run169 follow-up: added SQL/commit/rollback/connect counters and DB
+components, run-wide phases/install timing/admin display; batched quota ledger
+reads and provider-health/reconciliation writes, advisory readiness cache,
+throttled safe checkout probes/lease renewal without autocommit changes. Groq
+catalog uses compact equivalent prompt and soft reserve~3872/output<=1536 within
+hard5500/TPM8000, still conservatively accounts actual/unknown usage. Added precise
+allowlisted business-rule codes; old run169 exact score sub-rules cannot be recovered.
+Validated decision checkpoint survives candidate/run expiry; idempotent continuation,
+explicit timeout stage/counter; trial300 default, explicit600 maximum. No production
+DB/discovery/live providers accessed. Full backend460 passed/10 disposable-PG
+skipped, Ruff/TypeScript/build/22 browser passed; final lease/telemetry refinements
+covered by focused checks. Added PG regression cases to CI; actual CI not observed.
+Live latency and compact prompt quality remain unmeasured. Changes on feature
+free-daily-operations only; no scheduler activation or schema/data migration.

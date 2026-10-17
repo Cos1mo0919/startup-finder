@@ -45,7 +45,7 @@ SQLite fallback. Обе команды записывают данные: не �
 | Переменная | Обычный запуск | Trial |
 |---|---:|---:|
 | `DAILY_PROJECT_TARGET` | 20 | не больше 5 |
-| `DAILY_MAX_RUN_SECONDS` | 2700 | не больше 300 |
+| `DAILY_MAX_RUN_SECONDS` | 2700 | отдельный `TRIAL_MAX_RUN_SECONDS`: по умолчанию300, явно до600 |
 | `DAILY_PAGES_PER_RUN` / `DAILY_PAGES_PER_DAY` | 60 / 80 | отдельные `TRIAL_PAGES_PER_RUN` / `TRIAL_PAGES_PER_DAY`: 40 / 40 |
 | `DAILY_GEMINI_REQUESTS_PER_RUN` / `_PER_DAY` | 10 / 250 | не больше 5 / 5 |
 | `DAILY_GROQ_REQUESTS_PER_RUN` / `_PER_DAY` | 10 / 500 | не больше 5 / 5 |
@@ -609,3 +609,149 @@ trial снова остановится с no_llm_provider (уже без рас
 Recovery проверяется на временном SQLite и в CI на disposable PostgreSQL16;
 также проверяются stale hash/day, ручные решения, rollback, идемпотентность,
 разделение ledger и разнообразие trial источников.
+
+
+## Run169: разложение latency и сохранение результата
+
+По предоставленным данным кандидаты заняли ~166s, LLM HTTP всего ~12.7s,
+а total был ограничен300s. Это не измерение RTT Supabase: боевые SQL/ответы
+здесь не читались. Старый other включал SQL SELECT/UPDATE, commit/rollback,
+checkout ping+rollback, учёт provider health, quota reserve/reconcile и DB-работу
+с источниками. Между короткими Session происходили отдельные round-trip.
+Смена расположения runner/БД может усиливать это, но фактический регион runner
+и точная разбивка старых42–46s без прежней instrumentation неизвестны.
+
+### Новые измерения
+
+candidate_runs[].timings_ms теперь дополнительно содержит db_sql, db_transaction,
+db_checkout, db_connect, quota_before_http, quota_after_http, validation,
+provider_window_wait, validated_checkpoint, decision_write, lease. Timings —
+**exclusive**, вложенные этапы не складываются дважды. Собственно сон остаётся
+pauses. other — оставшиеся неразмеченные Python/ORM/системные накладные расходы.
+
+candidate_runs[].database содержит sql_queries, commits, rollbacks,
+checkout_probes, elapsed_ms и by_component. Там quota_before_http/quota_after_http
+показывают SQL-число и inclusive DB-time соответствующей операции (а не только
+чистые UPDATE). Не суммируйте database.elapsed_ms повторно с timings: это
+дополнительный агрегат тех же DB-вызовов. SQL text/параметры/ключи не пишутся.
+Lease SQL помечен компонентом lease: это время запроса и network/execution/lock
+вместе, не отдельная серверная статистика pg_locks.
+
+provider_waits[].reason различает rpm, tpm_reserved_tokens, minimum_interval;
+requested_seconds/skipped показывают ожидание или отказ ждать из-за deadline.
+Минутные окна Gemini/Groq и резерв до HTTP остаются обязательными. Пауза Retry429
+также измеряется как pauses; elapsed_ms отдельной попытки может включать её
+backoff, для чистого HTTP смотрите timings_ms.llm.
+
+run_phases_ms: initialization, queue_selection, processing, discovery, report,
+total. processing включает подготовку/запись результата в родительский Run,
+поэтому может быть больше суммы candidate totals. discovery включает получение
+источников/RSS и сохранение ссылок; вложенная обработка кандидатов исключена.
+run_database — SQL/transaction totals всего job. setup_timings_ms.engine_setup
+измеряет создание engine; физическое подключение учитывается в db_connect и
+initialization. setup_timings_ms.install заполняется Actions из длительности
+install step; локально null, если измерения нет. Checkout/setup-python самого
+Actions виден отдельно в UI Actions и сюда не включён.
+
+Run/admin хранят снимок в существующем финальном отчёте (без дополнительного
+commit ради telemetry); итоговый JSON содержит также завершение записи и освобождение lease. Малая разница
+ожидаема: невозможно записать время собственного последнего commit без ещё
+одного commit. Installation/engine setup не входят в300s рабочего budget.
+Сам budget создаётся после начальной записи Run, а не с начала Actions job.
+
+### Сокращение DB round-trip
+
+- Все checkpoint reads в budget.check объединены в один SELECT; дублирующий
+  pre-read в reserve убран, SELECT FOR UPDATE с проверкой перед списанием остаётся.
+- Quota+aggregate ledger читаются одним locking SELECT на две строки, затем
+  обновляются/commit ДО HTTP. Это один ledger-read, а не обещание одного SQL всего.
+- Provider success/error+request metrics буферизуются до конца попытки и
+  сохраняются вместе с usage reconciliation одной транзакцией. Fallback history
+  по-прежнему сохраняется отдельно. Неизвестный usage сохраняет полный резерв.
+- Advisory readiness cache действует внутри одного writer-owned job; reserve
+  ВСЕГДА заново блокирует и проверяет durable quotas. Cache не разрешает HTTP
+  поверх лимита. DB-size guard проверяется раз в10s, память/time — постоянно.
+- Lease продлевается максимум раз в10s при lease >=600s (для коротких lease
+  интервал не больше TTL/3). Checkout повторяет
+  SELECT1 probe не чаще10s для недавно проверенного IDLE connection. ACTIVE,
+  UNKNOWN и грязные транзакции всё равно обрабатываются при КАЖДОМ checkout,
+  autocommit не переключается. Неисправный connection может обнаружиться первым
+  SQL вместо лишнего pre-ping; rollback/error reporting сохраняются.
+
+### Groq: два небольших запроса вместо двух резервов5500
+
+Hard cap5500 и TPM8000 не повышены. Catalog Groq получает компактную версию тех же
+инструкций config/prompts/catalog_classifier_compact_v3.txt; серверные business
+validators не ослаблены. Система исходного prompt занимала ~3781 оценочных токенов
+без article/output, поэтому просто поставить cap3872 для старого prompt нельзя.
+Компактный prompt занимает ~1540 по текущей оценке, оставляя место source и JSON.
+
+Soft cap обычно3872 (=8000/2-128), output cap catalog Groq <=1536 с reasoning=low;
+резерв считается input+output, source-копия обрезается, сохранённая статья — нет.
+При учтённом actual usage предыдущего запроса soft cap может уменьшиться, чтобы
+вписаться в оставшееся окно. Два нормальных резерва <=7744 не требуют TPM-паузы.
+Если provider фактически использовал больше оценки или окно занято, lock/check
+по-прежнему потребует паузу/fallback; отсутствие ожидания не гарантируется.
+Для большого deep prompt, который не помещается в soft cap, правила не удаляются:
+сохраняется hard cap и обычное ожидание окна. Новый prompt version отмечается
+суффиксом _groq_compact_v1. Качество живого Groq с новым prompt/output не измерено;
+output_truncated/validation failures остаются видимыми, JSON не дописывается.
+
+### Дедлайны и continuation
+
+Кандидат по умолчанию45s (DAILY_CANDIDATE_TIMEOUT_SECONDS), включая ожидания/DB.
+Run по умолчанию300s. Для ОДНОГО ручного диагностического запуска оператор может
+явно задать TRIAL_MAX_RUN_SECONDS=600 (строго максимум600; default300). В Actions
+это Repository Variable того же имени; после диагностики удалить/вернуть300.
+Квоты,3/source и candidate45 от этого не меняются. Таймауты кооперативные:
+текущий SQL ограничен statement_timeout30s, HTTP — своим timeout, финальный
+rollback/report не обрывается SIGALRM. Поэтому wall time может превысить deadline.
+
+```bash
+# Только оператор, только после обновления ветки; это боевой discovery write:
+TRIAL_MAX_RUN_SECONDS=600 .venv/bin/python -m backend.app.free_daily --trial
+```
+
+candidate_timeout теперь stage=timeout, counts.timeouts, Candidate.pending;
+не fetch_failed. Устаревшие Run не переписываются. После валидного LLM-ответа
+сохраняется отдельный _validated_catalog_result checkpoint. Истечение45s не
+препятствует безопасному commit решения, но общий Run deadline/day/publication
+limits сохраняются. Если общий deadline уже истёк, checkpoint остаётся queued:
+следующий job валидирует и использует его без нового LLM/HTTP. canonical dedup
+и все publication/evidence gates остаются. Факт reuse виден в continuation.
+Потерянный ответ Groq из старого run169 этим кодом задним числом не восстановить.
+
+### Почему Gemini STOP не означает валидный результат
+
+В старой версии business_validation_failed выставлялся для invalid_score*;
+штатная группа — invalid_score_evidence. Для ДВУХ случаев run169 конкретная
+ветка не сохранена, назвать её для каждого нельзя. HTTP200/STOP подтверждает
+транспорт/завершение генерации, а не достоверность оценок.
+
+Теперь provider_attempts[].rule_code различает: scores_or_evidence_missing,
+neutral_fallback_mismatch, score_reason_keys, score_reason_length,
+real_product_usage_unsupported; также unsupported_project_name,
+unsupported_official_url, invalid_description, invalid_json_schema и другие
+allowlisted правила. Исходный текст ответа/исключения с данными не выводится.
+При business failure следующий provider анализирует тот же source, самостоятельно
+проходит все validators; если никто не прошёл, review_required/llm_unavailable.
+request_sent=false с candidate_timeout_before_http означает резерв без отправки;
+консервативный счётчик llm_requests сохраняется. llm_http_attempts отличает число
+начатых provider вызовов от числа резервов (DNS failure может не дать HTTP).
+
+### Один итоговый признак проверки
+
+trial_evaluation=passed: минимум5 llm_validated и5 processed, без timeouts и
+worker failures. Публикаций может быть0 при валидных NOT_PROJECT. partial —
+обработка начата, но проверка пяти не завершена; failed — авария; not_started —
+ничего не обработано. completed сам по себе не означает passed. Нормальное
+достижение time budget после пяти валидных решений не отменяет passed.
+Проверьте в /admin → Bepul kunlik ish фазы всего job, SQL-count/DB-time по
+кандидатам и quota-компонентам, provider_waits и rule_code.
+
+Боевой run169/база/живые провайдеры здесь не запускались. Offline тесты проверяют
+реальное commit-before-HTTP, сохранение результата после обоих дедлайнов и
+продолжение без повторного LLM, timeout stage, два TPM-reserve без ожидания,
+коды business rules, SQL timing, checkout ACTIVE safety и trial600 cap.
+PostgreSQL-варианты запускаются postgres-regression на disposable service16;
+без локального сервиса они skipped, CI outcome отдельно не подтверждён.
