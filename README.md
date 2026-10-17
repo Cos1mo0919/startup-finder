@@ -903,3 +903,16 @@ is configured, preserving the candidate queue/counters. Candidate day ledgers
 are separate for trial/daily, trial takes at most3 candidates/source. Guarded
 missing-key recovery for run148/children149–167 is preview-only unless explicitly
 applied with its state hash; see [recovery commands](docs/FREE_DAILY_OPERATIONS.md#ручная-recovery-только-просмотр-затем-явный-apply).
+
+Trial latency diagnostics now separate SQL/transactions/checkout, quota accounting,
+validation and provider windows, plus run-wide phases and Actions install time.
+Validated results checkpoint before publication and resume without another LLM;
+candidate timeouts have a dedicated stage/counter. Diagnostic override
+`TRIAL_MAX_RUN_SECONDS=600` is explicit (default300, maximum600);45s candidate
+deadline remains. `trial_evaluation=passed` means five validated and processed
+candidates without timeouts/worker failure, regardless of publication count.
+See [daily latency operations](docs/FREE_DAILY_OPERATIONS.md#run169-разложение-latency-и-сохранение-результата).
+
+Publication rollback preserves the validated LLM checkpoint. Retries reuse it
+without another provider call, wait 5/10 minutes, and stop after three failures
+with `publication_retry_exhausted`. See [daily operations](docs/FREE_DAILY_OPERATIONS.md).

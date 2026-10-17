@@ -85,7 +85,9 @@ class CatalogResult:
 
 
 class ClassifierFailure(Exception):
-    pass
+    def __init__(self, code, rule_code=None):
+        super().__init__(code)
+        self.rule_code = rule_code or code
 
 
 def words(text: str) -> list[str]:
@@ -110,20 +112,20 @@ def validate_entry(entry: CatalogEntry, source_text: str, method: str = "llm") -
         if not 10 <= len(words(entry.description_uz)) <= 15:
             raise ClassifierFailure("invalid_description")
         if entry.scores is None or entry.score_evidence is None:
-            raise ClassifierFailure("invalid_score_evidence")
+            raise ClassifierFailure("invalid_score_evidence", "scores_or_evidence_missing")
         for factor in ("novelty", "potential"):
             if not getattr(entry.score_evidence, factor):
                 if getattr(entry.scores, factor) != 4 or entry.score_reasons.get(factor) != NEUTRAL_REASON:
-                    raise ClassifierFailure("invalid_score_evidence")
+                    raise ClassifierFailure("invalid_score_evidence", "neutral_fallback_mismatch")
         if set(entry.score_reasons) != {"clarity", "real_product", "novelty", "potential"}:
-            raise ClassifierFailure("invalid_score_evidence")
+            raise ClassifierFailure("invalid_score_evidence", "score_reason_keys")
         for reason in entry.score_reasons.values():
             if not reason or len(words(reason)) > 15:
-                raise ClassifierFailure("invalid_score_evidence")
+                raise ClassifierFailure("invalid_score_evidence", "score_reason_length")
         usage = re.search(r"\b(users?|customers?|paying|revenue|active|foydalanuvchi|foydalanmoqda|mijoz(?:lar|i|imiz)?|ishlat|используют|клиент)\b|pulli hamkorlik", source_text, re.I)
         product = re.search(r"\b(launched|available|working|pilot|prototype|demo|ishga tush|prototip|foydalanmoqda|foydalanadi|запущ|прототип)\b", source_text, re.I)
         if entry.scores.real_product >= 8 and not (usage and product):
-            raise ClassifierFailure("invalid_score_evidence")
+            raise ClassifierFailure("invalid_score_evidence", "real_product_usage_unsupported")
     else:
         description = entry.description_uz
         if (len(meaningful_words(description)) < 8 or

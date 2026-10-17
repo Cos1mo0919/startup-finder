@@ -13,7 +13,7 @@ import httpx
 from .catalog import (ClassifierFailure, CatalogResult, PROMPT_PATH,
                       apply_neutral_score_fallback, parse_classifier_response)
 from .db import ProviderHealth, now_utc
-from .network import FetchError, public_dns, safe_url
+from .network import CandidateTimeout, FetchError, public_dns, safe_url
 from .free_budget import current_budget
 from .llm_budget import ProviderBudgetUnavailable, fit_prompt
 
@@ -190,6 +190,7 @@ class LLMService:
                                         "invalid_json": 0, "schema_failures": 0,
                                         "latency_total_ms": 0.0} for provider in self.providers}
         self.last_attempt_count = 0
+        self._pending_metrics = {provider.name: [] for provider in self.providers}
 
     @property
     def available(self):
@@ -230,29 +231,33 @@ class LLMService:
                 stats["schema_failures"] += 1
             self.failures[name] += 1
         if self.factory:
-            with self.factory.begin() as session:
-                row = session.get(ProviderHealth, name)
-                if row is None:
-                    row = ProviderHealth(name=name)
-                    session.add(row)
-                    session.flush()
-                if code == "request":
-                    row.requests += 1
-                    row.latency_total_ms += latency
-                elif code == "success":
-                    row.successes += 1
-                    row.consecutive_failures = 0
-                    row.last_success_at = now_utc()
-                    row.last_error = ""
-                else:
-                    attr = {"timeout": "timeouts", "rate_limited": "rate_limits",
-                            "quota_exceeded": "quota_errors", "invalid_json": "invalid_json",
-                            "schema_validation_failed": "schema_failures",
-                            "business_validation_failed": "schema_failures"}.get(code)
-                    if attr:
-                        setattr(row, attr, getattr(row, attr) + 1)
-                    row.consecutive_failures += 1
-                    row.last_error = code
+            self._pending_metrics[name].append((code, latency))
+
+    def _flush_metrics(self, name, session):
+        for code, latency in self._pending_metrics[name]:
+            row = session.get(ProviderHealth, name)
+            if row is None:
+                row = ProviderHealth(name=name)
+                session.add(row)
+                session.flush()
+            if code == "request":
+                row.requests += 1
+                row.latency_total_ms += latency
+            elif code == "success":
+                row.successes += 1
+                row.consecutive_failures = 0
+                row.last_success_at = now_utc()
+                row.last_error = ""
+            else:
+                attr = {"timeout": "timeouts", "rate_limited": "rate_limits",
+                        "quota_exceeded": "quota_errors", "invalid_json": "invalid_json",
+                        "schema_validation_failed": "schema_failures",
+                        "business_validation_failed": "schema_failures"}.get(code)
+                if attr:
+                    setattr(row, attr, getattr(row, attr) + 1)
+                row.consecutive_failures += 1
+                row.last_error = code
+        self._pending_metrics[name] = []
 
     def record_unavailable(self):
         from .telemetry import record
@@ -272,9 +277,10 @@ class LLMService:
                 f"URL: {article.url}\n<article>\n{text}\n</article>")
         system = PROMPT_PATH.read_text()
         return self.analyze_json(system, user, lambda payload: parse_classifier_response(
-            apply_neutral_score_fallback(payload), article.title + "\n" + text))
+            apply_neutral_score_fallback(payload), article.title + "\n" + text),
+            compact_system=(PROMPT_PATH.parent / "catalog_classifier_compact_v3.txt").read_text())
 
-    def analyze_json(self, system: str, user: str, validate):
+    def analyze_json(self, system: str, user: str, validate, compact_system=None):
         """Shared fallback path for classification and optional deep enrichment."""
         from .telemetry import record, remaining, span
         if not self.available:
@@ -298,8 +304,25 @@ class LLMService:
                 if budget:
                     if managed:
                         try:
-                            request_system, request_user, tokens, output = fit_prompt(
-                                system, user, budget.quotas.policies[provider.name]["request_tokens"], budget.output_tokens)
+                            policy = budget.quotas.policies[provider.name]
+                            from .llm_budget import estimate_tokens
+                            if provider.name == "groq" and compact_system:
+                                request_system = compact_system
+                            cap = policy["request_tokens"]
+                            if provider.name == "groq":
+                                soft = min(cap, policy["tpm"] // 2 - 128)
+                                # Generic deep prompts may be larger; never drop rules to force a small reserve.
+                                if estimate_tokens(" ".join(request_system.split())) + 512 <= soft:
+                                    recent = budget.quotas._readiness.get(provider.name, {}).get("events", [])
+                                    from datetime import timedelta
+                                    from .db import aware
+                                    from datetime import datetime
+                                    spent = sum(event["reserved_tokens"] for event in recent if aware(datetime.fromisoformat(event["at"])) > budget.clock() - timedelta(seconds=60))
+                                    available = policy["tpm"] - spent - 128
+                                    cap = min(soft, available) if available >= estimate_tokens(" ".join(request_system.split())) + 512 else soft
+                            desired_output = min(budget.output_tokens, 1536) if provider.name == "groq" and compact_system else budget.output_tokens
+                            request_system, request_user, tokens, output = fit_prompt(request_system, user, cap, desired_output)
+                            record("token_reservations", provider=provider.name, estimated_total=tokens, output_cap=output, request_cap=cap)
                             reservation = budget.quotas.reserve(provider.name, tokens)
                             budget.request_output_tokens = output
                         except ProviderBudgetUnavailable as exc:
@@ -312,16 +335,23 @@ class LLMService:
                 attempts += 1
                 self.last_attempt_count = attempts
                 try:
+                    if budget:
+                        budget.check_time()
                     timeout = remaining(self.settings.llm_timeout_seconds)
                     if budget:
                         timeout = min(timeout, max(0.001, budget.deadline - budget.timer()))
                     diagnostic["request_sent"] = True
                     with span("llm"):
                         payload = provider.complete(request_system, request_user, timeout)
-                    result = validate(payload)
+                    with span("validation"):
+                        result = validate(payload)
                     diagnostic["outcome"] = "success"
                     self._metric(provider.name, "success")
-                    return LLMAnalysis(result, provider.name, provider.model, attempts)
+                    return LLMAnalysis(result, provider.name, provider.model, attempts,
+                                       PROMPT_VERSION + "_groq_compact_v1" if provider.name == "groq" and compact_system else PROMPT_VERSION)
+                except CandidateTimeout:
+                    diagnostic.update(outcome="candidate_timeout_before_http" if not diagnostic["request_sent"] else "candidate_timeout_after_http", exception_class="CandidateTimeout")
+                    raise
                 except ProviderFailure as exc:
                     diagnostic.update(outcome=exc.code, exception_class=type(exc).__name__)
                     self._metric(provider.name, exc.code)
@@ -336,16 +366,23 @@ class LLMService:
                     if exc.code in {"rate_limited", "quota_exceeded", "missing_key"}:
                         break
                 except (ClassifierFailure, ValueError) as exc:
-                    diagnostic.update(outcome="business_validation_failed" if str(exc).startswith("invalid_score") else "schema_validation_failed", exception_class=type(exc).__name__)
-                    self._metric(provider.name, "business_validation_failed" if str(exc).startswith("invalid_score") else "schema_validation_failed")
+                    failure = "business_validation_failed" if isinstance(exc, ClassifierFailure) and str(exc) not in {"invalid_json_schema", "invalid_classification", "invalid_enum"} else "schema_validation_failed"
+                    diagnostic.update(outcome=failure, exception_class=type(exc).__name__, rule_code=business_rule_code(exc))
+                    self._metric(provider.name, failure)
                 finally:
                     diagnostic.update(http_status=getattr(provider, "last_http_status", None),
                                       finish_reason=getattr(provider, "last_finish_reason", None),
                                       elapsed_ms=round((monotonic() - began) * 1000, 2))
                     record("provider_attempts", **diagnostic)
-                    if reservation:
-                        budget.quotas.reconcile(provider.name, reservation, getattr(provider, "last_usage", None))
                     self._metric(provider.name, "request", round((monotonic() - began) * 1000, 2))
+                    if reservation:
+                        budget.quotas.reconcile(provider.name, reservation, getattr(provider, "last_usage", None),
+                                               after=(lambda session: self._flush_metrics(provider.name, session)) if self.factory else None)
+                    elif self.factory:
+                        from .telemetry import db_work
+                        with db_work("provider_metrics"):
+                            with self.factory.begin() as session:
+                                self._flush_metrics(provider.name, session)
                 if managed:
                     break  # Only 429 gets the dedicated bounded retry loop.
                 if self.failures[provider.name] >= self.settings.llm_circuit_breaker_failures:
@@ -360,3 +397,15 @@ class LLMService:
                         session.flush()
                     row.fallback_count += 1
         raise LLMUnavailable("llm_unavailable")
+
+
+def business_rule_code(exc):
+    allowed = {"invalid_enum", "unsupported_project_name", "unsupported_official_url", "invalid_description",
+               "invalid_score_evidence", "insufficient_description", "invalid_json_schema", "invalid_classification"}
+    allowed |= {"scores_or_evidence_missing", "neutral_fallback_mismatch", "score_reason_keys", "score_reason_length", "real_product_usage_unsupported"}
+    code = getattr(exc, "rule_code", str(exc))
+    if code in allowed:
+        return code
+    if code.startswith("invalid_score"):
+        return "invalid_score_evidence"
+    return "schema_validation_failed"

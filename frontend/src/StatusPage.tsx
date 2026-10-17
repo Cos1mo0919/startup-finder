@@ -123,11 +123,18 @@ export function StatusPage({adminKey}:{adminKey:string}) {
           Oxirgi 24 soatda: {s.free_daily.found_24h} yangi nomzod, {s.free_daily.published_24h} nashr.</p>
         <p>Oxirgi yakun: {stopLabel(s.free_daily.last_run?.stop_reason)}.</p>
         {s.free_daily.last_run?.counts&&<p>LLM ga yetdi: {s.free_daily.last_run.counts.reached_llm??0}; tahlil tasdiqlandi: {s.free_daily.last_run.counts.llm_validated??0}; LLM gacha to‘xtadi: {s.free_daily.last_run.counts.before_llm??0}. {Object.entries(s.free_daily.last_run.before_llm_reasons||{}).map(([reason,count])=>`${reason}: ${count}`).join(" · ")}</p>}
+        {s.free_daily.last_run?.trial_evaluation&&<p>Sinov natijasi: {s.free_daily.last_run.trial_evaluation}.</p>}
+        {s.free_daily.last_run?.run_phases_ms&&<p>Ish bosqichlari (ms): {Object.entries(s.free_daily.last_run.run_phases_ms).map(([key,value])=>`${key}: ${value}`).join(" · ")}</p>}
+        {s.free_daily.last_run?.setup_timings_ms&&<p>Tayyorlash (ms): {Object.entries(s.free_daily.last_run.setup_timings_ms).map(([key,value])=>`${key}: ${value??"o‘lchanmagan"}`).join(" · ")}</p>}
+        {s.free_daily.last_run?.run_database&&<p>Jami SQL: {s.free_daily.last_run.run_database.sql_queries}; baza: {s.free_daily.last_run.run_database.elapsed_ms} ms.</p>}
         {s.free_daily.last_run?.candidate_runs?.map(item=><details key={item.candidate_id}>
           <summary>{item.source?.name||item.candidate_id} · {item.stage} · {item.reason}</summary>
           <p>{item.source?.domain} · {item.source?.page_type}</p>
           {item.timings_ms ? <p>Bosqich vaqti (ms): {Object.entries(item.timings_ms).map(([name,value])=>`${name}: ${value}`).join(" · ")}</p> : <p>Bosqich vaqti saqlanmagan.</p>}
-          {item.provider_attempts?.map((attempt,index)=><p key={index}>{attempt.provider}: {attempt.outcome} · HTTP {attempt.http_status??"—"} · {attempt.elapsed_ms??0} ms · {attempt.finish_reason||""} · {attempt.exception_class||""} {attempt.reason||attempt.local_reason||""}</p>)}
+          {item.database&&<><p>SQL: {item.database.sql_queries}; baza: {item.database.elapsed_ms} ms; commit: {item.database.commits}; rollback: {item.database.rollbacks}.</p>
+            {Object.entries(item.database.by_component).map(([name,part])=><p key={name}>{name}: SQL {part.sql_queries} · {part.elapsed_ms} ms</p>)}</>}
+          {item.provider_waits?.map((wait,index)=><p key={index}>{wait.provider}: {wait.reason} · {wait.requested_seconds} s · {wait.skipped?"kutish o‘tkazildi":"kutildi"}</p>)}
+          {item.provider_attempts?.map((attempt,index)=><p key={index}>{attempt.provider}: {attempt.outcome} · HTTP {attempt.http_status??"—"} · {attempt.elapsed_ms??0} ms · {attempt.finish_reason||""} · {attempt.exception_class||""} {attempt.rule_code||""} {attempt.reason||attempt.local_reason||""}</p>)}
           {item.extraction?.map((step,index)=><p key={index}>Matn: {step.method} · {step.words} so‘z · {step.reason||""}</p>)}
         </details>)}
         <table><thead><tr><th>Resurs</th><th>Bugun / kunlik limit</th><th>24 soatda</th></tr></thead><tbody>

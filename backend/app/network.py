@@ -12,6 +12,10 @@ class FetchError(Exception):
     pass
 
 
+class CandidateTimeout(FetchError):
+    pass
+
+
 def safe_url(url):
     if not isinstance(url, str) or len(url) > 2048 or any(ord(c) < 32 for c in url):
         raise FetchError("invalid_url")
@@ -80,7 +84,7 @@ class WebClient:
         from .free_budget import current_budget
         remaining(seconds)
         if remaining(seconds) < seconds:
-            raise FetchError("candidate_timeout")
+            raise CandidateTimeout("candidate_timeout")
         budget = current_budget()
         if budget:
             budget.wait(seconds)

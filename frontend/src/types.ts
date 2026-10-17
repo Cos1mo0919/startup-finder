@@ -136,7 +136,7 @@ export type Status = {
     provider_quotas?: Record<string,{requests:number;tokens:number;reported_tokens:number;unconfirmed_attempts:number;
       limits:{requests:number;tokens:number;rpm:number;tpm:number};warnings:string[];blocked_reason:string;timezone:string;reset_at:string}>;
     usage_today:Record<string,number>;usage_24h:Record<string,number>;limits:Record<string,[number,number]>;
-    warnings:string[];blocked_providers:Record<string,string>;providers_enabled:Record<string,boolean>;last_run:{id:number;status:string;stop_reason:string;counts?:Record<string,number>;before_llm_reasons?:Record<string,number>;candidate_runs?:Array<{candidate_id:string;stage:string;reason?:string;source?:{name:string;domain:string;page_type:string};timings_ms?:Record<string,number>;provider_attempts?:Array<{provider:string;outcome:string;http_status?:number;elapsed_ms?:number;finish_reason?:string;exception_class?:string;reason?:string;local_reason?:string;request_sent?:boolean}>;extraction?:Array<{method:string;reason?:string;words:number}>}>}|null};
+    warnings:string[];blocked_providers:Record<string,string>;providers_enabled:Record<string,boolean>;last_run:{id:number;status:string;stop_reason:string;trial_evaluation?:string;run_phases_ms?:Record<string,number>;setup_timings_ms?:Record<string,number|null>;run_database?:DatabaseTiming;counts?:Record<string,number>;before_llm_reasons?:Record<string,number>;candidate_runs?:Array<{candidate_id:string;stage:string;reason?:string;source?:{name:string;domain:string;page_type:string};timings_ms?:Record<string,number>;database?:DatabaseTiming;provider_waits?:Array<{provider:string;reason:string;requested_seconds:number;skipped:boolean}>;provider_attempts?:Array<{provider:string;outcome:string;rule_code?:string;http_status?:number;elapsed_ms?:number;finish_reason?:string;exception_class?:string;reason?:string;local_reason?:string;request_sent?:boolean}>;extraction?:Array<{method:string;reason?:string;words:number}>}>}|null};
   intelligence_counts?: Record<string, number>;
   entity_type_counts?: Record<string, number>;
   problem_gate_counts?: Record<string, number>;
@@ -265,3 +265,5 @@ export type SectorStats = {
   total_projects: number;
   items: { sector: string; label: string; count: number; today: number }[];
 };
+
+export type DatabaseTiming = {sql_queries:number;commits:number;rollbacks:number;checkout_probes:number;elapsed_ms:number;by_component:Record<string,{sql_queries:number;elapsed_ms:number}>};
