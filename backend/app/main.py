@@ -213,7 +213,7 @@ def create_app(settings=None):
         archive: bool = False,
         city: str = "",
         audience: Literal["", "individual", "business", "both", "unknown"] = "",
-        period: Literal["all", "today", "7d", "30d"] = "all",
+        period: Literal["all", "today", "7d", "30d", "recent"] = "all",
         year: int | None = Query(default=None, ge=2022, le=2100),
         min_rating: float = Query(default=0, ge=0, le=10),
         grade: str = "",
@@ -273,6 +273,13 @@ def create_app(settings=None):
         elif period in ("7d", "30d"):
             query = query.where(Project.published_at >= now - timedelta(days=7 if period == "7d" else 30),
                                 Project.date_estimated.is_(False))
+        elif period == "recent":
+            # "So'nggi paytda": last week on Monday–Wednesday, the current week from Thursday,
+            # by the card date (estimated dates included).
+            from .freshness import recent_week
+            _, week_start, week_end = recent_week(now)
+            query = query.where(Project.published_at >= week_start.astimezone(timezone.utc),
+                                Project.published_at < week_end.astimezone(timezone.utc))
         if year:
             query = query.where(
                 Project.published_at >= datetime(year, 1, 1, tzinfo=TASHKENT).astimezone(timezone.utc),
@@ -312,24 +319,13 @@ def create_app(settings=None):
                 "page_size": page_size,
             }
 
-    @app.get("/api/catalog/recent")
-    def catalog_recent(limit: int = Query(default=24, ge=1, le=60)):
-        from .freshness import recent_window, site_added_at
-        with factory() as session:
-            items = session.scalars(select(Project).where(Project.publication_status == "PUBLISHED")).all()
-            period, start, end, ordered = recent_window(items, now_utc())
-            return {"period": period, "start": start.date().isoformat(),
-                    "end": (end - timedelta(days=1)).date().isoformat(), "total": len(ordered),
-                    "items": [{**serialize_project(project), "site_added_at": site_added_at(project).isoformat()}
-                              for project in ordered[:limit]]}
-
     @app.get("/api/catalog/home")
     def catalog_home():
         with factory() as session:
             all_items = session.scalars(select(Project).where(Project.publication_status == "PUBLISHED")).all()
             from .freshness import home_window
-            # "Bugun qo'shilgan": the Tashkent day a project appeared on the site, not the
-            # source article date; before today's run the home page shows yesterday.
+            # By the card date (article date, or discovery date when unknown): today,
+            # else yesterday (e.g. before the 20:00 run), else the latest earlier day.
             fresh_period, fresh_day, ordered = home_window(all_items, now_utc())
             local = [project for project in ordered if project_scope(project) == "Uzbekistan"]
             global_items = [project for project in ordered if project_scope(project) == "Global"]
@@ -367,13 +363,20 @@ def create_app(settings=None):
     def catalog_facets():
         with factory() as session:
             items = session.scalars(select(Project).where(Project.publication_status == "PUBLISHED")).all()
+            from .freshness import recent_summary, recent_week
             sections = {section: 0 for section in ("Uzbekistan", "Global", "GitHub", "Boshqa")}
             years = {}
+            now = now_utc()
+            _, week_start, week_end = recent_week(now)
+            recent = 0
             for project in items:
                 sections[project_scope(project)] += 1
-                year = str(aware(project.published_at).astimezone(TASHKENT).year)
+                published = aware(project.published_at)
+                year = str(published.astimezone(TASHKENT).year)
                 years[year] = years.get(year, 0) + 1
-            return {"total": len(items), "sections": sections, "years": years}
+                recent += week_start <= published < week_end
+            return {"total": len(items), "sections": sections, "years": years,
+                    "recent": {**recent_summary(now), "total": recent}}
 
     @app.get("/api/projects/{project_id}")
     def project_detail(project_id: str):

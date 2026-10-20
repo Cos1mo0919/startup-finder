@@ -398,8 +398,7 @@ def test_unscored_project_is_public_without_problem_or_numeric_score(settings, f
         assert card["short_description"].startswith("KotibAI")
         home = client.get("/api/catalog/home").json()
         assert home["total"] == home["uzbekistan_total"] == 1
-        # Added to the site today, so it is today's project; the card keeps the source date.
-        assert [item["name"] for item in home["top"]] == ["KotibAI"] and home["fresh_period"] == "today"
+        assert home["top"] == []  # A March article found today is not a "today" project.
         assert client.get("/api/projects?year=2026").json()["total"] == 1
 
 
@@ -419,7 +418,7 @@ def test_unknown_country_show_hn_project_appears_in_global_catalog(settings, fac
         home = client.get("/api/catalog/home").json()
         assert home["total"] == home["global_total"] == 1
         assert home["uzbekistan_total"] == 0
-        assert [item["name"] for item in home["top"]] == ["KotibAI"]  # Added today, whatever the article date.
+        assert home["top"] == []  # Historical publication stays in the catalog.
         assert client.get("/api/projects?country=global").json()["total"] == 1
         assert client.get("/api/projects?country=Uzbekistan").json()["total"] == 0
 

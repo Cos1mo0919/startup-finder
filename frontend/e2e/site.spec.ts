@@ -1,12 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
 
-// The "So‘nggi paytda" block depends on today's weekday; catalog tests here
-// stub it so their card and link lookups stay deterministic.
-test.beforeEach(async ({ page }) => {
-  await page.route("**/api/catalog/recent*", route => route.fulfill({ json: {
-    period: "this_week", start: "2026-10-19", end: "2026-10-25", total: 0, items: [] } }));
-});
-
 test("project catalog and detail show the product before optional analysis", async ({ page }, info) => {
   const errors: string[] = [];
   page.on("pageerror", error => errors.push(error.message));

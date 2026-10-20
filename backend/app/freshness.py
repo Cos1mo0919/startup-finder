@@ -1,27 +1,13 @@
-"""When a project appeared on the public site, and the home / recent windows.
+"""Home-page day window and the catalog "So‘nggi paytda" week, by the card date.
 
-"New" on the home page and in "So‘nggi paytda" means *added to izlanish* on that
-Tashkent day or week, not the date of the source article (which stays on the card
-and drives the archive).
+The card date is ``published_at``: the source article date, or the discovery
+date when the article date is unknown ("taxminiy"). Old articles found today
+therefore stay out of "today" and "recent" views.
 """
 from datetime import datetime, timedelta, timezone
 
 from .db import aware
 from .dates import TASHKENT, today_start
-
-PUBLISHED_VALUES = {"AUTO_PUBLISHED", "PUBLISHED"}
-
-
-def site_added_at(project) -> datetime:
-    """First transition to a published state; first_seen for legacy rows."""
-    stamps = []
-    for item in project.status_history or []:
-        if isinstance(item, dict) and item.get("value") in PUBLISHED_VALUES and item.get("timestamp"):
-            try:
-                stamps.append(aware(datetime.fromisoformat(item["timestamp"])))
-            except (TypeError, ValueError):
-                continue
-    return min(stamps) if stamps else aware(project.first_seen)
 
 
 def _newest_first(pairs):
@@ -29,15 +15,16 @@ def _newest_first(pairs):
 
 
 def home_window(projects, now):
-    """Projects added today; before today's run, yesterday's; else the latest day with additions."""
+    """Projects dated today; else yesterday (e.g. before the 20:00 run); else the latest
+    day within the past week. Older projects never appear on the home page."""
     today = today_start(now)
     tomorrow = today + timedelta(days=1)
-    added = [(site_added_at(project), project) for project in projects]
+    dated = [(aware(project.published_at), project) for project in projects]
     for label, start, end in (("today", today, tomorrow), ("yesterday", today - timedelta(days=1), today)):
-        window = [pair for pair in added if start <= pair[0] < end]
+        window = [pair for pair in dated if start <= pair[0] < end]
         if window:
             return label, start, _newest_first(window)
-    earlier = [pair for pair in added if pair[0] < today - timedelta(days=1)]
+    earlier = [pair for pair in dated if today - timedelta(days=7) <= pair[0] < today - timedelta(days=1)]
     if not earlier:
         return "empty", None, []
     latest_day = max(stamp for stamp, _ in earlier).astimezone(TASHKENT).date()
@@ -47,7 +34,9 @@ def home_window(projects, now):
 
 
 def recent_week(now):
-    """Monday–Wednesday: the previous Monday–Sunday week; Thursday–Sunday: the current week."""
+    """Monday–Wednesday: the previous Monday–Sunday week; Thursday–Sunday: the current week.
+
+    Returns (label, start, end) with Tashkent-aware bounds; ``end`` is exclusive."""
     local = aware(now).astimezone(TASHKENT)
     monday = (local - timedelta(days=local.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
     if local.weekday() <= 2:
@@ -55,9 +44,6 @@ def recent_week(now):
     return "this_week", monday, monday + timedelta(days=7)
 
 
-def recent_window(projects, now):
+def recent_summary(now):
     label, start, end = recent_week(now)
-    start_utc, end_utc = start.astimezone(timezone.utc), end.astimezone(timezone.utc)
-    window = [(stamp, project) for project in projects
-              if start_utc <= (stamp := site_added_at(project)) < end_utc]
-    return label, start, end, _newest_first(window)
+    return {"period": label, "start": start.date().isoformat(), "end": (end - timedelta(days=1)).date().isoformat()}
