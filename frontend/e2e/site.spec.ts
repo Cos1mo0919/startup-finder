@@ -64,7 +64,9 @@ test("admin is hidden like any unknown page and opens only with a valid key frag
   await page.evaluate(() => { window.location.hash = "test-admin-key"; });
   await expect(page.getByRole("heading", { name: "Qidiruv holati" })).toBeVisible();
   await expect(page).toHaveURL(/\/admin$/);
-  await expect(page.getByRole("navigation", { name: "Asosiy menyu" }).getByRole("link", { name: "Holat" })).toHaveCount(0);
+  await expect(page.getByRole("navigation", { name: "Asosiy menyu" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Bosh sahifa", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("banner").getByRole("navigation", { name: "Admin menyusi" })).toBeVisible();
   await page.getByRole("link", { name: "Ko‘rib chiqish" }).click();
   await expect(page.getByRole("heading", { name: "Ko‘rib chiqish navbati" })).toBeVisible();
   await page.getByRole("link", { name: "Manbalar samarasi" }).click();
@@ -75,6 +77,21 @@ test("admin is hidden like any unknown page and opens only with a valid key frag
   await expect(page.getByRole("heading", { name: "Signallar" })).toBeVisible();
   await page.reload();
   await expect(page.getByRole("heading", { name: "Signallar" })).toBeVisible();
+  // Leaving for the public site through the logo ends the session.
+  await page.getByRole("link", { name: "Izlanish bosh sahifa" }).click();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByRole("navigation", { name: "Asosiy menyu" })).toBeVisible();
+  await page.goto("/admin");
+  await expect(notFound).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Admin menyusi" })).toHaveCount(0);
+  // The same after an in-app visit to a public page and back.
+  await page.goto("/admin#test-admin-key");
+  await expect(page.getByRole("heading", { name: "Qidiruv holati" })).toBeVisible();
+  await page.goto("/loyihalar");
+  await page.goBack();
+  await expect(notFound).toBeVisible();
+  await page.goto("/admin#test-admin-key");
+  await expect(page.getByRole("heading", { name: "Qidiruv holati" })).toBeVisible();
   await page.getByRole("button", { name: "Chiqish" }).click();
   await expect(page).toHaveURL(/\/$/);
   await page.goto("/admin");

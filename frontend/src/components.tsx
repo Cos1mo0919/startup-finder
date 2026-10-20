@@ -6,7 +6,8 @@ import {
   Sprout,
 } from "lucide-react";
 import React, { useState } from "react";
-import { Link, NavLink, useNavigate } from "react-router-dom";
+import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
+import { ADMIN_LINKS, clearAdminSession, isAdminPath, useAdminVerified } from "./adminSession";
 import type { Component, Project } from "./types";
 
 import { date } from "./utils";
@@ -43,9 +44,35 @@ export function External({
     </a>
   );
 }
-export function Header() {
+function AdminMenu() {
+  const navigate = useNavigate();
   return (
-    <header className="header">
+    <nav aria-label="Admin menyusi" className="admin-menu">
+      {ADMIN_LINKS.map(([to, label]) => (
+        <NavLink key={to} to={to} end={to === "/admin/status"}>
+          {label}
+        </NavLink>
+      ))}
+      <button
+        type="button"
+        className="admin-logout"
+        onClick={() => {
+          clearAdminSession();
+          navigate("/", { replace: true });
+        }}
+      >
+        Chiqish
+      </button>
+    </nav>
+  );
+}
+export function Header() {
+  // Inside a verified admin session the public menu is replaced by the admin menu;
+  // the logo still leads to the public home page.
+  const { pathname } = useLocation();
+  const adminOpen = useAdminVerified() && isAdminPath(pathname);
+  return (
+    <header className={adminOpen ? "header header-admin" : "header"}>
       <div className="header-inner">
         <Link className="brand" to="/" aria-label="Izlanish bosh sahifa">
           <span className="brand-icon">
@@ -53,16 +80,20 @@ export function Header() {
           </span>
           izlanish<span className="brand-dot">.</span>
         </Link>
-        <nav aria-label="Asosiy menyu">
-          <NavLink to="/" end>
-            <span className="flag">●</span> Bosh sahifa
-          </NavLink>
-          <NavLink to="/loyihalar">Loyihalar</NavLink>
-          <NavLink to="/boshqa">Boshqa</NavLink>
-          <NavLink to="/arxiv">Arxiv</NavLink>
-          <NavLink to="/manbalar">Manbalar</NavLink>
-        </nav>
-        <span className="header-note">Haqiqiy loyihalar, asl manbalar.</span>
+        {adminOpen ? (
+          <AdminMenu />
+        ) : (
+          <nav aria-label="Asosiy menyu">
+            <NavLink to="/" end>
+              <span className="flag">●</span> Bosh sahifa
+            </NavLink>
+            <NavLink to="/loyihalar">Loyihalar</NavLink>
+            <NavLink to="/boshqa">Boshqa</NavLink>
+            <NavLink to="/arxiv">Arxiv</NavLink>
+            <NavLink to="/manbalar">Manbalar</NavLink>
+          </nav>
+        )}
+        {!adminOpen && <span className="header-note">Haqiqiy loyihalar, asl manbalar.</span>}
       </div>
     </header>
   );
