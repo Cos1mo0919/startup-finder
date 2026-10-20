@@ -66,7 +66,7 @@ test("admin is hidden like any unknown page and opens only by typing the key", a
     await expect(page.locator("body")).not.toContainText("boshqaruv");
   }
   // The key in the address no longer logs in, and it is wiped from the address bar.
-  await typeAdminKey(page, "test-admin-key");
+  await page.goto("/admin#test-admin-key");
   await expect(notFound).toBeVisible();
   await expect(page).toHaveURL(/\/admin$/);
   await expect(status).toHaveCount(0);
