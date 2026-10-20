@@ -1775,3 +1775,16 @@ footer > span {
 .intel-rubric dt { color:var(--muted); font-size:11px; }
 .intel-rubric dd { margin:4px 0 0; font-size:12px; }
 @media(max-width:720px){.intel-rubric{grid-template-columns:1fr}}
+
+.not-found { text-align: center; }
+.not-found-back {
+  margin-top: 1rem;
+  padding: 0.6rem 1.4rem;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.not-found-back:hover, .not-found-back:focus-visible { opacity: 0.8; }

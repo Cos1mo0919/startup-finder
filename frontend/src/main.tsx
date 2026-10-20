@@ -1,21 +1,13 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
-import { BrowserRouter, Link, Navigate, Route, Routes } from "react-router-dom";
-import { Footer, Header } from "./components";
+import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { Footer, Header, NotFound } from "./components";
 import { Detail } from "./Detail";
 import { Home } from "./Home";
 import { ArchivePage, DashboardPage, SourcesPage } from "./Intelligence";
 import { AdminPage } from "./Admin";
 import "./style.css";
 import "./intelligence-theme.css";
-function NotFound() {
-  return (
-    <main className="page empty-state">
-      <h1>Sahifa topilmadi</h1>
-      <Link to="/">Bosh sahifaga qaytish →</Link>
-    </main>
-  );
-}
 function App() {
   return (
     <BrowserRouter>
@@ -26,12 +18,6 @@ function App() {
         <Route path="/boshqa" element={<Home section="boshqa" />} />
         <Route path="/arxiv" element={<ArchivePage />} />
         <Route path="/loyiha/:id" element={<Detail />} />
-        <Route path="/muammolar" element={<Navigate to="/admin" replace />} />
-        <Route path="/muammo/:id" element={<Navigate to="/admin" replace />} />
-        <Route path="/goyalar" element={<Navigate to="/admin" replace />} />
-        <Route path="/goya/:id" element={<Navigate to="/admin" replace />} />
-        <Route path="/signallar" element={<Navigate to="/admin" replace />} />
-        <Route path="/sektorlar" element={<Navigate to="/admin" replace />} />
         <Route path="/manbalar" element={<SourcesPage />} />
         <Route path="/admin" element={<AdminPage />} />
         <Route path="/admin/status" element={<AdminPage />} />
