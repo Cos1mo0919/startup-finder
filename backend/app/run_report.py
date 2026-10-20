@@ -40,6 +40,8 @@ def candidate_outcome(factory, url, result):
         "stage": stage,
         "reason": reason[:200],
         "stop_reason": result.get("details", {}).get("stop_reason", ""),
+        # One article may contain several projects; the run counter sums projects.
+        "projects_published": result.get("counts", {}).get("auto_published", 0),
         "error_codes": [item.get("code", "")[:120] for item in result.get("errors", [])],
     }
 

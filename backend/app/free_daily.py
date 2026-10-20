@@ -82,9 +82,11 @@ def llm_run_remaining(service, budget):
                and not budget.blocked(name) for name in names)
 
 
-def next_candidate(factory, seen, llm_ready, excluded_sources=(), poor_sources=(), with_source=False):
+def next_candidate(factory, seen, llm_ready, excluded_sources=(), poor_sources=(), with_source=False, attempts=None):
     # Cheap project/title hints improve yield before source priority/age; only
     # ordering changes. Evidence and classification gates are unchanged.
+    # ``attempts`` (bucket -> candidates tried this run) rotates selection so the
+    # least-tried registered source goes next instead of draining one source.
     with factory() as session:
         text = func.lower(func.coalesce(Candidate.article["title"].as_string(),
                                         Candidate.article["_discovery_title"].as_string(), ""))
@@ -119,8 +121,12 @@ def next_candidate(factory, seen, llm_ready, excluded_sources=(), poor_sources=(
         query = query.outerjoin(failures, failures.c.source_id == RegistrySource.id)
         if with_source:
             query = query.add_columns(Candidate.source_id)
+        tried = {key[3:]: value for key, value in (attempts or {}).items() if key.startswith("id:") and value}
+        rotation = (case(*((Candidate.source_id == source_id, value) for source_id, value in sorted(tried.items())),
+                         else_=0),) if tried else ()
         query = query.order_by(
             case((Candidate.source_id.in_(poor_sources), 0), else_=1).desc(),
+            *rotation,
             case(((Candidate.status == "review_required") & (Candidate.reason == "llm_unavailable"), 1), else_=0).desc(),
             case((failures.c.count >= 3, 0), else_=1).desc(),
             case((func.length(Candidate.article["text"].as_string()) >= 200, 1), else_=0).desc(),
@@ -241,6 +247,7 @@ def _run_daily(settings, factory, *, trial=False, pipeline_factory=CatalogPipeli
                           "review_required", "duplicates", "published", "fetch_failed", "budget_stopped", "no_decision", "worker_failed", "timeouts")})
             candidate_runs = []
             source_attempts = Counter()
+            source_cap = 3 if trial else settings.daily_candidates_per_source
             active_url = None
             try:
                 budget.check()
@@ -272,7 +279,8 @@ def _run_daily(settings, factory, *, trial=False, pipeline_factory=CatalogPipeli
                             budget.stop(reason)
                         with phase("queue_selection"):
                             selected = next_candidate(factory, seen, bool(pipeline.llm_service and pipeline.llm_service.available),
-                                                 [key for key, value in source_attempts.items() if value >= 3] if trial else (), poor_sources, with_source=True)
+                                                 [key for key, value in source_attempts.items() if value >= source_cap], poor_sources,
+                                                 with_source=True, attempts=source_attempts)
                         if not selected:
                             return
                         from urllib.parse import urlsplit
@@ -365,7 +373,13 @@ def _run_daily(settings, factory, *, trial=False, pipeline_factory=CatalogPipeli
                     with factory.begin() as session:
                         row = session.get(Run, run_id)
                         daily = session.get(DailyStats, budget.day)
+                        # "published" = projects added to today's DailyStats during this run
+                        # (one article can yield several projects). The split below shows
+                        # how many candidates/articles produced them.
                         counts["published"] = max(0, (daily.published_count if daily else 0) - initial)
+                        counts["published_candidates"] = sum(item.get("stage") == "published" for item in candidate_runs)
+                        counts["published_projects_from_candidates"] = sum(
+                            item.get("projects_published", 0) for item in candidate_runs)
                         counts["before_llm"] += 0
                         counts["reached_llm"] += 0
                         counts["llm_http_attempts"] = sum(bool(attempt.get("request_sent")) for item in candidate_runs for attempt in item.get("provider_attempts", []))
@@ -395,6 +409,7 @@ def _run_daily(settings, factory, *, trial=False, pipeline_factory=CatalogPipeli
                                        "source_yield": final_yield,
                                        "candidate_runs": candidate_runs, "source_attempts": dict(source_attempts), "before_llm_reasons": dict(Counter(item["before_llm_reason"] for item in candidate_runs if item.get("before_llm_reason"))),
                                        "limits": limits, "target": budget.target, "day": budget.day,
+                                       "published_today_before_run": initial, "source_cap": source_cap,
                                        "budget_events": budget.events, "peak_rss_kib": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss}
                         row.details = {**row.details, "remaining_queue": session.scalar(select(func.count()).select_from(Candidate)
                                        .where(Candidate.status.in_(["queued", "pending", "review_required"])))}

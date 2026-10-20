@@ -787,3 +787,20 @@ postgres-regression workflow; Stage 1 already runs them via the full suite.
 GitHub Actions API returned Forbidden, including after retry, so remote green
 statuses are not observable/confirmed from this environment. No live provider
 quality or production latency comparison was performed.
+
+## Run 191 follow-up — 2026-10-20
+
+Clarified publication counters: `counts.published` remains the number of projects
+added to the Tashkent-day DailyStats during the run; new `published_candidates`,
+`published_projects_from_candidates`, per-candidate `projects_published`,
+`published_today_before_run` and `source_cap` explain multi-project articles
+(run 191: one Spot article produced three projects; trial 174 had already
+published two the same day). `source_yield` deprioritizes a source only after ten
+evaluated candidates with zero publications; LLM-unavailable/retry-exhausted,
+budget-stopped, timeout, worker-failed and no-decision outcomes are excluded.
+The per-source cap now applies to daily runs (`DAILY_CANDIDATES_PER_SOURCE`,
+default 3) with least-tried-source rotation in both modes.
+
+Production Supabase was read only (SELECT) to confirm run 191 and the retry
+queue; nothing was written. Local test execution was not possible in this
+session (package registries blocked), so validation relies on GitHub CI.

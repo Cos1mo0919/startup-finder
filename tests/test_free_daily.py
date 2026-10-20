@@ -148,6 +148,31 @@ def test_daily_goal_is_shared_across_restarts_and_backlog_is_preserved(settings,
     assert again["stop_reason"] == "daily_project_target"
 
 
+def test_report_separates_published_projects_from_published_candidates(settings, factory, offline_daily_preflight):
+    # Run 191 regression: one article listed three projects; "published" counts
+    # projects, so the report must say that only one candidate produced them.
+    class MultiService(PublishingService):
+        def analyze_source(self, article):
+            from backend.app.free_budget import current_budget
+            from backend.app.llm_service import LLMAnalysis
+            current_budget().reserve("llm:gemini")
+            entries = tuple(CatalogEntry(name=name, confidence=0.9,
+                            description_uz=f"{name} talabalar arizalarini bir joyda qabul qiladi va ishni tezlashtiradi")
+                            for name in ["AtlasGarden", "NimbusPay", "VectorScan"])
+            return LLMAnalysis(CatalogResult("MULTI", 0.9, entries), "gemini", "offline-fixture", 1)
+    seed_candidates(factory, ["MultiDigest"])
+    result = run_daily(settings.model_copy(update={"daily_project_target": 5}), factory,
+                       pipeline_factory=lambda config, factory: CatalogPipeline(
+                           config, factory, discovery=FakeDiscovery([]), llm_service=MultiService()))
+    assert result["counts"]["published"] == 3
+    assert result["counts"]["published_candidates"] == 1
+    assert result["counts"]["published_projects_from_candidates"] == 3
+    assert result["candidate_runs"][0]["projects_published"] == 3
+    with factory() as session:
+        details = session.get(Run, result["run_id"]).details
+        assert details["published_today_before_run"] == 0 and details["source_cap"] == 3
+
+
 def test_request_cap_stops_pipeline_without_rejecting_the_remaining_candidate(settings, factory, offline_daily_preflight):
     settings = settings.model_copy(update={"daily_gemini_requests_per_run": 1, "daily_gemini_requests_per_day": 1})
     seed_candidates(factory, ["AtlasGarden", "NimbusPay"])
