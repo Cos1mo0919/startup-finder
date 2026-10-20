@@ -833,3 +833,13 @@ not-found `/admin` page and presses Enter; a wrong key changes nothing on screen
 and any fragment is stripped. The owner approved enabling the daily discovery
 schedule: 15:00 UTC (20:00 Asia/Tashkent), bounded daily mode. Weekly backup
 schedule remains off.
+
+## Home "added today", recent week block and weekly backup — 2026-10-20
+
+The home page now lists projects by the Tashkent day they were added to the site
+(first published transition, else first_seen): today, else yesterday, else the
+latest day with additions. Source article dates stay on cards and drive the
+archive. This replaces the earlier rule that an old article found today is not
+"new", at the owner's request. `/loyihalar` shows "So‘nggi paytda": last week on
+Monday–Wednesday, the current week from Thursday. Owner-approved weekly backup
+schedule: Sunday 02:00 UTC, 14-day artifact retention.
