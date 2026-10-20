@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useState } from "react";
 import { clearAdminSession, readStoredKey, setVerifiedKey, useAdminVerified, verifiedKey } from "./adminSession";
 import { StatusPage } from "./StatusPage";
 import { External, Loading, NotFound } from "./components";
@@ -59,7 +59,8 @@ function stripFragment(){
 function useBlindKeyEntry(enabled:boolean,submit:(value:string)=>void){
   // On the not-found /admin page the owner types (or pastes) the key and presses Enter.
   // Nothing is shown and nothing goes into the URL or browser history.
-  useEffect(()=>{
+  // Layout effect: the listener exists before the page is painted, so no keystroke is lost.
+  useLayoutEffect(()=>{
     if(!enabled)return;
     let buffer="";
     let timer=0;
