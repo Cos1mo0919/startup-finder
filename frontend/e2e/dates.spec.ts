@@ -66,9 +66,7 @@ test("feed, detail and status render Uzbek month names in the browser", async ({
     body.runs = [body.last_run];
     await route.fulfill({ response, json: body });
   });
-  await page.goto("/admin");
-  await page.getByRole("textbox", { name: "Admin kaliti" }).fill("test-admin-key");
-  await page.getByRole("button", { name: "Kirish" }).click();
+  await page.goto("/admin#test-admin-key");
   await expect(
     page.getByRole("heading", { name: "Qidiruv holati" }),
   ).toBeVisible({ timeout: 15000 });

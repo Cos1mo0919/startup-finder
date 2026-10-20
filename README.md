@@ -46,7 +46,7 @@ Codespace нужен экспорт именно его БД: локальные
 
 Веб-сайт для поиска реальных проектов и решаемых ими проблем. Охват Узбекистана сохраняется; по разрешению пользователя работает отдельное ежедневное обнаружение международных проектов. Для каталога обязательны конкретная идентичность проекта, содержательное описание, проверяемый URL и дедупликация; глубокий анализ проблемы и рынка необязателен для публикации.
 
-Публичный интерфейс на узбекском: главная страница, каталог, отдельный раздел «Boshqa», архив по дате, группы источников и подробная страница проекта с фактами. Техническое состояние доступно владельцу в `/admin`. Приложение не создаёт вымышленных карточек ради заполнения ленты.
+Публичный интерфейс на узбекском: главная страница, каталог, отдельный раздел «Boshqa», архив по дате, группы источников и подробная страница проекта с фактами. Техническое состояние доступно владельцу по адресу `/admin#ADMIN_API_KEY`; без верного ключа `/admin` выглядит как обычная несуществующая страница. Приложение не создаёт вымышленных карточек ради заполнения ленты.
 
 ## Что реализовано
 
@@ -59,7 +59,7 @@ Codespace нужен экспорт именно его БД: локальные
 - Раздельные факты и AI-выводы; формальные рейтинги полезности и доверия с сохранением компонентов.
 - Дедупликация URL, названий, автора/организации, псевдонимов и сходства описаний. Добавление источника не меняет `first_seen`.
 - Настоящие изображения из метаданных исходной страницы с указанием источника либо placeholder. Изображения не генерируются.
-- Владелец видит состояние, источники, очередь, причины отклонения и эффективность источников в `/admin` после ввода `ADMIN_API_KEY`.
+- Владелец видит состояние, источники, очередь, причины отклонения и эффективность источников по адресу `/admin#ADMIN_API_KEY` (ключ после `#` не отправляется на сервер и сразу убирается из адресной строки).
 
 ## Режим без платных API
 
@@ -554,8 +554,9 @@ Global` tanloviga ega. `Arxiv`da Bugun, 7 kun, 30 kun, yil va nom qidiruvi
 bor. `Manbalar` manbalar guruhlarini tushuntiradi; texnik xatolarni ko‘rsatmaydi.
 Imkoniyatlar reytingi, muammolar, signallar va g‘oyalar ochiq bosh menyudan
 olingan, ammo ularning SQL modellari va tahlil ma’lumotlari saqlangan.
-Eski to‘g‘ridan-to‘g‘ri sahifa havolalari `/admin`ga yo‘naltiriladi;
-muammolar, g‘oyalar, signallar va sektorlar egasining ichki menyusida turadi.
+Eski to‘g‘ridan-to‘g‘ri sahifa havolalari (`/muammolar` va boshqalar) endi
+`/admin`ga yo‘naltirilmaydi, oddiy «Bunday sahifa mavjud emas» sahifasini
+ko‘rsatadi; muammolar, g‘oyalar, signallar va sektorlar egasining ichki menyusida turadi.
 
 Ommaviy `/api/projects` faqat `publication_status=PUBLISHED` qaytaradi.
 Bu oldingi bosqichda muammo va foydalanuvchi majburiy darvoza edi;
@@ -570,6 +571,16 @@ samarasini ko‘rsatadi. `ADMIN_API_KEY` ni `.env` yoki hostingning himoyalangan
 environment sozlamasida uzoq tasodifiy qiymatga o‘rnating. U Gitga kiritilmaydi.
 Admin API so‘rovlarida `X-Admin-Key` yuboriladi. Kalit bo‘lmasa admin API 503,
 noto‘g‘ri bo‘lsa 401 qaytaradi. Ochiq sahifa kalitga muhtoj emas.
+
+**Yashirin kirish.** `/admin` kirish formasini ko‘rsatmaydi. Kalitsiz yoki
+noto‘g‘ri kalit bilan u har qanday mavjud bo‘lmagan manzil kabi
+«Bunday sahifa mavjud emas» sahifasini va «Orqaga» tugmasini ko‘rsatadi.
+Egasi `https://<sayt>/admin#ADMIN_API_KEY` manzilini ochadi: `#` dan keyingi
+qism serverga yuborilmaydi va server loglariga yozilmaydi; sahifa uni darhol
+manzildan olib tashlaydi, `GET /api/admin/verify` orqali tekshiradi va faqat
+tasdiqlansa panelni ochadi. Kalit sessiya davomida brauzer yorlig‘ida saqlanadi;
+«Chiqish» uni o‘chiradi va bosh sahifaga qaytaradi. Kalitda `#`, `%`, bo‘sh joy
+kabi belgilar bo‘lsa, ularni URL-kodlash kerak.
 Muammo, g‘oya, signal va sektor API so‘rovlari ham shu kalit bilan himoyalangan.
 
 Global loyihalar uchun bepul Show HN RSS bevosita loyiha saytlari havolalarini

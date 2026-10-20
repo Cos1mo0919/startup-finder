@@ -391,6 +391,11 @@ def create_app(settings=None):
                                           for link in links if (problem := session.get(Problem, link.problem_id))]
             return result
 
+    @app.get("/api/admin/verify", dependencies=[Depends(require_admin)], include_in_schema=False)
+    def admin_verify():
+        # The admin UI stays a "page not found" until the server accepts the key.
+        return {"ok": True}
+
     @app.get("/api/admin/status", dependencies=[Depends(require_admin)])
     @app.get("/api/status", dependencies=[Depends(require_admin)], include_in_schema=False)
     def status():

@@ -246,6 +246,17 @@ def test_admin_daily_usage_warning_and_last24h(settings, factory):
         assert client.get('/api/admin/status', headers={"X-Admin-Key": "test-admin-key"}).json()["free_daily"]["warnings"] == ["pages"]
 
 
+def test_admin_verify_accepts_only_the_configured_key_and_admin_url_is_a_plain_page(settings):
+    with TestClient(create_app(settings)) as client:
+        assert client.get('/api/admin/verify').status_code == 401
+        assert client.get('/api/admin/verify', headers={"X-Admin-Key": "wrong"}).status_code == 401
+        assert client.get('/api/admin/verify', headers={"X-Admin-Key": "test-admin-key"}).json() == {"ok": True}
+        assert "/api/admin/verify" not in client.get('/openapi.json').text
+        # /admin and an unknown URL get the same SPA shell, so the server reveals nothing.
+        admin, unknown = client.get('/admin'), client.get('/no-such-page-anywhere')
+        assert admin.status_code == unknown.status_code and admin.content == unknown.content
+
+
 def test_raw_ingestion_is_idempotent_and_queue_hint_prioritizes_concrete_project(factory):
     with factory.begin() as session:
         source = RegistrySource(id="fixture", name="Fixture", url="https://fixture.example", source_type="startup_platform")

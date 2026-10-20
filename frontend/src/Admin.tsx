@@ -1,7 +1,7 @@
-import { useState } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { StatusPage } from "./StatusPage";
-import { External, Loading } from "./components";
+import { External, Loading, NotFound } from "./components";
 import { useApi } from "./useApi";
 import { ProblemsPage, ProblemDetailPage, IdeasPage, IdeaDetailPage, SignalsPage, SectorsPage } from "./Intelligence";
 
@@ -51,9 +51,44 @@ function SourceYield({adminKey}:{adminKey:string}) {
   return <section className="detail-section"><h2>Manbalar samarasi</h2>{loading?<Loading/>:<div className="admin-yield-table"><table><thead><tr><th>Manba</th><th>Topilgan</th><th>Nomzod</th><th>Tasdiqlangan</th><th>Nashr</th><th>Rad</th><th>Asosiy sabab</th></tr></thead><tbody>{data?.map(row=><tr key={row.source_id}><td>{row.name}</td><td>{row.items_fetched}</td><td>{row.project_candidates}</td><td>{row.verified_projects}</td><td>{row.published_projects}</td><td>{row.rejected_items}</td><td>{row.dominant_rejection_reasons.map(([reason,count])=>`${reason}: ${count}`).join(", ")||"—"}</td></tr>)}</tbody></table></div>}</section>;
 }
 
+const ADMIN_KEY_STORAGE="izlanish-admin-key";
+let verifiedKey:string|null=null; // Key the server accepted in this tab; avoids re-checks between sections.
+
+function readStoredKey(){try{return sessionStorage.getItem(ADMIN_KEY_STORAGE)||""}catch{return ""}}
+function storeKey(value:string|null){try{if(value)sessionStorage.setItem(ADMIN_KEY_STORAGE,value);else sessionStorage.removeItem(ADMIN_KEY_STORAGE)}catch{/* storage unavailable */}}
+function keyFromHash(){
+  // Entry point: /admin#KEY. The fragment is never sent to the server or written to its logs.
+  const raw=window.location.hash.slice(1);
+  if(!raw)return "";
+  try{return decodeURIComponent(raw)}catch{return raw}
+}
+
 export function AdminPage({section="status"}:{section?:"status"|"review"|"catalog"|"sources"|"problems"|"problem"|"ideas"|"idea"|"signals"|"sectors"}) {
-  const [key,setKey]=useState(()=>sessionStorage.getItem("izlanish-admin-key")||"");
-  const [input,setInput]=useState("");
-  if(!key)return <main className="page admin-login"><h1>Egasi uchun boshqaruv</h1><p>Texnik ma’lumotlar va ko‘rib chiqish navbati faqat administratorga ochiq.</p><form onSubmit={event=>{event.preventDefault();sessionStorage.setItem("izlanish-admin-key",input);setKey(input)}}><label>Admin kaliti <input type="password" value={input} onChange={event=>setInput(event.target.value)} autoComplete="off"/></label><button type="submit" disabled={!input}>Kirish</button></form></main>;
-  return <><nav className="page admin-nav" aria-label="Admin menyusi"><Link to="/admin/status">Holat</Link><Link to="/admin/review">Ko‘rib chiqish</Link><Link to="/admin/catalog">Loyihalar</Link><Link to="/admin/sources">Manbalar samarasi</Link><Link to="/admin/muammolar">Muammolar</Link><Link to="/admin/goyalar">G‘oyalar</Link><Link to="/admin/signallar">Signallar</Link><Link to="/admin/sektorlar">Sektorlar</Link><button onClick={()=>{sessionStorage.removeItem("izlanish-admin-key");setKey("")}}>Chiqish</button></nav>{section==="status"?<StatusPage adminKey={key}/>:section==="problems"?<ProblemsPage adminKey={key}/>:section==="problem"?<ProblemDetailPage adminKey={key}/>:section==="ideas"?<IdeasPage adminKey={key}/>:section==="idea"?<IdeaDetailPage adminKey={key}/>:section==="signals"?<SignalsPage adminKey={key}/>:section==="sectors"?<SectorsPage adminKey={key}/>:<main className="page admin-page">{section==="review"?<ReviewQueue adminKey={key}/>:section==="catalog"?<CatalogReview adminKey={key}/>:<SourceYield adminKey={key}/>}</main>}</>;
+  const navigate=useNavigate();
+  const [candidate,setCandidate]=useState(()=>keyFromHash()||readStoredKey());
+  const [attempt,setAttempt]=useState(0);
+  const [state,setState]=useState<"checking"|"ok"|"denied">(()=>!candidate?"denied":candidate===verifiedKey?"ok":"checking");
+  useEffect(()=>{
+    // Typing "#KEY" after an already open /admin changes only the fragment (no reload).
+    const onHash=()=>{const next=keyFromHash();if(next){setState(next===verifiedKey?"ok":"checking");setCandidate(next);setAttempt(value=>value+1)}};
+    window.addEventListener("hashchange",onHash);
+    return ()=>window.removeEventListener("hashchange",onHash);
+  },[]);
+  useEffect(()=>{
+    if(window.location.hash)window.history.replaceState(window.history.state,"",window.location.pathname+window.location.search);
+    if(!candidate||candidate===verifiedKey)return;
+    const controller=new AbortController();
+    fetch("/api/admin/verify",{headers:{"X-Admin-Key":candidate},signal:controller.signal})
+      .then(response=>{
+        if(response.ok){verifiedKey=candidate;storeKey(candidate);setState("ok")}
+        else{verifiedKey=null;storeKey(null);setState("denied")}
+      })
+      .catch(()=>{if(!controller.signal.aborted)setState("denied")});
+    return ()=>controller.abort();
+  },[candidate,attempt]);
+  if(state==="checking")return <main className="page" aria-busy="true"/>;
+  if(state==="denied")return <NotFound/>;
+  const key=candidate;
+  const logout=()=>{verifiedKey=null;storeKey(null);navigate("/",{replace:true})};
+  return <><nav className="page admin-nav" aria-label="Admin menyusi"><Link to="/admin/status">Holat</Link><Link to="/admin/review">Ko‘rib chiqish</Link><Link to="/admin/catalog">Loyihalar</Link><Link to="/admin/sources">Manbalar samarasi</Link><Link to="/admin/muammolar">Muammolar</Link><Link to="/admin/goyalar">G‘oyalar</Link><Link to="/admin/signallar">Signallar</Link><Link to="/admin/sektorlar">Sektorlar</Link><button onClick={logout}>Chiqish</button></nav>{section==="status"?<StatusPage adminKey={key}/>:section==="problems"?<ProblemsPage adminKey={key}/>:section==="problem"?<ProblemDetailPage adminKey={key}/>:section==="ideas"?<IdeasPage adminKey={key}/>:section==="idea"?<IdeaDetailPage adminKey={key}/>:section==="signals"?<SignalsPage adminKey={key}/>:section==="sectors"?<SectorsPage adminKey={key}/>:<main className="page admin-page">{section==="review"?<ReviewQueue adminKey={key}/>:section==="catalog"?<CatalogReview adminKey={key}/>:<SourceYield adminKey={key}/>}</main>}</>;
 }

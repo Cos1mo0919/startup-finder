@@ -804,3 +804,14 @@ default 3) with least-tried-source rotation in both modes.
 Production Supabase was read only (SELECT) to confirm run 191 and the retry
 queue; nothing was written. Local test execution was not possible in this
 session (package registries blocked), so validation relies on GitHub CI.
+
+## Hidden admin entry — 2026-10-20
+
+`/admin` no longer shows a login form. Without a key, with a wrong key, or on
+legacy public links (`/muammolar`, `/signallar`, ...) the site renders the same
+"Bunday sahifa mavjud emas" page with an "Orqaga" button as any unknown URL.
+The owner opens `/admin#ADMIN_API_KEY`; the fragment is not sent to the server,
+is removed from the address bar immediately, and the key is checked by the new
+`GET /api/admin/verify` before any admin UI renders. Admin API authorization is
+unchanged (401 on a wrong key). Daily run 197 confirmed source rotation
+(15 candidates from 15 sources) and consistent publication counters.

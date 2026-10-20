@@ -6,7 +6,7 @@ import {
   Sprout,
 } from "lucide-react";
 import React, { useState } from "react";
-import { Link, NavLink } from "react-router-dom";
+import { Link, NavLink, useNavigate } from "react-router-dom";
 import type { Component, Project } from "./types";
 
 import { date } from "./utils";
@@ -76,6 +76,19 @@ export function Footer() {
       <p>Haqiqiy loyihalar va ularning manbalari.</p>
       <span>Faktlar — manbalardan. Tahlil — alohida.</span>
     </footer>
+  );
+}
+export function NotFound() {
+  // Shared by unknown URLs and the hidden admin area, so both look identical.
+  const navigate = useNavigate();
+  return (
+    <main className="page empty-state not-found">
+      <h1>Bunday sahifa mavjud emas</h1>
+      <p>Siz qidirgan manzil topilmadi.</p>
+      <button type="button" className="not-found-back" onClick={() => navigate("/", { replace: true })}>
+        Orqaga
+      </button>
+    </main>
   );
 }
 export function ErrorBox({ retry }: { retry: () => void }) {
