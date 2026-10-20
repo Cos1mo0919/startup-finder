@@ -1803,5 +1803,4 @@ footer > span {
 }
 .header-admin .admin-logout:hover, .header-admin .admin-logout:focus-visible { color: var(--accent, #4fd1a5); }
 
-.catalog-recent { margin: 8px 0 36px; }
-.catalog-recent .intel-heading { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 16px; margin-bottom: 16px; }
+.catalog-recent-note { margin: 4px 0 8px; color: var(--text-muted, inherit); font-size: 14px; }

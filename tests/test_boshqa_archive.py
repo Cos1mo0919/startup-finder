@@ -47,41 +47,34 @@ def test_boshqa_requires_published_project_and_admin_assignment(settings, factor
         assert project.published_at.year == 2025
 
 
-def _added_at(factory, project_id, when):
+def _redate(factory, project_id, when):
     with factory.begin() as session:
-        project = session.get(Project, project_id)
-        project.status_history = [{**item, "timestamp": when.isoformat()} for item in project.status_history]
-        project.first_seen = when
+        session.get(Project, project_id).published_at = when
 
 
-def test_home_shows_projects_added_today_then_yesterday_then_latest_day(settings, factory, monkeypatch):
-    # 2026-10-12 17:00 Tashkent. "New" means added to the site, whatever the article date.
+def test_home_uses_card_date_today_then_yesterday_then_latest_week_day(settings, factory, monkeypatch):
+    # 2026-10-12 17:00 Tashkent. The card date (article date, or discovery date when unknown) decides.
     fixed = datetime(2026, 10, 12, 12, tzinfo=timezone.utc)
     monkeypatch.setattr("backend.app.main.now_utc", lambda: fixed)
-    old_article = _publish(factory, "OldTool", "https://unknown.example/old",
-                           datetime(2023, 7, 1, tzinfo=timezone.utc), when=fixed - timedelta(days=5))
-    found_today = _publish(factory, "RecentTool", "https://unknown.example/recent",
-                           datetime(2024, 1, 1, tzinfo=timezone.utc), when=fixed - timedelta(hours=1))
+    old = _publish(factory, "OldTool", "https://unknown.example/old",
+                   datetime(2023, 7, 1, tzinfo=timezone.utc), when=fixed - timedelta(hours=2))
+    recent = _publish(factory, "RecentTool", "https://unknown.example/recent", fixed - timedelta(hours=1))
     with TestClient(create_app(settings)) as client:
         home = client.get("/api/catalog/home").json()
         assert home["fresh_period"] == "today" and home["fresh_day"] == "2026-10-12"
+        # The 2023 article found today is not a "today" project.
         assert [item["name"] for item in home["top"]] == ["RecentTool"]
-        assert home["top"][0]["published_at"].startswith("2024-01-01")  # The card keeps the source date.
-        # Nothing added today yet (e.g. before the 20:00 run): yesterday 23:00 Tashkent shows.
-        _added_at(factory, found_today, datetime(2026, 10, 11, 18, 0, tzinfo=timezone.utc))
+        _redate(factory, recent, datetime(2026, 10, 11, 18, 0, tzinfo=timezone.utc))  # yesterday 23:00 Tashkent
         home = client.get("/api/catalog/home").json()
         assert home["fresh_period"] == "yesterday" and [item["name"] for item in home["top"]] == ["RecentTool"]
-        # Nothing today or yesterday: the latest day with additions, labelled with its date.
-        _added_at(factory, found_today, fixed - timedelta(days=3))
+        _redate(factory, recent, fixed - timedelta(days=3))
         home = client.get("/api/catalog/home").json()
         assert home["fresh_period"] == "latest" and home["fresh_day"] == "2026-10-09"
         assert [item["name"] for item in home["top"]] == ["RecentTool"]
-        assert client.get("/api/projects?archive=true&year=2023").json()["items"][0]["id"] == old_article
-    with factory.begin() as session:
-        for project in session.scalars(select(Project)):
-            project.publication_status = "REVIEW_REQUIRED"
-    with TestClient(create_app(settings)) as client:
-        assert client.get("/api/catalog/home").json()["fresh_period"] == "empty"
+        _redate(factory, recent, fixed - timedelta(days=9))  # Older than a week: archive only.
+        home = client.get("/api/catalog/home").json()
+        assert home["fresh_period"] == "empty" and home["top"] == []
+        assert client.get("/api/projects?archive=true&year=2023").json()["items"][0]["id"] == old
 
 
 @pytest.mark.parametrize("now,period,start,end", [
@@ -91,22 +84,29 @@ def test_home_shows_projects_added_today_then_yesterday_then_latest_day(settings
     # From Thursday the current week.
     (datetime(2026, 10, 21, 19, 0, tzinfo=timezone.utc), "this_week", "2026-10-19", "2026-10-25"),  # Thu 00:00
     (datetime(2026, 10, 25, 18, tzinfo=timezone.utc), "this_week", "2026-10-19", "2026-10-25"),   # Sun 23:00
-    # Sunday 23:00 UTC is already Monday in Tashkent.
+    # Sunday 20:00 UTC is already Monday in Tashkent.
     (datetime(2026, 10, 25, 20, tzinfo=timezone.utc), "last_week", "2026-10-19", "2026-10-25"),
 ])
-def test_recent_block_week_rule(settings, factory, monkeypatch, now, period, start, end):
+def test_recent_filter_uses_card_date_and_week_rule(settings, factory, monkeypatch, now, period, start, end):
     monkeypatch.setattr("backend.app.main.now_utc", lambda: now)
     week_start = datetime.fromisoformat(start).replace(tzinfo=timezone(timedelta(hours=5)))
-    added = (week_start + timedelta(days=1, hours=20)).astimezone(timezone.utc)  # Tuesday 20:00 Tashkent
     inside = _publish(factory, "InsideTool", "https://unknown.example/inside",
-                      datetime(2022, 5, 1, tzinfo=timezone.utc), when=added)
-    _publish(factory, "OutsideTool", "https://unknown.example/outside",
-             datetime(2022, 5, 1, tzinfo=timezone.utc), when=(week_start - timedelta(minutes=1)).astimezone(timezone.utc))
+                      (week_start + timedelta(days=1, hours=20)).astimezone(timezone.utc))
+    _publish(factory, "BeforeTool", "https://unknown.example/before",
+             (week_start - timedelta(minutes=1)).astimezone(timezone.utc))
+    _publish(factory, "AfterTool", "https://unknown.example/after",
+             (week_start + timedelta(days=7)).astimezone(timezone.utc))
+    # Found inside the week but written in 2023: not recent.
+    _publish(factory, "OldArticleTool", "https://unknown.example/old-article",
+             datetime(2023, 10, 25, tzinfo=timezone.utc), when=(week_start + timedelta(days=2)).astimezone(timezone.utc))
     with TestClient(create_app(settings)) as client:
-        recent = client.get("/api/catalog/recent").json()
-    assert (recent["period"], recent["start"], recent["end"]) == (period, start, end)
-    assert [item["id"] for item in recent["items"]] == [inside] and recent["total"] == 1
-    assert datetime.fromisoformat(recent["items"][0]["site_added_at"]) == added
+        listing = client.get("/api/projects?period=recent").json()
+        facets = client.get("/api/catalog/facets").json()
+        assert [item["id"] for item in listing["items"]] == [inside]
+        assert facets["recent"] == {"period": period, "start": start, "end": end, "total": 1}
+        # Combines with the other filters instead of replacing them.
+        assert client.get("/api/projects?period=recent&q=Inside").json()["total"] == 1
+        assert client.get("/api/projects?period=recent&q=Before").json()["total"] == 0
 
 
 def test_facets_and_year_filters_do_not_use_discovered_at(settings, factory):
