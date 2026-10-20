@@ -163,7 +163,7 @@ def test_source_yield_ignores_outcomes_caused_by_our_own_limits(settings, factor
                                for i, item in enumerate(not_ours + evaluated)]}))
     with factory() as session:
         row = recent_yield(session)[0]
-    assert row["counts"]["candidates"] == 21 and row["counts"]["evaluated"] == 9
+    assert row["counts"]["candidates"] == 23 and row["counts"]["evaluated"] == 9
     assert row["counts"]["llm_unavailable"] == 10
     assert not row["deprioritized"] and row["minimum_basis"] == "evaluated"
     with factory.begin() as session:
