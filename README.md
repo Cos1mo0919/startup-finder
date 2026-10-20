@@ -46,7 +46,7 @@ Codespace нужен экспорт именно его БД: локальные
 
 Веб-сайт для поиска реальных проектов и решаемых ими проблем. Охват Узбекистана сохраняется; по разрешению пользователя работает отдельное ежедневное обнаружение международных проектов. Для каталога обязательны конкретная идентичность проекта, содержательное описание, проверяемый URL и дедупликация; глубокий анализ проблемы и рынка необязателен для публикации.
 
-Публичный интерфейс на узбекском: главная страница, каталог, отдельный раздел «Boshqa», архив по дате, группы источников и подробная страница проекта с фактами. Техническое состояние доступно владельцу по адресу `/admin#ADMIN_API_KEY`; без верного ключа `/admin` выглядит как обычная несуществующая страница. Приложение не создаёт вымышленных карточек ради заполнения ленты.
+Публичный интерфейс на узбекском: главная страница, каталог, отдельный раздел «Boshqa», архив по дате, группы источников и подробная страница проекта с фактами. Техническое состояние доступно владельцу в `/admin`: на странице «не найдено» нужно напечатать `ADMIN_API_KEY` и нажать Enter; без этого `/admin` выглядит как обычная несуществующая страница. Приложение не создаёт вымышленных карточек ради заполнения ленты.
 
 ## Что реализовано
 
@@ -59,7 +59,7 @@ Codespace нужен экспорт именно его БД: локальные
 - Раздельные факты и AI-выводы; формальные рейтинги полезности и доверия с сохранением компонентов.
 - Дедупликация URL, названий, автора/организации, псевдонимов и сходства описаний. Добавление источника не меняет `first_seen`.
 - Настоящие изображения из метаданных исходной страницы с указанием источника либо placeholder. Изображения не генерируются.
-- Владелец видит состояние, источники, очередь, причины отклонения и эффективность источников по адресу `/admin#ADMIN_API_KEY` (ключ после `#` не отправляется на сервер и сразу убирается из адресной строки).
+- Владелец видит состояние, источники, очередь, причины отклонения и эффективность источников в `/admin` после ввода `ADMIN_API_KEY` с клавиатуры на странице «не найдено» (ключ не попадает в адрес и историю браузера).
 
 ## Режим без платных API
 
@@ -572,15 +572,13 @@ environment sozlamasida uzoq tasodifiy qiymatga o‘rnating. U Gitga kiritilmayd
 Admin API so‘rovlarida `X-Admin-Key` yuboriladi. Kalit bo‘lmasa admin API 503,
 noto‘g‘ri bo‘lsa 401 qaytaradi. Ochiq sahifa kalitga muhtoj emas.
 
-**Yashirin kirish.** `/admin` kirish formasini ko‘rsatmaydi. Kalitsiz yoki
-noto‘g‘ri kalit bilan u har qanday mavjud bo‘lmagan manzil kabi
-«Bunday sahifa mavjud emas» sahifasini va «Orqaga» tugmasini ko‘rsatadi.
-Egasi `https://<sayt>/admin#ADMIN_API_KEY` manzilini ochadi: `#` dan keyingi
-qism serverga yuborilmaydi va server loglariga yozilmaydi; sahifa uni darhol
-manzildan olib tashlaydi, `GET /api/admin/verify` orqali tekshiradi va faqat
-tasdiqlansa panelni ochadi. Kalit sessiya davomida brauzer yorlig‘ida saqlanadi;
-«Chiqish» uni o‘chiradi va bosh sahifaga qaytaradi. Kalitda `#`, `%`, bo‘sh joy
-kabi belgilar bo‘lsa, ularni URL-kodlash kerak.
+**Yashirin kirish.** `/admin` kirish formasini ko‘rsatmaydi. U har qanday mavjud
+bo‘lmagan manzil kabi «Bunday sahifa mavjud emas» sahifasini va «Orqaga» tugmasini
+ko‘rsatadi. Egasi shu sahifada `ADMIN_API_KEY`ni yozadi (yoki Ctrl+V bilan qo‘yadi)
+va Enter bosadi; kalit `GET /api/admin/verify` orqali tekshiriladi va faqat
+tasdiqlansa panel ochiladi. Kalit manzilga va brauzer tarixiga tushmaydi; eski
+`/admin#kalit` havolalari kirishga ruxsat bermaydi. Kalit sessiya davomida brauzer
+yorlig‘ida saqlanadi; ochiq sahifaga o‘tish yoki «Chiqish» uni o‘chiradi.
 Muammo, g‘oya, signal va sektor API so‘rovlari ham shu kalit bilan himoyalangan.
 
 Global loyihalar uchun bepul Show HN RSS bevosita loyiha saytlari havolalarini

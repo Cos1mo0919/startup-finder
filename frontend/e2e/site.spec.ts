@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 
 test("project catalog and detail show the product before optional analysis", async ({ page }, info) => {
   const errors: string[] = [];
@@ -45,24 +45,39 @@ test("catalog cards shorten presentation while detail retains source description
   await expect(page.locator("body")).toContainText("tavsif44");
 });
 
-test("admin is hidden like any unknown page and opens only with a valid key fragment", async ({ page }) => {
+async function typeAdminKey(page: Page, key: string) {
+  await page.goto("/admin");
+  await expect(page.getByRole("heading", { name: "Bunday sahifa mavjud emas" })).toBeVisible();
+  await page.keyboard.type(key);
+  await page.keyboard.press("Enter");
+}
+
+test("admin is hidden like any unknown page and opens only by typing the key", async ({ page }) => {
   const notFound = page.getByRole("heading", { name: "Bunday sahifa mavjud emas" });
+  const status = page.getByRole("heading", { name: "Qidiruv holati" });
   await page.goto("/muammolar");
   await expect(notFound).toBeVisible();
   await expect(page).toHaveURL(/\/muammolar$/);
-  for (const url of ["/admin#wrong-key", "/admin/review", "/admin"]) {
+  for (const url of ["/admin/review", "/admin"]) {
     await page.goto(url);
     await expect(notFound).toBeVisible();
     await expect(page.getByRole("navigation", { name: "Admin menyusi" })).toHaveCount(0);
     await expect(page.locator("body")).not.toContainText("Admin kaliti");
     await expect(page.locator("body")).not.toContainText("boshqaruv");
   }
+  // The key in the address no longer logs in, and it is wiped from the address bar.
+  await typeAdminKey(page, "test-admin-key");
+  await expect(notFound).toBeVisible();
+  await expect(page).toHaveURL(/\/admin$/);
+  await expect(status).toHaveCount(0);
+  // A wrong typed key changes nothing on screen.
+  await typeAdminKey(page, "wrong-key");
+  await expect(notFound).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Admin menyusi" })).toHaveCount(0);
   await page.getByRole("button", { name: "Orqaga" }).click();
   await expect(page).toHaveURL(/\/$/);
-  await page.goto("/admin");
-  await expect(notFound).toBeVisible();
-  await page.evaluate(() => { window.location.hash = "test-admin-key"; });
-  await expect(page.getByRole("heading", { name: "Qidiruv holati" })).toBeVisible();
+  await typeAdminKey(page, "test-admin-key");
+  await expect(status).toBeVisible();
   await expect(page).toHaveURL(/\/admin$/);
   await expect(page.getByRole("navigation", { name: "Asosiy menyu" })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Bosh sahifa", exact: true })).toHaveCount(0);
@@ -85,13 +100,13 @@ test("admin is hidden like any unknown page and opens only with a valid key frag
   await expect(notFound).toBeVisible();
   await expect(page.getByRole("navigation", { name: "Admin menyusi" })).toHaveCount(0);
   // The same after an in-app visit to a public page and back.
-  await page.goto("/admin#test-admin-key");
-  await expect(page.getByRole("heading", { name: "Qidiruv holati" })).toBeVisible();
+  await typeAdminKey(page, "test-admin-key");
+  await expect(status).toBeVisible();
   await page.goto("/loyihalar");
   await page.goBack();
   await expect(notFound).toBeVisible();
-  await page.goto("/admin#test-admin-key");
-  await expect(page.getByRole("heading", { name: "Qidiruv holati" })).toBeVisible();
+  await typeAdminKey(page, "test-admin-key");
+  await expect(status).toBeVisible();
   await page.getByRole("button", { name: "Chiqish" }).click();
   await expect(page).toHaveURL(/\/$/);
   await page.goto("/admin");
@@ -113,7 +128,7 @@ test("admin daily budgets show usage and warnings without public exposure", asyn
     blocked_providers: {groq: "rate_limited"}, providers_enabled: {gemini: true, groq: true, openai: false},
     last_run: {id: 99, status: "completed", stop_reason: "daily_limit:llm:gemini", trial_evaluation:"partial",run_phases_ms:{initialization:100,discovery:200,processing:300,queue_selection:20,report:10,total:630},run_database:{sql_queries:12,commits:4,rollbacks:5,checkout_probes:1,elapsed_ms:200,by_component:{}},counts:{reached_llm:1,llm_validated:0,before_llm:2}, before_llm_reasons:{article_body_missing:2}, candidate_runs:[{candidate_id:"fixture",stage:"review_required",reason:"llm_unavailable",source:{name:"Fixture source",domain:"fixture.example",page_type:"project_page"},timings_ms:{robots:10,page_read:20,extraction:5,llm:30,pauses:0,lock_wait:1,total:70},database:{sql_queries:6,commits:2,rollbacks:3,checkout_probes:0,elapsed_ms:40,by_component:{quota_before_http:{sql_queries:2,elapsed_ms:10}}},provider_waits:[{provider:"groq",reason:"tpm_reserved_tokens",requested_seconds:6,skipped:false}],provider_attempts:[{provider:"gemini",outcome:"business_validation_failed",rule_code:"score_reason_length",http_status:200,elapsed_ms:10,finish_reason:"STOP"},{provider:"groq",outcome:"output_truncated",http_status:200,elapsed_ms:30,finish_reason:"length"}]}]},
   } } }));
-  await page.goto("/admin#test-admin-key");
+  await typeAdminKey(page, "test-admin-key");
   const panel = page.locator("section").filter({has: page.getByRole("heading", {name: "Bepul kunlik ish"})});
   await expect(panel).toContainText("Nashr: 3/20");
   await expect(panel).toContainText("Sinov sahifa budjeti: 6 / 40");

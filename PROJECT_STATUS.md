@@ -824,3 +824,12 @@ page ends the admin session, so `/admin` without the key is a not-found page
 again; back/forward-cache restores are re-checked. `unsupported_official_url`
 no longer discards analyses: official URLs are compared ignoring case, scheme,
 `www.` and trailing slash; unsupported ones are dropped (null), never stored.
+
+## Keyless admin URL and daily schedule — 2026-10-20
+
+The `/admin#KEY` entry was removed because browsers keep typed URLs (with the
+key) in history suggestions. The owner now types or pastes the key on the
+not-found `/admin` page and presses Enter; a wrong key changes nothing on screen,
+and any fragment is stripped. The owner approved enabling the daily discovery
+schedule: 15:00 UTC (20:00 Asia/Tashkent), bounded daily mode. Weekly backup
+schedule remains off.

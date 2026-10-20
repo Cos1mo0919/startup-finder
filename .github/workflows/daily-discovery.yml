@@ -7,9 +7,11 @@ on:
         description: Trial defaults to five minutes; TRIAL_MAX_RUN_SECONDS allows up to ten
         options: [trial, daily]
         default: trial
-  # Enable only after owner approval and account quota review:
-  # schedule:
-  #   - cron: '0 9 * * *' # 14:00 Asia/Tashkent; after Gemini Pacific midnight in both seasons; GitHub may delay scheduled jobs.
+  # Owner-approved daily run (2026-10-20): 20:00 Asia/Tashkent = 15:00 UTC, after the
+  # Gemini Pacific-midnight reset in both seasons. GitHub may start scheduled jobs late.
+  # Scheduled runs have no inputs and therefore use the bounded daily mode.
+  schedule:
+    - cron: '0 15 * * *'
 permissions:
   contents: read
 concurrency:
