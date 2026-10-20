@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useState } from "react";
 import { clearAdminSession, readStoredKey, setVerifiedKey, useAdminVerified, verifiedKey } from "./adminSession";
 import { StatusPage } from "./StatusPage";
 import { External, Loading, NotFound } from "./components";
@@ -51,25 +51,62 @@ function SourceYield({adminKey}:{adminKey:string}) {
   return <section className="detail-section"><h2>Manbalar samarasi</h2>{loading?<Loading/>:<div className="admin-yield-table"><table><thead><tr><th>Manba</th><th>Topilgan</th><th>Nomzod</th><th>Tasdiqlangan</th><th>Nashr</th><th>Rad</th><th>Asosiy sabab</th></tr></thead><tbody>{data?.map(row=><tr key={row.source_id}><td>{row.name}</td><td>{row.items_fetched}</td><td>{row.project_candidates}</td><td>{row.verified_projects}</td><td>{row.published_projects}</td><td>{row.rejected_items}</td><td>{row.dominant_rejection_reasons.map(([reason,count])=>`${reason}: ${count}`).join(", ")||"—"}</td></tr>)}</tbody></table></div>}</section>;
 }
 
-function keyFromHash(){
-  // Entry point: /admin#KEY. The fragment is never sent to the server or written to its logs.
-  const raw=window.location.hash.slice(1);
-  if(!raw)return "";
-  try{return decodeURIComponent(raw)}catch{return raw}
+function stripFragment(){
+  // Old "/admin#KEY" links must neither log in nor stay in the address bar.
+  if(window.location.hash)window.history.replaceState(window.history.state,"",window.location.pathname+window.location.search);
+}
+
+function useBlindKeyEntry(enabled:boolean,submit:(value:string)=>void){
+  // On the not-found /admin page the owner types (or pastes) the key and presses Enter.
+  // Nothing is shown and nothing goes into the URL or browser history.
+  // Layout effect: the listener exists before the page is painted, so no keystroke is lost.
+  useLayoutEffect(()=>{
+    if(!enabled)return;
+    let buffer="";
+    let timer=0;
+    const reset=()=>{buffer="";window.clearTimeout(timer)};
+    const onKey=(event:KeyboardEvent)=>{
+      if(event.ctrlKey||event.metaKey||event.altKey||event.isComposing)return;
+      if(event.key==="Enter"){
+        if(buffer){event.preventDefault();const value=buffer;reset();submit(value)}
+        return;
+      }
+      if(event.key==="Escape"){reset();return}
+      if(event.key==="Backspace"){buffer=buffer.slice(0,-1);return}
+      if(event.key.length===1){
+        buffer=(buffer+event.key).slice(-512);
+        window.clearTimeout(timer);
+        timer=window.setTimeout(()=>{buffer=""},120000);
+      }
+    };
+    const onPaste=(event:ClipboardEvent)=>{
+      const value=event.clipboardData?.getData("text")?.trim();
+      if(value){event.preventDefault();reset();submit(value)}
+    };
+    window.addEventListener("keydown",onKey);
+    window.addEventListener("paste",onPaste);
+    return ()=>{reset();window.removeEventListener("keydown",onKey);window.removeEventListener("paste",onPaste)};
+  },[enabled,submit]);
 }
 
 export function AdminPage({section="status"}:{section?:"status"|"review"|"catalog"|"sources"|"problems"|"problem"|"ideas"|"idea"|"signals"|"sectors"}) {
-  const [candidate,setCandidate]=useState(()=>keyFromHash()||verifiedKey()||readStoredKey());
+  const [candidate,setCandidate]=useState(()=>verifiedKey()||readStoredKey());
   const [attempt,setAttempt]=useState(0);
+  const [typed,setTyped]=useState(false);
   const [state,setState]=useState<"checking"|"ok"|"denied">(()=>!candidate?"denied":candidate===verifiedKey()?"ok":"checking");
   useEffect(()=>{
-    // Typing "#KEY" after an already open /admin changes only the fragment (no reload).
-    const onHash=()=>{const next=keyFromHash();if(next){setState(next===verifiedKey()?"ok":"checking");setCandidate(next);setAttempt(value=>value+1)}};
-    window.addEventListener("hashchange",onHash);
-    return ()=>window.removeEventListener("hashchange",onHash);
+    stripFragment();
+    window.addEventListener("hashchange",stripFragment);
+    return ()=>window.removeEventListener("hashchange",stripFragment);
   },[]);
+  const submit=useCallback((value:string)=>{
+    setTyped(true);
+    setState(value===verifiedKey()?"ok":"checking");
+    setCandidate(value);
+    setAttempt(count=>count+1);
+  },[]);
+  useBlindKeyEntry(state==="denied",submit);
   useEffect(()=>{
-    if(window.location.hash)window.history.replaceState(window.history.state,"",window.location.pathname+window.location.search);
     if(!candidate||candidate===verifiedKey())return;
     const controller=new AbortController();
     fetch("/api/admin/verify",{headers:{"X-Admin-Key":candidate},signal:controller.signal})
@@ -82,7 +119,8 @@ export function AdminPage({section="status"}:{section?:"status"|"review"|"catalo
   },[candidate,attempt]);
   // Logging out elsewhere (header "Chiqish") must close this page too.
   const verified=useAdminVerified();
-  if(state==="checking")return <main className="page" aria-busy="true"/>;
+  // A typed attempt keeps the not-found page on screen, so a wrong guess shows nothing at all.
+  if(state==="checking")return typed?<NotFound/>:<main className="page" aria-busy="true"/>;
   if(state==="denied"||!verified)return <NotFound/>;
   const key=candidate;
   return <>{section==="status"?<StatusPage adminKey={key}/>:section==="problems"?<ProblemsPage adminKey={key}/>:section==="problem"?<ProblemDetailPage adminKey={key}/>:section==="ideas"?<IdeasPage adminKey={key}/>:section==="idea"?<IdeaDetailPage adminKey={key}/>:section==="signals"?<SignalsPage adminKey={key}/>:section==="sectors"?<SectorsPage adminKey={key}/>:<main className="page admin-page">{section==="review"?<ReviewQueue adminKey={key}/>:section==="catalog"?<CatalogReview adminKey={key}/>:<SourceYield adminKey={key}/>}</main>}</>;

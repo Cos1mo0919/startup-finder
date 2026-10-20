@@ -4,7 +4,8 @@ export default defineConfig({
   testDir: "./e2e",
   fullyParallel: false,
   retries: 0,
-  reporter: "list",
+  // On GitHub Actions failures also become check annotations.
+  reporter: process.env.CI ? [["list"], ["github"]] : "list",
   use: {
     baseURL: "http://127.0.0.1:8011",
     trace: "retain-on-failure",
