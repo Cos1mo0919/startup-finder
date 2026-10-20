@@ -6,6 +6,14 @@ from sqlalchemy import select
 from .db import RegistrySource, Run, now_utc
 
 MIN_CANDIDATES = 10
+# Outcomes caused by our own limits (LLM down/quota, run budget, slow database)
+# say nothing about the source, so they never count toward deprioritization.
+UNEVALUATED_REASONS = {"llm_unavailable", "llm_retry_exhausted"}
+UNEVALUATED_STAGES = {"budget_stopped", "timeout", "worker_failed", "no_decision"}
+
+
+def evaluated(item):
+    return item.get("reason") not in UNEVALUATED_REASONS and item.get("stage") not in UNEVALUATED_STAGES
 
 
 def recent_yield(session, current=None):
@@ -30,10 +38,12 @@ def recent_yield(session, current=None):
                                          "domain": source.get("domain", ""), "counts": Counter()})
             row["counts"]["candidates"] += 1
             row["counts"][item.get("stage", "unknown")] += 1
-            if item.get("reason") in {"llm_unavailable", "llm_retry_exhausted"}:
+            if item.get("reason") in UNEVALUATED_REASONS:
                 row["counts"]["llm_unavailable"] += 1
+            if evaluated(item):
+                row["counts"]["evaluated"] += 1
     return [{**row, "counts": {key: row["counts"][key] for key in
-             ("candidates", "published", "rejected", "review_required", "llm_unavailable", "fetch_failed")},
-             "deprioritized": row["counts"]["candidates"] >= MIN_CANDIDATES and row["counts"]["published"] == 0,
-             "minimum_candidates": MIN_CANDIDATES, "window": "last_20_runs_7_days"}
+             ("candidates", "evaluated", "published", "rejected", "review_required", "llm_unavailable", "fetch_failed")},
+             "deprioritized": row["counts"]["evaluated"] >= MIN_CANDIDATES and row["counts"]["published"] == 0,
+             "minimum_candidates": MIN_CANDIDATES, "minimum_basis": "evaluated", "window": "last_20_runs_7_days"}
             for row in sorted(counts.values(), key=lambda row: (-row["counts"]["candidates"], row["name"]))]

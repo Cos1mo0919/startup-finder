@@ -141,8 +141,8 @@ export function StatusPage({adminKey}:{adminKey:string}) {
           {item.extraction?.map((step,index)=><p key={index}>Matn: {step.method} · {step.words} so‘z · {step.reason||""}</p>)}
         </details>)}
         {!!s.free_daily.source_yield?.length&&<><h3>Manbalar samaradorligi · oxirgi 20 ish / 7 kun</h3>
-          <table><thead><tr><th>Manba</th><th>Nomzod</th><th>Nashr</th><th>Rad etilgan</th><th>LLM mavjud emas</th><th>Navbat</th></tr></thead><tbody>
-            {s.free_daily.source_yield.map(source=><tr key={source.source_id||source.domain}><td>{source.name}</td><td>{source.counts.candidates}</td><td>{source.counts.published}</td><td>{source.counts.rejected}</td><td>{source.counts.llm_unavailable}</td><td>{source.deprioritized?"Ustuvorlik pasaytirildi":"Oddiy"}</td></tr>)}
+          <table><thead><tr><th>Manba</th><th>Nomzod</th><th>Baholangan</th><th>Nashr</th><th>Rad etilgan</th><th>LLM mavjud emas</th><th>Navbat</th></tr></thead><tbody>
+            {s.free_daily.source_yield.map(source=><tr key={source.source_id||source.domain}><td>{source.name}</td><td>{source.counts.candidates}</td><td>{source.counts.evaluated??"—"}</td><td>{source.counts.published}</td><td>{source.counts.rejected}</td><td>{source.counts.llm_unavailable}</td><td>{source.deprioritized?"Ustuvorlik pasaytirildi":"Oddiy"}</td></tr>)}
           </tbody></table></>}
         <table><thead><tr><th>Resurs</th><th>Bugun / kunlik limit</th><th>24 soatda</th></tr></thead><tbody>
           {Object.entries(s.free_daily.limits).map(([key,limits])=><tr key={key}><td>{resourceLabels[key]||key}</td>

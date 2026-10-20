@@ -134,17 +134,60 @@ def test_source_yield_is_advisory_and_visible_in_admin(settings, factory):
                          RegistrySource(id="launch", name="Launch", url="https://launch.example", enabled=True, priority=2)])
         session.flush()
         candidates = [{"candidate_id": str(i), "source": {"id": "news", "name": "News", "domain": "news.example"},
-                       "stage": "review_required", "reason": "llm_unavailable"} for i in range(10)]
+                       "stage": "rejected", "reason": "not_a_project"} for i in range(10)]
         session.add(Run(status="completed", started_at=now_utc(), details={"mode": "free_daily", "candidate_runs": candidates}, counts={}))
         for identifier in ("news", "launch"):
             session.add(Candidate(url=f"https://{identifier}.example/item", status="queued", source_id=identifier, article={}))
     with factory() as session:
         report = recent_yield(session)
-        assert report[0]["counts"]["llm_unavailable"] == 10
+        assert report[0]["counts"]["evaluated"] == 10
         assert report[0]["deprioritized"]
         assert free_status(session, settings)["source_yield"] == report
         assert session.get(RegistrySource, "news").enabled
     assert next_candidate(factory, set(), True, poor_sources=["news"]) == "https://launch.example/item"
+
+
+def test_source_yield_ignores_outcomes_caused_by_our_own_limits(settings, factory):
+    # Gazeta.uz/namdu.uz regression: LLM outages, budget stops and timeouts are
+    # not the source's fault and must not deprioritize it.
+    with factory.begin() as session:
+        session.add(RegistrySource(id="gazeta", name="Gazeta", url="https://gazeta.example", enabled=True))
+        source = {"id": "gazeta", "name": "Gazeta", "domain": "gazeta.example"}
+        not_ours = ([{"stage": "review_required", "reason": "llm_unavailable"}] * 8
+                    + [{"stage": "review_required", "reason": "llm_retry_exhausted"}] * 2
+                    + [{"stage": "budget_stopped", "reason": ""}, {"stage": "timeout", "reason": "candidate_timeout"},
+                       {"stage": "worker_failed"}, {"stage": "no_decision", "reason": ""}])
+        evaluated = [{"stage": "rejected", "reason": "not_a_project"}] * 9
+        session.add(Run(status="completed", started_at=now_utc(), counts={}, details={"mode": "free_daily",
+            "candidate_runs": [{"candidate_id": str(i), "source": source, **item}
+                               for i, item in enumerate(not_ours + evaluated)]}))
+    with factory() as session:
+        row = recent_yield(session)[0]
+    assert row["counts"]["candidates"] == 21 and row["counts"]["evaluated"] == 9
+    assert row["counts"]["llm_unavailable"] == 10
+    assert not row["deprioritized"] and row["minimum_basis"] == "evaluated"
+    with factory.begin() as session:
+        session.add(Run(status="completed", started_at=now_utc(), counts={}, details={"mode": "free_daily",
+            "candidate_runs": [{"candidate_id": "x", "source": source, "stage": "fetch_failed", "reason": "http_404"}]}))
+    with factory() as session:
+        assert recent_yield(session)[0]["deprioritized"]  # A real fetch failure is the source's fault.
+
+
+def test_selection_rotates_to_the_least_tried_source(factory):
+    with factory.begin() as session:
+        session.add_all([RegistrySource(id="big", name="Big", url="https://big.example", enabled=True, priority=9),
+                         RegistrySource(id="small", name="Small", url="https://small.example", enabled=True, priority=1)])
+        session.flush()
+        for identifier in ("big", "small"):
+            for index in range(2):
+                session.add(Candidate(url=f"https://{identifier}.example/{index}", status="queued",
+                                      source_id=identifier, article={}))
+    assert next_candidate(factory, set(), True).startswith("https://big.example/")
+    rotated = next_candidate(factory, set(), True, attempts={"id:big": 1}, with_source=True)
+    assert rotated[1] == "small"
+    assert next_candidate(factory, set(), True, attempts={"id:big": 1, "id:small": 1}).startswith("https://big.example/")
+    assert next_candidate(factory, set(), True, excluded_sources=["id:big"], attempts={"id:big": 3}).startswith(
+        "https://small.example/")
 
 
 @pytest.mark.parametrize("enough_time", [True, False])

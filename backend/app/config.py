@@ -65,6 +65,8 @@ class Settings(BaseSettings):
     daily_github_requests_per_day: int = Field(default=2, ge=0, le=10)
     daily_candidates_per_run: int = Field(default=80, ge=1, le=500)
     daily_candidates_per_day: int = Field(default=120, ge=1, le=500)
+    # Per-run cap for one source bucket; selection rotates through sources.
+    daily_candidates_per_source: int = Field(default=3, ge=1, le=50)
     daily_max_sources: int = Field(default=12, ge=1, le=30)
     daily_llm_min_interval_seconds: int = Field(default=6, ge=1, le=120)
     daily_llm_max_output_tokens: int = Field(default=2048, ge=256, le=4096)

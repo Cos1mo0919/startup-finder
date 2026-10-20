@@ -81,8 +81,8 @@ def configured(settings):
     )
 
 
-@pytest.mark.parametrize("trial,expected", [(True, 3), (False, 6)])
-def test_three_per_source_applies_only_to_trial(settings, factory, trial, expected):
+@pytest.mark.parametrize("trial,per_source,expected", [(True, 6, 3), (False, 3, 3), (False, 6, 6)])
+def test_per_source_cap_applies_to_trial_and_configurable_daily(settings, factory, trial, per_source, expected):
     with factory.begin() as session:
         session.add(
             RegistrySource(
@@ -99,7 +99,8 @@ def test_three_per_source_applies_only_to_trial(settings, factory, trial, expect
             )
     result = run_daily(
         configured(settings).model_copy(
-            update={"daily_project_target": 6, "daily_llm_min_interval_seconds": 0}
+            update={"daily_project_target": 6, "daily_llm_min_interval_seconds": 0,
+                    "daily_candidates_per_source": per_source}
         ),
         factory,
         trial=trial,

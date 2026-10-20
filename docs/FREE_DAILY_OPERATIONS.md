@@ -52,6 +52,7 @@ SQLite fallback. Обе команды записывают данные: не �
 | `DAILY_SEARCH_REQUESTS_PER_RUN` / `_PER_DAY` (Brave) | 0 / 0 | 0 / 0 |
 | `DAILY_GITHUB_REQUESTS_PER_RUN` / `_PER_DAY` | 2 / 2 | не больше 1 / 1 |
 | `DAILY_CANDIDATES_PER_RUN` / `_PER_DAY` | 80 / 120 | не больше 20 / 20 |
+| `DAILY_CANDIDATES_PER_SOURCE` | 3 (за запуск, по очереди между источниками) | 3 |
 | `DAILY_MAX_SOURCES` | 12 | не больше 6 |
 | `DAILY_LLM_MIN_INTERVAL_SECONDS` | 6 | 6 |
 | `DAILY_LLM_MAX_OUTPUT_TOKENS` | 2048 | 2048 |
@@ -839,3 +840,50 @@ field paths and error types, never raw replies, input values or validation messa
 into an unsupported name. Strict provider JSON-schema mode is not enabled without
 verifying model support and accounting for the schema's additional token overhead.
 Old `invalid_json_schema` events cannot reveal their failed fields retroactively.
+
+## Run191: счётчики публикаций, честный source_yield и чередование источников (2026-10-20)
+
+**`published` считает проекты, а не кандидатов.** Это разница `DailyStats.published_count`
+за день (Asia/Tashkent) до и после запуска. Одна статья может описывать несколько
+проектов (`MULTI`). В run 191 одна статья Spot (кандидат 196) дала три проекта, поэтому
+`counts.published=3` при одном `published` в `candidate_runs`. Публикации trial
+расходуют ту же дневную цель: run 174 опубликовал 2, run 191 добавил 3, итого 5 = цель.
+Новые поля отчёта:
+
+- `counts.published_candidates` — сколько кандидатов (статей) стали `published`;
+- `counts.published_projects_from_candidates` — сумма проектов от этих кандидатов;
+- `candidate_runs[].projects_published` — проектов от конкретного кандидата;
+- `published_today_before_run`, `source_cap` в details запуска.
+
+Если `published` больше `published_projects_from_candidates`, разницу во время запуска
+добавил кто-то ещё (например, публикация в /admin).
+
+**`daily_project_target` и `daily_publish_limit_reached` — один и тот же лимит,
+`DAILY_PROJECT_TARGET`, на двух уровнях.** В free_daily `daily_publish_limit` приравнивается
+к цели. `daily_publish_limit_reached` — стоп внутри обработки кандидата, когда
+резервирование публикации достигло лимита; оставшиеся проекты статьи откладываются
+(`daily_goal_deferred_entries`) и публикуются в следующем запуске, где есть место в цели,
+без нового вызова LLM.
+`daily_project_target` — стоп всего запуска перед следующим кандидатом.
+
+**`source_yield` больше не штрафует источник за наши собственные ограничения.**
+Источник понижается в очереди, только если у него ≥10 *оценённых* кандидатов
+(`counts.evaluated`) и 0 публикаций. Не считаются оценёнными: причины
+`llm_unavailable`, `llm_retry_exhausted` и стадии `budget_stopped`, `timeout`,
+`worker_failed`, `no_decision`. Реальная ошибка чтения (`fetch_failed`) по-прежнему
+считается. В /admin добавлена колонка «Baholangan». Из-за прежнего правила Gazeta.uz
+(12 кандидатов, все `llm_unavailable`) и namdu.uz (11 из 14) были понижены
+несправедливо; после обновления они вернутся в обычный порядок.
+
+**Лимит на источник и чередование действуют и в daily.** Раньше «не больше 3 с
+одного источника» работало только в trial; daily брал все кандидаты подряд из
+одного источника (run 191: 5 из 5 — Spot). Теперь `DAILY_CANDIDATES_PER_SOURCE`
+(по умолчанию 3) ограничивает кандидатов одного источника за запуск, а выбор
+идёт по кругу: следующим берётся наименее использованный в этом запуске источник.
+Незарегистрированные URL группируются по домену. Если все источники с очередью
+исчерпали лимит, запуск переходит к discovery и заканчивается обычным образом.
+
+**Повтор `llm_unavailable`.** На 2026-10-20 в базе 349 таких кандидатов (288
+`deterministic`, 61 `llm_failed`), у всех 0 неудачных повторов и срок наступил. Они
+выбираются раньше новых кандидатов (через `_llm_retry`, максимум 3 повтора с
+задержкой 6/12 ч), поэтому возвращаются в работу без ручных действий.
