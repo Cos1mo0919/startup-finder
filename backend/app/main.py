@@ -312,25 +312,25 @@ def create_app(settings=None):
                 "page_size": page_size,
             }
 
+    @app.get("/api/catalog/recent")
+    def catalog_recent(limit: int = Query(default=24, ge=1, le=60)):
+        from .freshness import recent_window, site_added_at
+        with factory() as session:
+            items = session.scalars(select(Project).where(Project.publication_status == "PUBLISHED")).all()
+            period, start, end, ordered = recent_window(items, now_utc())
+            return {"period": period, "start": start.date().isoformat(),
+                    "end": (end - timedelta(days=1)).date().isoformat(), "total": len(ordered),
+                    "items": [{**serialize_project(project), "site_added_at": site_added_at(project).isoformat()}
+                              for project in ordered[:limit]]}
+
     @app.get("/api/catalog/home")
     def catalog_home():
         with factory() as session:
             all_items = session.scalars(select(Project).where(Project.publication_status == "PUBLISHED")).all()
-            now = now_utc()
-            today = today_start(now)
-            eligible = [project for project in all_items if not project.date_estimated and
-                        aware(project.published_at) < today + timedelta(days=1)]
-            fresh_period = "empty"
-            fresh = []
-            for label, start in (("today", today), ("yesterday", today - timedelta(days=1)),
-                                 ("three_days", today - timedelta(days=2))):
-                previous = today if label == "yesterday" else None
-                fresh = [project for project in eligible if aware(project.published_at) >= start and
-                         (previous is None or aware(project.published_at) < previous)]
-                if fresh:
-                    fresh_period = label
-                    break
-            ordered = sorted(fresh, key=lambda project: (aware(project.published_at), project.id), reverse=True)
+            from .freshness import home_window
+            # "Bugun qo'shilgan": the Tashkent day a project appeared on the site, not the
+            # source article date; before today's run the home page shows yesterday.
+            fresh_period, fresh_day, ordered = home_window(all_items, now_utc())
             local = [project for project in ordered if project_scope(project) == "Uzbekistan"]
             global_items = [project for project in ordered if project_scope(project) == "Global"]
             github_items = [project for project in ordered if project_scope(project) == "GitHub"]
@@ -352,7 +352,8 @@ def create_app(settings=None):
                 "github_total": sections["GitHub"],
                 "boshqa_total": sections["Boshqa"],
                 "fresh_period": fresh_period,
-                "top": [serialize_project(project) for project in ordered[:6]],
+                "fresh_day": fresh_day.astimezone(TASHKENT).date().isoformat() if fresh_day else None,
+                "top": [serialize_project(project) for project in ordered[:12]],
                 "uzbekistan": [serialize_project(project) for project in local[:4]],
                 "global": [serialize_project(project) for project in global_items[:4]],
                 "github": [serialize_project(project) for project in github_items[:4]],

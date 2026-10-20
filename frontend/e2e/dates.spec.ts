@@ -1,6 +1,13 @@
 import { test, expect } from "@playwright/test";
 import { date, time } from "../src/utils";
 
+// The "So‘nggi paytda" block depends on today's weekday; catalog tests here
+// stub it so their card and link lookups stay deterministic.
+test.beforeEach(async ({ page }) => {
+  await page.route("**/api/catalog/recent*", route => route.fulfill({ json: {
+    period: "this_week", start: "2026-10-19", end: "2026-10-25", total: 0, items: [] } }));
+});
+
 test("Uzbek dates use explicit month names and Tashkent components", () => {
   expect(date("2026-03-10T00:00:00Z")).toBe("10 mart 2026");
   expect(date("2026-10-07T09:48:00Z", true)).toBe("7 oktabr 2026, 14:48");

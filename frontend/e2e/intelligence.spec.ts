@@ -10,7 +10,7 @@ test("public navigation stays focused on projects", async ({ page }) => {
     await expect(navigation.getByRole("link", { name: label })).toBeVisible();
   }
   await expect(page.getByRole("heading", { name: "izlanish." })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Bugungi loyihalar" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Bugun qo‘shilgan loyihalar" })).toBeVisible();
   await expect(page.locator(".intel-metrics a")).toHaveCount(4);
   await expect(page.getByRole("heading", { name: "Eng kuchli imkoniyatlar" })).toHaveCount(0);
   await page.goto("/boshqa");
@@ -36,7 +36,7 @@ test("unknown country with Global scope appears in catalog", async ({ page, requ
     ...listing, total: 1, items: [globalProject],
   } }));
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Bugungi loyihalar" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Bugun qo‘shilgan loyihalar" })).toBeVisible();
   await expect(page.getByText("Global ·", { exact: false }).first()).toBeVisible();
   await page.goto("/loyihalar?country=global");
   await expect(page.getByRole("link", { name: globalProject.name }).first()).toBeVisible();
@@ -87,4 +87,25 @@ test("Boshqa card explains uncertain section without altering project text", asy
   await expect(page.getByRole("heading", { name: "Boshqa" })).toBeVisible();
   await expect(page.getByText("AI aniqlay olmadi.")).toBeVisible();
   await expect(page.getByText("Manba va mamlakat aniqlanmadi.")).toBeVisible();
+});
+
+test("home falls back to yesterday and catalog shows the recent week block", async ({ page, request }) => {
+  const listing = await (await request.get("/api/projects?period=all")).json();
+  const project = listing.items[0];
+  await page.route("**/api/catalog/home", route => route.fulfill({ json: {
+    total: 1, uzbekistan_total: 1, global_total: 0, github_total: 0, boshqa_total: 0,
+    fresh_period: "yesterday", fresh_day: "2026-10-19", top: [project] } }));
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "Kecha qo‘shilgan loyihalar" })).toBeVisible();
+  await expect(page.getByText("kecha qo‘shilganlar ko‘rsatilmoqda", { exact: false })).toBeVisible();
+  await page.route("**/api/catalog/recent*", route => route.fulfill({ json: {
+    period: "last_week", start: "2026-10-12", end: "2026-10-18", total: 1,
+    items: [{ ...project, site_added_at: "2026-10-14T15:05:00+00:00" }] } }));
+  await page.goto("/loyihalar");
+  const recent = page.getByRole("region", { name: "So‘nggi paytda" });
+  await expect(recent).toBeVisible();
+  await expect(recent).toContainText("O‘tgan hafta: 12 oktabr 2026 — 18 oktabr 2026 · 1 ta loyiha");
+  await expect(recent.getByRole("link", { name: project.name }).first()).toBeVisible();
+  await page.goto("/loyihalar?country=global");
+  await expect(page.getByRole("region", { name: "So‘nggi paytda" })).toHaveCount(0);
 });

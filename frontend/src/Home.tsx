@@ -4,8 +4,21 @@ import { useSearchParams } from "react-router-dom";
 import { Card, ErrorBox, Loading } from "./components";
 import type { Project } from "./types";
 import { useApi } from "./useApi";
+import { date } from "./utils";
 
 type Facets = {total:number;sections:Record<string,number>;years:Record<string,number>};
+type Recent = {period:"this_week"|"last_week";start:string;end:string;total:number;items:Project[]};
+
+function RecentSection({categories}:{categories:Record<string,string>}) {
+  // Monday–Wednesday shows last week; from Thursday, the current week (Tashkent time).
+  const recent = useApi<Recent>("/api/catalog/recent");
+  if (recent.loading || recent.error || !recent.data) return null;
+  const {period, start, end, total, items} = recent.data;
+  return <section className="catalog-recent" aria-labelledby="recent-heading">
+    <div className="intel-heading"><h2 id="recent-heading">So‘nggi paytda</h2><span className="catalog-count">{period==="this_week"?"Joriy hafta":"O‘tgan hafta"}: {date(start)} — {date(end)} · {total} ta loyiha</span></div>
+    {items.length?<div className="catalog-grid">{items.map(project=><Card key={project.id} project={project} categories={categories}/>)}</div>:<div className="intel-quiet-state"><strong>{period==="this_week"?"Bu haftada hali yangi loyiha qo‘shilmadi.":"O‘tgan haftada yangi loyiha qo‘shilmagan."}</strong></div>}
+  </section>;
+}
 export function Home({section}:{section?:"boshqa"}={}) {
   const [params, setParams] = useSearchParams();
   const [query, setQuery] = useState(params.get("q") || "");
@@ -28,6 +41,7 @@ export function Home({section}:{section?:"boshqa"}={}) {
   };
   return <main className="page catalog-page">
     <div className="catalog-heading"><h1>{section ? "Boshqa" : "Loyihalar"}</h1><p>{section ? "Bo‘limi ishonchli aniqlanmagan, lekin nashrga yaroqli loyihalar." : "Mahsulotlar, startaplar va prototiplar — qisqa tavsif va asl manbalar bilan."}</p></div>
+    {!section && !country && !year && !params.get("q") && page===1 && <RecentSection categories={meta.data?.categories || {}}/>}
     <div className="catalog-controls">
       <label>Yil <select aria-label="Yil" value={year} onChange={event=>change("year",event.target.value)}><option value="">Barchasi ({facets.data?.total??0})</option>{[2026,2025].map(value=><option key={value} value={value}>{value} ({facets.data?.years[String(value)]??0})</option>)}</select></label>
       {!section && <label>Bo‘lim <select aria-label="Bo‘lim" value={country} onChange={event=>change("country",event.target.value)}><option value="">Barchasi ({facets.data?.total??0})</option>{[["Uzbekistan","O‘zbekiston"],["global","Global"],["github","GitHub"],["boshqa","Boshqa"]].map(([value,label])=><option key={value} value={value}>{label} ({facets.data?.sections[value==="global"?"Global":value==="github"?"GitHub":value==="boshqa"?"Boshqa":"Uzbekistan"]??0})</option>)}</select></label>}

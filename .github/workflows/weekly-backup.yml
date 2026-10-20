@@ -1,9 +1,10 @@
 name: Private encrypted PostgreSQL backup
 on:
   workflow_dispatch:
-  # Enable only after owner approval and artifact quota review:
-  # schedule:
-  #   - cron: '0 2 * * 0' # Sunday 07:00 Asia/Tashkent
+  # Owner-approved (2026-10-20): every Sunday 02:00 UTC = 07:00 Asia/Tashkent,
+  # well away from the 20:00 daily discovery run.
+  schedule:
+    - cron: '0 2 * * 0'
 permissions:
   contents: read
 concurrency:
@@ -39,7 +40,8 @@ jobs:
         with:
           name: encrypted-postgres-backup
           path: data/backups/*.gpg
-          retention-days: 7
+          # Two weekly backups (<= 2 x 20 MiB) stay within the free artifact storage.
+          retention-days: 14
           if-no-files-found: error
       - name: Remove runner dump files
         if: always()
