@@ -815,3 +815,12 @@ is removed from the address bar immediately, and the key is checked by the new
 `GET /api/admin/verify` before any admin UI renders. Admin API authorization is
 unchanged (401 on a wrong key). Daily run 197 confirmed source rotation
 (15 candidates from 15 sources) and consistent publication counters.
+
+## Admin header, session reset and official URL support — 2026-10-20
+
+In a verified admin session the header shows the admin menu (with "Chiqish")
+instead of the public menu; the logo still leads to `/`. Visiting any public
+page ends the admin session, so `/admin` without the key is a not-found page
+again; back/forward-cache restores are re-checked. `unsupported_official_url`
+no longer discards analyses: official URLs are compared ignoring case, scheme,
+`www.` and trailing slash; unsupported ones are dropped (null), never stored.

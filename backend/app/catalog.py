@@ -18,7 +18,7 @@ from sqlalchemy.orm import lazyload
 from .config import ROOT
 from .db import Project, Source
 from .detection import normalize
-from .network import canonical_url, public_dns, safe_url
+from .network import FetchError, canonical_url, public_dns, safe_url
 
 SECTORS = (
     "AI", "FinTech", "HealthTech", "EdTech", "AgriTech", "Logistics",
@@ -102,15 +102,48 @@ def meaningful_words(text: str) -> list[str]:
     return [word for word in words(text) if len(word) > 2 and word.casefold() not in stop]
 
 
+_SCHEME = re.compile(r"^[a-z][a-z0-9+.-]*://", re.I)
+
+
+def _mentioned(fragment: str, text: str) -> bool:
+    """Case-insensitive mention bounded so "x.ai" does not match inside "turistx.ai"."""
+    pattern = r"(?<![\w.-])(?:https?://)?(?:www\.)?" + re.escape(fragment) + r"(?![\w-])"
+    return re.search(pattern, text, re.I) is not None
+
+
+def supported_official_url(url: str, source_text: str) -> str | None:
+    """Return the URL when the source shows it (a bare domain is enough for a site
+    root), otherwise None. Comparison ignores case, scheme, "www." and trailing "/"."""
+    candidate = url.strip()
+    if not _SCHEME.match(candidate):
+        candidate = "https://" + candidate
+    candidate = re.sub(r"^http://", "https://", candidate, flags=re.I)
+    try:
+        candidate = safe_url(candidate)
+    except FetchError:
+        return None
+    parts = urlsplit(candidate)
+    host = parts.hostname or ""
+    bare_host = host.removeprefix("www.")
+    if "." not in bare_host:
+        return None
+    full = (bare_host + parts.path).rstrip("/") + (("?" + parts.query) if parts.query else "")
+    if full != bare_host:
+        # A specific page (github.com/owner/repo, t.me/channel) must appear as is;
+        # falling back to a shared host's root would be a misleading "official" URL.
+        return candidate if _mentioned(full, source_text) else None
+    return f"https://{host}/" if _mentioned(bare_host, source_text) else None
+
+
 def validate_entry(entry: CatalogEntry, source_text: str, method: str = "llm") -> None:
     if entry.sector not in SECTORS or entry.project_type not in PROJECT_TYPES or entry.stage not in STAGES:
         raise ClassifierFailure("invalid_enum")
     if normalize(entry.name) not in normalize(source_text):
         raise ClassifierFailure("unsupported_project_name")
     if entry.official_url:
-        safe_url(entry.official_url)
-        if entry.official_url not in source_text:
-            raise ClassifierFailure("unsupported_official_url")
+        # official_url is optional: an unsupported URL is dropped, never stored
+        # and never a reason to discard an otherwise valid analysis.
+        entry.official_url = supported_official_url(entry.official_url, source_text)
     if method == "llm":
         if not 10 <= len(words(entry.description_uz)) <= 15:
             raise ClassifierFailure("invalid_description")

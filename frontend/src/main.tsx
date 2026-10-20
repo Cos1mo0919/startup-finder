@@ -1,6 +1,7 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { createRoot } from "react-dom/client";
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Route, Routes, useLocation } from "react-router-dom";
+import { clearAdminSession, isAdminPath } from "./adminSession";
 import { Footer, Header, NotFound } from "./components";
 import { Detail } from "./Detail";
 import { Home } from "./Home";
@@ -8,9 +9,19 @@ import { ArchivePage, DashboardPage, SourcesPage } from "./Intelligence";
 import { AdminPage } from "./Admin";
 import "./style.css";
 import "./intelligence-theme.css";
+function AdminSessionGuard() {
+  // Visiting any public page ends the admin session, so typing /admin again
+  // without the key shows the ordinary "not found" page.
+  const { pathname } = useLocation();
+  useEffect(() => {
+    if (!isAdminPath(pathname)) clearAdminSession();
+  }, [pathname]);
+  return null;
+}
 function App() {
   return (
     <BrowserRouter>
+      <AdminSessionGuard />
       <Header />
       <Routes>
         <Route path="/" element={<DashboardPage />} />

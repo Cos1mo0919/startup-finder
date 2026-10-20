@@ -527,3 +527,24 @@ def test_similar_names_with_conflicting_creators_not_merged(settings, factory):
         match, possible = duplicate_decision(session, CatalogEntry(name="KotibAI", creator="Another Creator", confidence=0.9), "https://example.org/other")
         assert match is None and possible is not None
         assert possible.name == "KotibAI"
+
+
+@pytest.mark.parametrize("given,text,expected", [
+    # Run 197 regressions: the model normalized a URL the page writes differently.
+    ("https://pulse.ciphera.net", "Demo: https://pulse.ciphera.net/demo", "https://pulse.ciphera.net/"),
+    ("https://kotib.ai", "KotibAI (Kotib.ai) xizmati", "https://kotib.ai/"),
+    ("http://WWW.Kotib.uz/app/", "Sayt: www.kotib.uz/app", "https://www.kotib.uz/app/"),
+    ("https://kotib.ai/pricing", "KotibAI sayti: https://kotib.ai/pricing", "https://kotib.ai/pricing"),
+    # Unsupported, invented or unsafe URLs are dropped, not stored.
+    ("https://kotib.uz", "KotibAI xizmati", None),
+    ("https://x.ai", "Kotibx.ai xizmati", None),
+    ("https://github.com/someone/else", "Kod: github.com/kotib/app", None),
+    ("https://kotib.ai/invented/path", "KotibAI (kotib.ai) xizmati", None),
+    ("javascript:alert(1)", "KotibAI xizmati", None),
+    ("https://localhost/admin", "KotibAI localhost", None),
+])
+def test_official_url_is_compared_loosely_and_dropped_when_unsupported(given, text, expected):
+    source = "KotibAI ovozli xabarlarni matnga aylantiradi. " + text
+    result = parse_classifier_response(project_payload(official_url=given), source)
+    assert result.classification == "PROJECT"
+    assert result.entries[0].official_url == expected
