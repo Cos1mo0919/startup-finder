@@ -407,3 +407,12 @@ def test_admin_shows_github_target_and_next_scheduled_run(settings, factory):
         datetime(2026, 10, 23, 15, 0, tzinfo=timezone.utc)
     workflow = (Path(__file__).parents[1] / ".github/workflows/daily-discovery.yml").read_text()
     assert f"cron: '{SCHEDULE_UTC_MINUTE} {SCHEDULE_UTC_HOUR} * * *'" in workflow
+
+
+def test_memory_guard_stops_a_run_at_the_configured_peak(settings, factory, isolated_memory_guard,
+                                                          offline_daily_preflight):
+    seed_candidates(factory, ["AtlasGarden"])
+    isolated_memory_guard.ru_maxrss = 400 * 1024  # 400 MiB >= the 384 MiB default
+    result = run_daily(settings, factory, pipeline_factory=publishing_pipeline)
+    assert result["stop_reason"] == "memory_guard"
+    assert result["counts"]["attempted"] == 0 and not result["usage"].get("llm:gemini")

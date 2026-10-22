@@ -1,8 +1,22 @@
 from datetime import timedelta
+from types import SimpleNamespace
+
 import pytest
 from backend.app.config import Settings
 from backend.app.db import make_db, now_utc
 from backend.app.schemas import Analysis, Article, Evidence, Fact
+
+
+@pytest.fixture(autouse=True)
+def isolated_memory_guard(monkeypatch):
+    """The daily memory guard reads the *peak* RSS of the whole process. In
+    production each run is a fresh process; in pytest hundreds of tests share
+    one, so the peak would eventually trip the guard in unrelated tests. Report
+    a small fixed peak unless a test sets its own (see test_memory_guard_*)."""
+    fake = SimpleNamespace(ru_maxrss=64 * 1024)  # 64 MiB, in KiB like Linux
+    monkeypatch.setattr("backend.app.free_budget.process_resource",
+                        SimpleNamespace(RUSAGE_SELF=0, getrusage=lambda _who: fake))
+    return fake
 
 
 @pytest.fixture
