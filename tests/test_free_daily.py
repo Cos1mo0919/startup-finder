@@ -382,3 +382,28 @@ def test_ping_is_an_empty_keep_alive_response(settings):
             response = client.request(method, "/api/ping")
             assert response.status_code == 204 and response.content == b""
         assert "/api/ping" not in client.get("/openapi.json").text
+
+
+def test_admin_shows_github_target_and_next_scheduled_run(settings, factory):
+    from datetime import datetime, timezone
+    from pathlib import Path
+    from backend.app.free_budget import SCHEDULE_UTC_HOUR, SCHEDULE_UTC_MINUTE, next_scheduled_run
+    # The web service default (20) must not be shown when the GitHub run used 8.
+    with factory.begin() as session:
+        session.add(Run(status="completed", started_at=now_utc(), counts={},
+                        details={"mode": "free_daily", "trial": True, "target": 5}))
+        session.add(Run(status="completed", started_at=now_utc(), counts={},
+                        details={"mode": "free_daily", "trial": False, "target": 8}))
+        session.add(Run(status="completed", started_at=now_utc(), counts={},
+                        details={"mode": "free_daily", "trial": True, "target": 5}))
+    with factory() as session:
+        status = free_status(session, settings.model_copy(update={"daily_project_target": 20}))
+    assert status["target"] == 8
+    assert datetime.fromisoformat(status["next_scheduled_run"]) > now_utc()
+    # 14:59 UTC -> today 15:00 UTC (20:00 Tashkent); 15:00 UTC -> tomorrow.
+    assert next_scheduled_run(datetime(2026, 10, 22, 14, 59, tzinfo=timezone.utc)) == \
+        datetime(2026, 10, 22, 15, 0, tzinfo=timezone.utc)
+    assert next_scheduled_run(datetime(2026, 10, 22, 15, 0, tzinfo=timezone.utc)) == \
+        datetime(2026, 10, 23, 15, 0, tzinfo=timezone.utc)
+    workflow = (Path(__file__).parents[1] / ".github/workflows/daily-discovery.yml").read_text()
+    assert f"cron: '{SCHEDULE_UTC_MINUTE} {SCHEDULE_UTC_HOUR} * * *'" in workflow

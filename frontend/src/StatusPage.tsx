@@ -87,9 +87,9 @@ export function StatusPage({adminKey}:{adminKey:string}) {
           ],
           [
             "Keyingi qidiruv",
-            s.scheduler_enabled ? date(s.next_run, true) : "Jadval o‘chirilgan",
+            s.scheduler_enabled ? date(s.next_run, true) : s.free_daily?.next_scheduled_run ? `≈ ${date(s.free_daily.next_scheduled_run, true)}` : "Jadval o‘chirilgan",
           ],
-          ["Keyingi kunlik ishlov", s.scheduler_enabled ? date(s.next_daily_processing||null, true) : "Jadval o‘chirilgan"],
+          ["Keyingi kunlik ishlov", s.scheduler_enabled ? date(s.next_daily_processing||null, true) : s.free_daily?.next_scheduled_run ? `≈ ${date(s.free_daily.next_scheduled_run, true)}` : "Jadval o‘chirilgan"],
           ["Jami loyihalar", String(s.total_projects)],
           ["Bugun nashr etildi", `${s.free_daily?.published_today??s.daily_publication?.published??0}/${s.free_daily?.target??s.daily_publication?.limit??100}`],
           ["7 kunda", String(s.daily_publication?.week??0)],

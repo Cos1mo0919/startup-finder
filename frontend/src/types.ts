@@ -131,7 +131,7 @@ export type Run = {
   duration_seconds: number | null;
 };
 export type Status = {
-  free_daily?: {day:string;timezone:string;target:number;published_today:number;found_24h:number;published_24h:number;
+  free_daily?: {day:string;timezone:string;target:number;next_scheduled_run?:string;published_today:number;found_24h:number;published_24h:number;
     page_mode?:string;candidate_budgets?:Record<string,{used:number;limits:number[]}>;page_budgets?:Record<string,{used:number;limits:[number,number];attempted:number;refunded:number}>;
     provider_quotas?: Record<string,{requests:number;tokens:number;reported_tokens:number;unconfirmed_attempts:number;
       limits:{requests:number;tokens:number;rpm:number;tpm:number};warnings:string[];blocked_reason:string;timezone:string;reset_at:string}>;
