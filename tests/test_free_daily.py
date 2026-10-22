@@ -416,3 +416,35 @@ def test_memory_guard_stops_a_run_at_the_configured_peak(settings, factory, isol
     result = run_daily(settings, factory, pipeline_factory=publishing_pipeline)
     assert result["stop_reason"] == "memory_guard"
     assert result["counts"]["attempted"] == 0 and not result["usage"].get("llm:gemini")
+
+
+def test_review_queue_publishes_an_analysed_project_and_refuses_unanalysed_items(settings, factory):
+    page = sample_article(name="AtlasGarden", url="https://fixture.example/atlas")
+    entry = CatalogEntry(name="AtlasGarden", confidence=0.9,
+                         description_uz="AtlasGarden talabalar arizalarini bir joyda qabul qiladi va ishni tezlashtiradi")
+    with factory.begin() as session:
+        save_catalog_result(session, page, CatalogResult("PROJECT", 0.9, (entry,)), settings=settings)
+        project = session.scalar(select(Project))
+        project.publication_status, project.visible = "REVIEW_REQUIRED", False
+        candidate = session.get(Candidate, page.url)
+        candidate.status, candidate.reason = "review_required", "uncertain_not_project"
+        session.add(Candidate(url="https://fixture.example/raw", status="review_required",
+                              reason="llm_unavailable", article={"title": "Raw"}))
+        project_id = project.id
+    headers = {"X-Admin-Key": "test-admin-key"}
+    with TestClient(create_app(settings)) as client:
+        items = {item["url"]: item for item in client.get("/api/admin/review", headers=headers).json()["items"]}
+        assert items[page.url]["publishable"] is True
+        assert items["https://fixture.example/raw"]["publishable"] is False
+        assert client.post("/api/admin/review/publish", params={"url": page.url}).status_code == 401
+        refused = client.post("/api/admin/review/publish", params={"url": "https://fixture.example/raw"}, headers=headers)
+        assert refused.status_code == 422 and refused.json()["detail"] == "not_analysed"
+        done = client.post("/api/admin/review/publish", params={"url": page.url}, headers=headers)
+        assert done.status_code == 200 and done.json()["published"] == [project_id]
+        assert [item["name"] for item in client.get("/api/projects").json()["items"]] == ["AtlasGarden"]
+        assert page.url not in {item["url"] for item in client.get("/api/admin/review", headers=headers).json()["items"]}
+    with factory() as session:
+        project = session.get(Project, project_id)
+        assert project.publication_status == "PUBLISHED" and project.publication_method == "admin"
+        assert session.get(Candidate, page.url).status == "published"
+        assert session.get(Candidate, "https://fixture.example/raw").status == "review_required"

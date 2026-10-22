@@ -39,6 +39,12 @@ def usable_images(images):
             and (not item.get("height") or item["height"] >= 90)]
 
 
+def publishable_project(project) -> bool:
+    """A public card needs a name, a description and at least one source."""
+    return bool(project.name and project.short_description and project.sources
+                and project.publication_status not in {"DUPLICATE", "REJECTED"})
+
+
 def iso(value):
     return aware(value).isoformat() if value else None
 
@@ -531,7 +537,33 @@ def create_app(settings=None):
                 "status_history": c.status_history,
                 "publication_method": next((p.publication_method for pid in c.project_ids or [] if (p := session.get(Project, pid))), ""),
                 "analysis_method": c.analysis_mode,
+                "publishable": any(publishable_project(p) for pid in c.project_ids or []
+                                   if (p := session.get(Project, pid))),
             } for c in rows]}
+
+    @app.post("/api/admin/review/publish", dependencies=[Depends(require_admin)])
+    def review_publish(url: str):
+        """Owner publishes the analysed project(s) behind a review item."""
+        from .catalog_admin import catalog_action
+        from .daily import DailyLimitReached
+        with writer_session(factory) as session:
+            candidate = session.get(Candidate, url)
+            if not candidate or candidate.status not in {"pending", "review_required", "error"}:
+                raise HTTPException(404, "Ko‘rib chiqiladigan nomzod topilmadi")
+            projects = [p for pid in candidate.project_ids or []
+                        if (p := session.get(Project, pid)) and publishable_project(p)]
+            if not projects:
+                # Without an analysed project there is no name/description to show publicly.
+                raise HTTPException(422, "not_analysed")
+            try:
+                published = [catalog_action(session, project.id, "PUBLISH", "admin_review_publish", settings=settings)["id"]
+                             for project in projects]
+            except DailyLimitReached as exc:
+                raise HTTPException(409, exc.reason) from exc
+            candidate.review_decision = "PUBLISH"
+            candidate.status, candidate.reason = "published", ""
+            candidate.updated_at = now_utc()
+            return {"url": url, "status": candidate.status, "published": published}
 
     @app.post("/api/admin/review/action", dependencies=[Depends(require_admin)])
     def review_action(url: str, action: Literal["ACCEPT", "REJECT", "KEEP_FOR_REVIEW"], reason: str = ""):
