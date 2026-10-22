@@ -1,9 +1,17 @@
 """Owner decisions for catalog records. Never discard source provenance."""
 
-from sqlalchemy import select
+from sqlalchemy import String, cast, or_, select
 
 from .catalog_store import history
 from .db import Candidate, Project, now_utc
+
+
+def _related_candidates(session, project_ids, urls):
+    """Only candidates linked to these projects or their source URLs; never the whole table."""
+    conditions = [cast(Candidate.project_ids, String).contains(pid, autoescape=True) for pid in project_ids if pid]
+    if urls:
+        conditions.append(Candidate.url.in_(list(urls)))
+    return session.scalars(select(Candidate).where(or_(*conditions))).all() if conditions else []
 
 
 def catalog_action(session, project_id: str, action: str, reason: str = "", target_id: str = "",
@@ -49,7 +57,7 @@ def catalog_action(session, project_id: str, action: str, reason: str = "", targ
         target.first_seen = min(target.first_seen, project.first_seen)
         target.last_seen = max(target.last_seen, project.last_seen)
         target.status_history = history(target.status_history, "MERGE_RECEIVED", "admin", reason or project.id, when)
-        for candidate in session.scalars(select(Candidate)):
+        for candidate in _related_candidates(session, [project.id], ()):
             if project.id in (candidate.project_ids or []):
                 candidate.project_ids = list(dict.fromkeys(target.id if pid == project.id else pid for pid in candidate.project_ids))
         project.publication_status = "DUPLICATE"
@@ -59,7 +67,7 @@ def catalog_action(session, project_id: str, action: str, reason: str = "", targ
         raise ValueError("invalid_action")
     project.publication_method = "admin"
     project.status_history = history(project.status_history, project.publication_status, "admin", project.publication_reason, when)
-    for candidate in session.scalars(select(Candidate)):
+    for candidate in _related_candidates(session, [project.id], affected_urls):
         if project.id not in (candidate.project_ids or []) and candidate.url not in affected_urls:
             continue
         linked = [session.get(Project, pid) for pid in candidate.project_ids or []]
