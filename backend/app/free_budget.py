@@ -2,7 +2,7 @@
 
 from collections import Counter
 from contextvars import ContextVar
-from datetime import timedelta
+from datetime import timedelta, timezone
 from time import monotonic, sleep
 import resource as process_resource
 
@@ -195,6 +195,28 @@ class DailyBudget:
         self.events.append(event)
 
 
+# Must match the cron in .github/workflows/daily-discovery.yml (checked by a test).
+SCHEDULE_UTC_HOUR, SCHEDULE_UTC_MINUTE = 15, 0  # 20:00 Asia/Tashkent
+
+
+def next_scheduled_run(now):
+    """Next GitHub Actions daily run (GitHub may start it some minutes late)."""
+    candidate = aware(now).astimezone(timezone.utc).replace(
+        hour=SCHEDULE_UTC_HOUR, minute=SCHEDULE_UTC_MINUTE, second=0, microsecond=0)
+    return candidate if candidate > aware(now) else candidate + timedelta(days=1)
+
+
+def last_daily_target(session):
+    """Target of the latest non-trial daily run. The web service does not see the
+    GitHub Actions variables, so its own default must not be shown as the goal."""
+    from .db import Run
+    for details in session.scalars(select(Run.details).where(Run.details["mode"].as_string() == "free_daily")
+                                   .order_by(Run.id.desc()).limit(20)):
+        if details and not details.get("trial") and details.get("target"):
+            return details["target"]
+    return None
+
+
 def free_status(session, settings):
     from .db import Run, DailyStats, RawDiscovery
     from sqlalchemy import func
@@ -260,7 +282,9 @@ def free_status(session, settings):
         recent["llm:" + provider] = len(events)
         recent["tokens:" + provider] = sum(event["tokens"] for event in events)
     from .source_yield import recent_yield
-    return {"source_yield": recent_yield(session), "day": day, "timezone": "Asia/Tashkent", "target": data.get("target", settings.daily_project_target),
+    return {"source_yield": recent_yield(session), "day": day, "timezone": "Asia/Tashkent",
+            "target": data.get("target") or last_daily_target(session) or settings.daily_project_target,
+            "next_scheduled_run": next_scheduled_run(now).isoformat(),
             "published_today": today.published_count if today else 0,
             "usage_today": usage, "usage_24h": dict(recent), "limits": limits,
             "blocked_providers": {**{name: reason for name, reason in data.get("blocked", {}).items()
