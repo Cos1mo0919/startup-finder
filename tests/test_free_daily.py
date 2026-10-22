@@ -374,3 +374,11 @@ def test_github_keeps_earlier_results_when_next_query_hits_the_budget(settings, 
     finally:
         ACTIVE.reset(token)
         client.close()
+
+
+def test_ping_is_an_empty_keep_alive_response(settings):
+    with TestClient(create_app(settings)) as client:
+        for method in ("GET", "HEAD"):
+            response = client.request(method, "/api/ping")
+            assert response.status_code == 204 and response.content == b""
+        assert "/api/ping" not in client.get("/openapi.json").text

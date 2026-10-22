@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 import hmac
 from typing import Literal
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import String, cast, func, or_, select, text
@@ -189,6 +189,11 @@ def create_app(settings=None):
             "default-src 'self'; img-src 'self' https: data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
         )
         return response
+
+    @app.api_route("/api/ping", methods=["GET", "HEAD"], include_in_schema=False)
+    def ping():
+        # Keep-alive target for external uptime pingers: no body, no database work.
+        return Response(status_code=204)
 
     @app.get("/api/health")
     def health():
