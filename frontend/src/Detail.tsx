@@ -19,7 +19,7 @@ export function Detail() {
   const hasAnalysis=!!(p.problem_statement||p.problem_subject||benefit||p.secondary_problems?.length||p.opportunity_score!==null);
   return <main className="page detail public-detail">
     <Link className="back-link" to="/loyihalar"><ArrowLeft size={16}/> Loyihalarga qaytish</Link>
-    <header className="detail-heading"><span className="category">{projectGeographyLabel(p)} · {p.primary_sector||"Other"} · {date(p.published_at)}{p.date_estimated?" (taxminiy)":""}</span><h1>{p.name}</h1>{(p.creator||p.organization)&&<p>{p.creator||p.organization}</p>}</header>
+    <header className="detail-heading"><span className="category">{projectGeographyLabel(p)} · {p.primary_sector||"Other"} · {p.date_estimated?`Topilgan: ${date(p.published_at)}`:date(p.published_at)}</span><h1>{p.name}</h1>{(p.creator||p.organization)&&<p>{p.creator||p.organization}</p>}</header>
     <div className="public-detail-layout"><div className="public-detail-main">
       <section className="detail-section"><h2>Loyiha nima qiladi?</h2><p>{description}</p><div className="catalog-detail-meta"><span>{p.catalog_score===null||p.score_pending?"Baholanmagan":`${p.catalog_score.toFixed(1)} / 10`}</span><span>{p.source_count} ta manba</span><span>{p.project_type}</span></div></section>
       <section className="detail-section"><h2>Asl manbalar</h2>{p.official_url&&<p><External href={p.official_url}>Rasmiy loyiha sahifasi</External></p>}{p.sources?.map(source=><p key={source.url}><External href={source.url}>{source.publisher} · {date(source.published_at)}</External></p>)}</section>

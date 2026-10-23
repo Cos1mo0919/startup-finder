@@ -1,0 +1,192 @@
+/* Buttons, filters and form fields in the site's own style (dark, mint accent).
+   Loaded last so it wins over the older base and theme rules. */
+
+.btn,
+.pagination button,
+.admin-actions button,
+.notice button,
+.catalog-search button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 18px;
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.btn:hover:not(:disabled),
+.pagination button:hover:not(:disabled),
+.admin-actions button:hover:not(:disabled),
+.notice button:hover:not(:disabled) {
+  border-color: var(--accent);
+  filter: none;
+}
+
+.btn-primary,
+.catalog-search button,
+.admin-actions .btn-primary {
+  border-color: transparent;
+  background: var(--accent);
+  color: #0d131a;
+  font-weight: 700;
+}
+.btn-primary:hover:not(:disabled),
+.catalog-search button:hover:not(:disabled),
+.admin-actions .btn-primary:hover:not(:disabled) {
+  border-color: transparent;
+  background: #8ce6c8;
+  filter: none;
+}
+
+.btn-danger,
+.admin-actions .btn-danger {
+  border-color: #7a4a43;
+  background: transparent;
+  color: var(--danger);
+}
+.btn-danger:hover:not(:disabled),
+.admin-actions .btn-danger:hover:not(:disabled) {
+  border-color: var(--danger);
+  background: #2a1b1a;
+}
+
+.btn-pill { border-radius: 999px; }
+
+.btn:disabled,
+.pagination button:disabled,
+.admin-actions button:disabled,
+.catalog-search button:disabled {
+  opacity: 0.42;
+  cursor: default;
+}
+
+/* Catalog and archive controls: search first, then compact filter chips. */
+.catalog-controls {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin: 20px 0 14px;
+}
+.catalog-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 360px;
+  max-width: 560px;
+  min-width: 0;
+}
+.search-field {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  box-sizing: border-box;
+  padding: 0 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text-muted);
+}
+.search-field:focus-within { border-color: var(--accent); }
+.search-field input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 15px;
+}
+.search-field input::placeholder { color: var(--text-muted); }
+
+.filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.chip-select {
+  appearance: none;
+  -webkit-appearance: none;
+  min-height: 40px;
+  padding: 0 34px 0 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background-color: var(--surface);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23b4c7c4' stroke-width='2.5' stroke-linecap='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 13px center;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.chip-select:hover { border-color: var(--accent); }
+.chip-select.is-active {
+  border-color: #317b69;
+  background-color: var(--accent-soft);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2373ddbb' stroke-width='2.5' stroke-linecap='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  color: var(--accent);
+  font-weight: 600;
+}
+.chip-select option { background: var(--surface); color: var(--text-primary); }
+
+.catalog-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 4px 12px;
+  margin: 0 0 16px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+.catalog-meta .catalog-count,
+.catalog-meta .catalog-recent-note { margin: 0; color: var(--text-muted); font-size: 13px; }
+
+.pagination { gap: 12px; font-size: 13px; color: var(--text-muted); }
+
+/* Admin forms (desktop): dark fields that match the buttons. */
+.admin-page input:not([type="checkbox"]),
+.admin-page select,
+.detail-section input:not([type="checkbox"]),
+.detail-section select {
+  min-height: 40px;
+  box-sizing: border-box;
+  padding: 0 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 14px;
+}
+.admin-page input:focus,
+.admin-page select:focus,
+.detail-section input:focus,
+.detail-section select:focus { border-color: var(--accent); outline: none; }
+.admin-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+
+@media (max-width: 700px) {
+  .catalog-controls { flex-direction: column; align-items: stretch; gap: 10px; margin: 16px 0 12px; }
+  .catalog-search { flex: none; max-width: none; }
+  .filter-chips { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
+  .filter-chips::-webkit-scrollbar { display: none; }
+  .chip-select { flex-shrink: 0; }
+  .catalog-page .catalog-heading { margin-bottom: 4px; }
+}

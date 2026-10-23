@@ -1,3 +1,4 @@
+import { Search } from "lucide-react";
 import { useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { Card, External, Loading } from "./components";
@@ -63,7 +64,7 @@ export function ArchivePage(){
   const meta=useApi<{categories:Record<string,string>}>("/api/meta");
   const update=(key:string,value:string)=>{const next=new URLSearchParams(params);if(key!=="page")next.delete("page");if(value)next.set(key,value);else next.delete(key);setParams(next)};
   return <main className="page intel-page archive-page"><h1>Arxiv</h1><p>Loyihalar topilgan kuniga emas, manbadagi nashr sanasiga ko‘ra joylashtiriladi. Eski loyihalar saqlanadi.</p>
-    <div className="catalog-controls"><label>Yil <select aria-label="Yil" value={year} onChange={event=>update("year",event.target.value)}><option value="">Barcha yillar</option>{[2026,2025,2024,2023,2022].map(y=><option value={y} key={y}>{y}</option>)}</select></label><form className="catalog-search" role="search" onSubmit={event=>{event.preventDefault();update("q",query.trim())}}><input aria-label="Arxivda loyiha nomini qidirish" value={query} onChange={event=>setQuery(event.target.value)} placeholder="Loyiha nomi"/><button type="submit">Qidirish</button></form></div>
+    <div className="catalog-controls"><form className="catalog-search" role="search" onSubmit={event=>{event.preventDefault();update("q",query.trim())}}><label className="search-field"><Search size={18} aria-hidden="true"/><input aria-label="Arxivda loyiha nomini qidirish" value={query} onChange={event=>setQuery(event.target.value)} placeholder="Loyiha nomi"/></label><button type="submit">Qidirish</button></form><div className="filter-chips" role="group" aria-label="Filtrlar"><select aria-label="Yil" className={`chip-select${year?" is-active":""}`} value={year} onChange={event=>update("year",event.target.value)}><option value="">Barcha yillar</option>{[2026,2025,2024,2023,2022].map(y=><option value={y} key={y}>{y}</option>)}</select></div></div>
     <p className="catalog-count">{data?.total??0} ta loyiha</p>{loading?<Loading/>:data?.items.length?<div className="catalog-grid">{data.items.map(project=><Card key={project.id} project={project} categories={meta.data?.categories||{}}/>)}</div>:<div className="intel-quiet-state"><strong>Bu davr uchun loyiha topilmadi.</strong><span>Boshqa yilni tanlang yoki barcha arxivni ko‘ring.</span></div>}
     {data&&data.total>data.page_size&&<div className="pagination"><button disabled={page===1} onClick={()=>update("page",String(page-1))}>← Oldingi</button><span>{page}-sahifa</span><button disabled={page*data.page_size>=data.total} onClick={()=>update("page",String(page+1))}>Keyingi →</button></div>}
   </main>;

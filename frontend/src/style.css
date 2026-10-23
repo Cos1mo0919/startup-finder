@@ -1777,17 +1777,7 @@ footer > span {
 @media(max-width:720px){.intel-rubric{grid-template-columns:1fr}}
 
 .not-found { text-align: center; }
-.not-found-back {
-  margin-top: 1rem;
-  padding: 0.6rem 1.4rem;
-  border-radius: 999px;
-  border: 1px solid currentColor;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  cursor: pointer;
-}
-.not-found-back:hover, .not-found-back:focus-visible { opacity: 0.8; }
+.not-found-back { margin-top: 1rem; }
 
 .header-admin .admin-logout {
   height: 34px;
