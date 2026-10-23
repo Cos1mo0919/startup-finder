@@ -116,7 +116,7 @@ export function NotFound() {
     <main className="page empty-state not-found">
       <h1>Bunday sahifa mavjud emas</h1>
       <p>Siz qidirgan manzil topilmadi.</p>
-      <button type="button" className="not-found-back" onClick={() => navigate("/", { replace: true })}>
+      <button type="button" className="btn btn-primary btn-pill not-found-back" onClick={() => navigate("/", { replace: true })}>
         Orqaga
       </button>
     </main>
@@ -169,7 +169,7 @@ export function Card({
           <Leaf size={13} />
           {categories[p.primary_sector] || p.primary_sector || categories[p.category] || "Boshqa"}
         </span>
-        <span className="card-date">{projectGeographyLabel(p)} · {date(p.published_at)}{p.date_estimated ? " (taxminiy)" : ""}</span>
+        <span className="card-date">{projectGeographyLabel(p)} · {p.date_estimated ? `Topilgan: ${date(p.published_at)}` : date(p.published_at)}</span>
       </div>
       <div className="card-body">
         <div className="card-copy">

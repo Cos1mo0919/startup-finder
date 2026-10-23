@@ -9,6 +9,7 @@ import { ArchivePage, DashboardPage, SourcesPage } from "./Intelligence";
 import { AdminPage } from "./Admin";
 import "./style.css";
 import "./intelligence-theme.css";
+import "./controls.css";
 function AdminSessionGuard() {
   // Visiting any public page ends the admin session, so typing /admin again
   // without the key shows the ordinary "not found" page.
