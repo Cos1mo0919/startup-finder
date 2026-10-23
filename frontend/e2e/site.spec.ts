@@ -22,7 +22,8 @@ test("project catalog and detail show the product before optional analysis", asy
   await page.getByRole("textbox", { name: "Loyiha nomini qidirish" }).fill("Agro");
   await page.getByRole("button", { name: "Qidirish" }).click();
   await expect(page.getByRole("link", { name: "AgroKo‘mak" })).toBeVisible();
-  await page.getByRole("combobox", { name: "Bo‘lim" }).selectOption("global");
+  await page.getByRole("button", { name: "Bo‘lim: barchasi" }).click();
+  await page.getByRole("listbox", { name: "Bo‘lim" }).getByRole("option", { name: /^Global/ }).click();
   await expect(page.getByRole("link", { name: "AgroKo‘mak" })).toHaveCount(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   expect(errors).toEqual([]);
