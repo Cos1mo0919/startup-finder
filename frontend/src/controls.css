@@ -72,6 +72,8 @@
 
 /* Catalog and archive controls: search first, then compact filter chips. */
 .catalog-controls {
+  min-width: 0;
+  max-width: 100%;
   display: flex;
   flex-direction: row;
   flex-wrap: wrap;
@@ -104,6 +106,7 @@
 .search-field:focus-within { border-color: var(--accent); }
 .search-field input {
   flex: 1;
+  width: 100%;
   min-width: 0;
   border: 0;
   outline: none;
@@ -115,6 +118,8 @@
 .search-field input::placeholder { color: var(--text-muted); }
 
 .filter-chips {
+  min-width: 0;
+  max-width: 100%;
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
@@ -184,7 +189,11 @@
 
 @media (max-width: 700px) {
   .catalog-controls { flex-direction: column; align-items: stretch; gap: 10px; margin: 16px 0 12px; }
-  .catalog-search { flex: none; max-width: none; }
+  .catalog-search { flex: none; max-width: none; width: 100%; min-width: 0; }
+  .catalog-search button { flex-shrink: 0; }
+  .search-field { overflow: hidden; }
+  /* A nowrap chip row must scroll inside the page, never widen it. */
+  .catalog-page, .archive-page { min-width: 0; overflow-x: clip; }
   .filter-chips { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
   .filter-chips::-webkit-scrollbar { display: none; }
   .chip-select { flex-shrink: 0; }
