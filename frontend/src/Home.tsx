@@ -2,6 +2,7 @@ import { Search } from "lucide-react";
 import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Card, ErrorBox, Loading } from "./components";
+import { FilterBar } from "./FilterBar";
 import type { Project } from "./types";
 import { useApi } from "./useApi";
 import { date } from "./utils";
@@ -34,11 +35,14 @@ export function Home({section}:{section?:"boshqa"}={}) {
     <div className="catalog-heading"><h1>{section ? "Boshqa" : "Loyihalar"}</h1><p>{section ? "Bo‘limi ishonchli aniqlanmagan, lekin nashrga yaroqli loyihalar." : "Mahsulotlar, startaplar va prototiplar — qisqa tavsif va asl manbalar bilan."}</p></div>
     <div className="catalog-controls">
       <form className="catalog-search" role="search" onSubmit={event=>{event.preventDefault();change("q",query.trim())}}><label className="search-field"><Search size={18} aria-hidden="true"/><input aria-label="Loyiha nomini qidirish" value={query} onChange={event=>setQuery(event.target.value)} placeholder="Loyiha nomi"/></label><button type="submit">Qidirish</button></form>
-      <div className="filter-chips" role="group" aria-label="Filtrlar">
-        <select aria-label="Davr" className={`chip-select${recentOnly ? " is-active" : ""}`} value={recentOnly ? "recent" : ""} onChange={event=>change("period",event.target.value)}><option value="">Barcha vaqt ({facets.data?.total??0})</option><option value="recent">So‘nggi paytda ({facets.data?.recent?.total??0})</option></select>
-        <select aria-label="Yil" className={`chip-select${year ? " is-active" : ""}`} value={year} onChange={event=>change("year",event.target.value)}><option value="">Yil: barchasi ({facets.data?.total??0})</option>{[2026,2025].map(value=><option key={value} value={value}>{value} ({facets.data?.years[String(value)]??0})</option>)}</select>
-        {!section && <select aria-label="Bo‘lim" className={`chip-select${country ? " is-active" : ""}`} value={country} onChange={event=>change("country",event.target.value)}><option value="">Bo‘lim: barchasi ({facets.data?.total??0})</option>{[["Uzbekistan","O‘zbekiston"],["global","Global"],["github","GitHub"],["boshqa","Boshqa"]].map(([value,label])=><option key={value} value={value}>{label} ({facets.data?.sections[value==="global"?"Global":value==="github"?"GitHub":value==="boshqa"?"Boshqa":"Uzbekistan"]??0})</option>)}</select>}
-      </div>
+      <FilterBar filters={[
+        {key:"period",name:"Davr",placeholder:"Barcha vaqt",prefix:"",value:recentOnly?"recent":"",onChange:value=>change("period",value),
+          options:[{value:"",label:"Barcha vaqt",count:facets.data?.total??0},{value:"recent",label:"So‘nggi paytda",count:facets.data?.recent?.total??0}]},
+        {key:"year",name:"Yil",placeholder:"Yil: barchasi",prefix:"Yil: ",value:year,onChange:value=>change("year",value),
+          options:[{value:"",label:"Barchasi",count:facets.data?.total??0},...[2026,2025].map(value=>({value:String(value),label:String(value),count:facets.data?.years[String(value)]??0}))]},
+        ...(section?[]:[{key:"country",name:"Bo‘lim",placeholder:"Bo‘lim: barchasi",prefix:"Bo‘lim: ",value:country,onChange:(value:string)=>change("country",value),
+          options:[{value:"",label:"Barchasi",count:facets.data?.total??0},...[["Uzbekistan","O‘zbekiston","Uzbekistan"],["global","Global","Global"],["github","GitHub","GitHub"],["boshqa","Boshqa","Boshqa"]].map(([value,label,facet])=>({value,label,count:facets.data?.sections[facet]??0}))]}]),
+      ]}/>
     </div>
     <div className="catalog-meta">
       {recentOnly && facets.data?.recent ? <p className="catalog-recent-note">{facets.data.recent.period==="this_week"?"Joriy hafta":"O‘tgan hafta"}: {date(facets.data.recent.start)} — {date(facets.data.recent.end)}</p> : <span/>}

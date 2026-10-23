@@ -21,7 +21,7 @@ test("public navigation stays focused on projects", async ({ page }) => {
   await expect(page.locator("body")).not.toContainText("HTTP 403");
   await page.goto("/arxiv?year=2022");
   await expect(page.getByRole("heading", { name: "Arxiv" })).toBeVisible();
-  await expect(page.getByRole("combobox", { name: "Yil" })).toHaveValue("2022");
+  await expect(page.getByRole("button", { name: "Yil: 2022" })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   expect(errors).toEqual([]);
 });
@@ -56,7 +56,7 @@ test("GitHub source has its own catalog tab and home counter", async ({ page, re
   await page.goto("/");
   await expect(page.getByRole("link", { name: /1\s*GitHub/ })).toBeVisible();
   await page.goto("/loyihalar?country=github");
-  await expect(page.getByRole("combobox", { name: "Bo‘lim" })).toHaveValue("github");
+  await expect(page.getByRole("button", { name: "Bo‘lim: GitHub" })).toBeVisible();
   await expect(page.getByRole("link", { name: project.name }).first()).toBeVisible();
 });
 
@@ -73,8 +73,17 @@ test("empty fresh window links to archive and catalog offers year and section co
   await expect(page.getByText("Hozircha yangi loyihalar yo‘q.")).toBeVisible();
   await expect(page.getByRole("link", { name: "Arxivga o‘ting →" })).toHaveAttribute("href", "/arxiv");
   await page.goto("/loyihalar");
-  await expect(page.getByRole("combobox", { name: "Yil" }).getByRole("option", { name: "2025 (1)" })).toHaveCount(1);
-  await expect(page.getByRole("combobox", { name: "Bo‘lim" }).getByRole("option", { name: "Boshqa (1)" })).toHaveCount(1);
+  // Filters are chips with an in-page panel, never a native select popup.
+  await expect(page.locator("select")).toHaveCount(0);
+  await page.getByRole("button", { name: "Yil: barchasi" }).click();
+  await expect(page.getByRole("listbox", { name: "Yil" }).getByRole("option", { name: "2025 1 ta" })).toHaveCount(1);
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("listbox")).toHaveCount(0);
+  await page.getByRole("button", { name: "Bo‘lim: barchasi" }).click();
+  await expect(page.getByRole("listbox", { name: "Bo‘lim" }).getByRole("option", { name: "Boshqa 1 ta" })).toHaveCount(1);
+  // Tapping elsewhere closes the panel.
+  await page.getByRole("heading", { name: "Loyihalar", exact: true }).click();
+  await expect(page.getByRole("listbox")).toHaveCount(0);
 });
 
 test("Boshqa card explains uncertain section without altering project text", async ({ page, request }) => {
@@ -107,19 +116,23 @@ test("home falls back to So‘nggi loyihalar and catalog offers the So‘nggi pa
   await page.route("**/api/projects?*", route =>
     route.fulfill({ json: { items: [project], total: 1, page: 1, page_size: 12 } }));
   await page.goto("/loyihalar");
-  const period = page.getByRole("combobox", { name: "Davr" });
-  await expect(period.getByRole("option", { name: "So‘nggi paytda (1)" })).toHaveCount(1);
+  await page.getByRole("button", { name: "Barcha vaqt" }).click();
+  const period = page.getByRole("listbox", { name: "Davr" });
+  await expect(period.getByRole("option", { name: "So‘nggi paytda 1 ta" })).toHaveCount(1);
   const recentRequest = page.waitForRequest(request =>
     request.url().includes("/api/projects?") && request.url().includes("period=recent"));
-  await period.selectOption("recent");
+  await period.getByRole("option", { name: /So‘nggi paytda/ }).click();
   await recentRequest;
   await expect(page).toHaveURL(/period=recent/);
   await expect(page.getByText("O‘tgan hafta: 12 oktabr 2026 — 18 oktabr 2026")).toBeVisible();
   // The other filters stay available and combine with it.
-  await expect(page.getByRole("combobox", { name: "Yil" })).toBeVisible();
-  await expect(page.getByRole("combobox", { name: "Bo‘lim" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "So‘nggi paytda" })).toBeVisible();
+  await expect(page.getByRole("listbox")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Yil: barchasi" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Bo‘lim: barchasi" })).toBeVisible();
   await expect(page.getByRole("textbox", { name: "Loyiha nomini qidirish" })).toBeVisible();
-  await page.getByRole("combobox", { name: "Bo‘lim" }).selectOption("Uzbekistan");
+  await page.getByRole("button", { name: "Bo‘lim: barchasi" }).click();
+  await page.getByRole("listbox", { name: "Bo‘lim" }).getByRole("option", { name: /O‘zbekiston/ }).click();
   await expect(page).toHaveURL(/period=recent/);
   await expect(page).toHaveURL(/country=Uzbekistan/);
 });
