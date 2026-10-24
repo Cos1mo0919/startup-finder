@@ -108,12 +108,15 @@ def offline_daily_preflight(monkeypatch):
     monkeypatch.setattr("backend.app.free_daily.llm_preflight", lambda settings: True)
 
 
-def pytest_runtest_logreport(report):
-    """On GitHub Actions, surface failing tests as check annotations."""
+
+def pytest_terminal_summary(terminalreporter):
+    """On GitHub Actions, surface failing tests and collection errors as check annotations."""
     import os
-    import sys
-    if report.failed and os.environ.get("GITHUB_ACTIONS") == "true":
-        path, line, _ = report.location
-        message = str(report.longrepr).strip().splitlines()[-1][:500].replace("%", "%25")
-        sys.__stdout__.write(f"::error file={path},line={(line or 0) + 1}::{report.nodeid}: {message}\n")
-        sys.__stdout__.flush()
+    if os.environ.get("GITHUB_ACTIONS") != "true":
+        return
+    for report in terminalreporter.stats.get("failed", []) + terminalreporter.stats.get("error", []):
+        location = getattr(report, "location", None) or (getattr(report, "nodeid", "") or "tests", None, "")
+        path, line = location[0], location[1]
+        lines = [x for x in str(report.longrepr).strip().splitlines() if x.strip()] or ["failed"]
+        message = (lines[-1] + " | " + " / ".join(lines[-6:-1]))[:900].replace("%", "%25")
+        terminalreporter.write_line(f"::error file={path},line={(line or 0) + 1}::{report.nodeid}: {message}")
