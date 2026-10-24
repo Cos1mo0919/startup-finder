@@ -234,7 +234,12 @@ def test_actual_usage_captured_by_both_http_adapters_and_output_is_bounded(monke
 
 
 def test_token_eighty_percent_warning_is_visible_to_admin(settings, factory):
-    budget = managed(settings, factory)
+    # The loop below advances the clock ~16 minutes. Start at least an hour before
+    # Tashkent midnight so the simulated run never crosses into the next day.
+    now = datetime.now(timezone.utc)
+    if (now + timedelta(hours=5)).hour >= 23:
+        now -= timedelta(hours=1)
+    budget = managed(settings, factory, clock=lambda: now)
     for index in range(16):
         budget.quotas.reserve("groq", 5000)
         # Advance rate window without spending wall-clock time.
