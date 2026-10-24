@@ -1,3 +1,4 @@
+from tests.admin_key import ADMIN_KEY
 from datetime import timedelta
 from types import SimpleNamespace
 
@@ -34,7 +35,7 @@ def settings(tmp_path):
         openrouter_api_key="",
         groq_api_key="",
         search_api_key="",
-        admin_api_key="test-admin-key",
+        admin_api_key=ADMIN_KEY,
     )
 
 

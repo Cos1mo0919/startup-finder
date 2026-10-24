@@ -1,3 +1,4 @@
+from tests.admin_key import ADMIN_KEY
 from zoneinfo import ZoneInfo
 from datetime import timedelta
 import json
@@ -135,7 +136,7 @@ def test_missing_key_is_visible_configuration_state(settings, factory):
     )
     Discovery(settings, FakeWeb(), factory=factory).discover(now_utc())
     with TestClient(create_app(settings)) as client:
-        assert client.get("/api/admin/sources", headers={"X-Admin-Key": "test-admin-key"}).json()[0]["status"] == "NEEDS_CONFIG"
+        assert client.get("/api/admin/sources", headers={"X-Admin-Key": ADMIN_KEY}).json()[0]["status"] == "NEEDS_CONFIG"
 
 
 def test_stop_filter_hides_unknown_creator_and_records_reasons(settings, factory):
@@ -145,7 +146,7 @@ def test_stop_filter_hides_unknown_creator_and_records_reasons(settings, factory
     Pipeline(settings, factory, FakeDiscovery([])).persist(analysis, [article], now_utc())
     with TestClient(create_app(settings)) as client:
         assert client.get("/api/projects?period=all").json()["total"] == 0
-        status = client.get("/api/admin/status", headers={"X-Admin-Key": "test-admin-key"}).json()
+        status = client.get("/api/admin/status", headers={"X-Admin-Key": ADMIN_KEY}).json()
         assert status["evidence_summary"]["hidden_projects"] == 1
         assert "Muallif yoki jamoa tasdiqlanmagan" in status["rejected_candidates"][0]["reason_labels"]
         hidden = status["project_debug"][0]["id"]
@@ -277,7 +278,7 @@ def test_multi_sector_filters_stats_exclude_hidden(settings, factory):
     Pipeline(settings, factory, FakeDiscovery([])).persist(analysis, [a], now_utc())
     with TestClient(create_app(settings)) as client:
         assert client.get("/api/projects?period=all&category=ai").json()["total"] == 1
-        stats = client.get("/api/sectors/stats", headers={"X-Admin-Key": "test-admin-key"}).json()
+        stats = client.get("/api/sectors/stats", headers={"X-Admin-Key": ADMIN_KEY}).json()
         assert stats["total_projects"] == 1
         assert next(s for s in stats["items"] if s["sector"] == "ai")["count"] == 1
         assert next(s for s in stats["items"] if s["sector"] == "agritech")["count"] == 1

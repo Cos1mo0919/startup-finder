@@ -1,5 +1,6 @@
 """Isolated test server. Fixtures NEVER enter the live database."""
 
+from tests.admin_key import ADMIN_KEY
 import tempfile
 import os
 from pathlib import Path
@@ -27,7 +28,7 @@ def main():
             openrouter_api_key="",
             groq_api_key="",
             search_api_key="",
-            admin_api_key="test-admin-key",
+            admin_api_key=ADMIN_KEY,
         )
         engine, factory = make_db(settings.database_url)
         article = sample_article()

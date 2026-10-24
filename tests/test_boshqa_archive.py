@@ -1,3 +1,4 @@
+from tests.admin_key import ADMIN_KEY
 import pytest
 from datetime import datetime, timedelta, timezone
 
@@ -30,13 +31,13 @@ def test_boshqa_requires_published_project_and_admin_assignment(settings, factor
         project = session.get(Project, old)
         assert project_scope(project) == "Boshqa"
     with TestClient(create_app(settings)) as client:
-        assert client.get("/api/admin/catalog?section=Boshqa", headers={"X-Admin-Key": "test-admin-key"}).json()["total"] == 1
+        assert client.get("/api/admin/catalog?section=Boshqa", headers={"X-Admin-Key": ADMIN_KEY}).json()["total"] == 1
         assert client.get("/api/projects?country=boshqa").json()["total"] == 1
         assert client.get("/api/projects?archive=true&year=2025").json()["total"] == 1
         assert client.get("/api/projects?country=global").json()["total"] == 0
         assert client.post(f"/api/admin/projects/{old}/section?section=Global&reason=Official%20company%20review").status_code == 401
         response = client.post(f"/api/admin/projects/{old}/section?section=Global&reason=Official%20company%20review",
-                               headers={"X-Admin-Key": "test-admin-key"})
+                               headers={"X-Admin-Key": ADMIN_KEY})
         assert response.status_code == 200
         assert client.get("/api/projects?country=boshqa").json()["total"] == 0
         assert client.get("/api/projects?country=global").json()["total"] == 1

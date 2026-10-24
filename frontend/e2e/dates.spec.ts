@@ -1,6 +1,9 @@
 import { test, expect } from "@playwright/test";
 import { date, time } from "../src/utils";
 
+// Random per run, set in playwright.config.ts and shared with the browser server.
+const ADMIN_KEY = process.env.TEST_ADMIN_KEY!;
+
 test("Uzbek dates use explicit month names and Tashkent components", () => {
   expect(date("2026-03-10T00:00:00Z")).toBe("10 mart 2026");
   expect(date("2026-10-07T09:48:00Z", true)).toBe("7 oktabr 2026, 14:48");
@@ -68,7 +71,7 @@ test("feed, detail and status render Uzbek month names in the browser", async ({
   });
   await page.goto("/admin");
   await expect(page.getByRole("heading", { name: "Bunday sahifa mavjud emas" })).toBeVisible();
-  await page.keyboard.type("test-admin-key");
+  await page.keyboard.type(ADMIN_KEY);
   await page.keyboard.press("Enter");
   await expect(
     page.getByRole("heading", { name: "Qidiruv holati" }),

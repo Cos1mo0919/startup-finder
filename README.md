@@ -12,8 +12,8 @@ Every card links back to its original source. Facts come from sources, and AI an
 ![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)
 ![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)
 ![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)
-![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Supabase-4169E1?logo=postgresql&logoColor=white)
-![Render](https://img.shields.io/badge/Hosted%20on-Render-46E3B7?logo=render&logoColor=black)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?logo=postgresql&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)
 
 </div>
 
@@ -32,13 +32,11 @@ The site's interface is in **Uzbek**. Section names and buttons in this README a
 - **Real projects only.** A card needs a concrete project name, a meaningful description and a verifiable source URL. The site never adds made-up or filler cards to fill the feed.
 - **Facts and AI are kept apart.** Facts on a project page are quoted from the source. Any AI interpretation sits in a separate, clearly labeled *Detailed analysis* (“Batafsil tahlil”) block that is never presented as fact.
 - **Honest dates.** Projects are dated by when the source published them, not by when the bot found them. If the date can only be estimated, the card says so (“Topilgan: …”, *found on*).
-- **Runs on free tiers.** Discovery, AI classification, hosting and the database all use free plans, with strict daily request budgets so nothing incurs a paid bill.
+- **Runs on free tiers.** Discovery, AI classification and hosting all use free plans, with strict daily request budgets so nothing incurs a paid bill.
 
 ---
 
 ## ✨ Features
-
-### For visitors
 
 | Page | What it does |
 |---|---|
@@ -53,15 +51,6 @@ The site's interface is in **Uzbek**. Section names and buttons in this README a
 
 The layout is responsive and designed mobile-first. It has a dark theme with a mint accent.
 
-### For the owner
-
-A private admin panel is protected by a secret key and shows nothing to anyone else. It covers:
-
-- run status and daily budgets
-- a review queue, where uncertain finds wait for a manual *Publish* (“Nashr etish”) or *Reject* (“Rad etish”)
-- catalog management
-- source health and yield statistics
-
 ---
 
 ## ⚙️ How it works
@@ -73,7 +62,7 @@ flowchart LR
     C --> D[AI classification<br/>Gemini → Groq fallback]
     D --> E{Evidence gates<br/>name · description · URL}
     E -->|passes| F[Deduplicate<br/>URL · name · author · similarity]
-    E -->|uncertain| R[Owner review queue]
+    E -->|uncertain| R[Held back for a second check]
     F --> G[(PostgreSQL)]
     R --> G
     G --> H[izlanish website]
@@ -88,7 +77,7 @@ flowchart LR
    The collector respects `robots.txt` and per-source limits.
 2. **Filter.** Pages without a reliable publication date, future-dated pages and obvious noise are dropped before any AI call is spent.
 3. **Classify.** An LLM (Google **Gemini**, with **Groq** as a fallback) decides whether the page describes a real project. It extracts the name, creator and sector, and writes a short Uzbek description. Responses are validated against a strict JSON schema. Names and links are checked against the source text.
-4. **Verify.** Mandatory evidence gates check for a named project, a substantive description and a working source URL. Anything uncertain goes to the owner's review queue instead of being published.
+4. **Verify.** Mandatory evidence gates check for a named project, a substantive description and a working source URL. Anything uncertain is held back and checked again instead of being published.
 5. **Deduplicate.** URLs, names, creators, aliases and description similarity are compared, so the same project found in two places becomes one card with several sources.
 6. **Publish.** Up to a daily target of new projects (currently 8) is published. A catalog score out of 10 ranks the cards.
 
@@ -97,7 +86,6 @@ flowchart LR
 - **Hard budgets.** Every run has limits on pages, candidates, LLM requests and tokens per run and per day. A circuit breaker stops calling a provider after repeated failures.
 - **One writer at a time.** A database lease means only one job writes at once.
 - **Weekly encrypted backups.** A separate workflow takes a database backup every week and encrypts it with GPG.
-- **No sleep on Render.** A keep-alive ping stops the free Render instance from going to sleep.
 
 ---
 
@@ -107,10 +95,10 @@ flowchart LR
 |---|---|
 | **Frontend** | React 19, TypeScript, Vite, React Router, Lucide icons |
 | **Backend** | Python 3.12, FastAPI, Pydantic, SQLAlchemy 2, httpx, BeautifulSoup, feedparser, Protego (`robots.txt`) |
-| **Database** | PostgreSQL on Supabase, with row-level security. SQLite is used only in isolated tests. |
+| **Database** | PostgreSQL with row-level security. SQLite is used only in isolated tests. |
 | **AI** | Google Gemini (primary) and Groq (fallback), both free-tier with enforced quotas |
 | **Automation** | GitHub Actions: daily discovery, weekly encrypted backup, CI |
-| **Hosting** | Render (Docker web service, free plan) |
+| **Deployment** | One Docker image: the built frontend is served by FastAPI |
 | **Testing** | pytest, Ruff, Playwright end-to-end tests on desktop and mobile (iPhone 13) viewports, PostgreSQL regression suite |
 
 ---
@@ -131,8 +119,7 @@ startup-finder/
 ├── scripts/              # setup, start, checks, backup, deployment verification
 ├── docs/                 # design notes, operations and validation reports
 ├── .github/workflows/    # CI, daily discovery, weekly backup, Postgres regression
-├── Dockerfile            # single image: builds the frontend, serves it with FastAPI
-└── render.yaml           # Render blueprint
+└── Dockerfile            # single image: builds the frontend, serves it with FastAPI
 ```
 
 ---
@@ -175,7 +162,7 @@ For frontend development, run the API with `uvicorn backend.app.main:create_app 
 ./scripts/check.sh
 ```
 
-> AI keys are optional. Without them the site still works, and new finds wait in the review queue until a key is configured. Secrets belong in your environment or hosting settings, never in Git. See [`.env.example`](.env.example).
+> AI keys are optional. Without them the site still works, and new finds are held back until a key is configured. Secrets belong in your environment or hosting settings, never in Git. See [`.env.example`](.env.example).
 
 ---
 
@@ -183,10 +170,10 @@ For frontend development, run the API with `uvicorn backend.app.main:create_app 
 
 - [x] Uzbekistan catalog with verified sources
 - [x] Global and GitHub sections
-- [x] Free, budgeted daily discovery and owner review queue
+- [x] Free, budgeted daily discovery
 - [x] Weekly encrypted backups
 - [ ] More regional sources (Central Asia)
-- [ ] Problem → solution insights published to visitors (currently admin-only)
+- [ ] Problem → solution insights for visitors
 
 ---
 
@@ -194,7 +181,6 @@ For frontend development, run the API with `uvicorn backend.app.main:create_app 
 
 - [`ARCHITECTURE.md`](ARCHITECTURE.md): how the system is designed
 - [`docs/FREE_DAILY_OPERATIONS.md`](docs/FREE_DAILY_OPERATIONS.md): how the free daily run and its budgets work
-- [`docs/RENDER_DEPLOY.md`](docs/RENDER_DEPLOY.md): deployment to Render
 - [`docs/DEVELOPMENT_NOTES.md`](docs/DEVELOPMENT_NOTES.md): detailed development log (in Russian)
 
 ---
