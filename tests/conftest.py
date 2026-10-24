@@ -106,3 +106,14 @@ def offline_daily_preflight(monkeypatch):
     No real key or external provider call is introduced into these tests.
     """
     monkeypatch.setattr("backend.app.free_daily.llm_preflight", lambda settings: True)
+
+
+def pytest_runtest_logreport(report):
+    """On GitHub Actions, surface failing tests as check annotations."""
+    import os
+    import sys
+    if report.failed and os.environ.get("GITHUB_ACTIONS") == "true":
+        path, line, _ = report.location
+        message = str(report.longrepr).strip().splitlines()[-1][:500].replace("%", "%25")
+        sys.__stdout__.write(f"::error file={path},line={(line or 0) + 1}::{report.nodeid}: {message}\n")
+        sys.__stdout__.flush()
