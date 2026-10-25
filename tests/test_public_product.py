@@ -1,3 +1,4 @@
+from tests.admin_key import ADMIN_KEY
 from datetime import datetime, timezone
 
 from fastapi.testclient import TestClient
@@ -43,7 +44,7 @@ def test_verified_but_incomplete_project_is_admin_only(settings, factory):
         assert client.get("/api/projects?period=all").json()["total"] == 0
         assert client.get(f"/api/projects/{project.id}").status_code == 404
         assert client.get("/api/admin/review").status_code == 401
-        queue = client.get("/api/admin/review", headers={"X-Admin-Key": "test-admin-key"}).json()
+        queue = client.get("/api/admin/review", headers={"X-Admin-Key": ADMIN_KEY}).json()
         assert queue["total"] == 1
         assert queue["items"][0]["reason"] == project.publication_reason
 
@@ -53,7 +54,7 @@ def test_admin_accept_requeues_without_bypassing_publication(settings, factory):
     article.text = "O‘zbekiston uchun AquaSense platformasi Ali Karimov tomonidan ishlab chiqildi. Fermerlar uchun prototip taqdim etildi."
     Pipeline(settings, factory, FakeDiscovery([article])).run()
     with TestClient(create_app(settings)) as client:
-        response = client.post("/api/admin/review/action", params={"url": article.url, "action": "ACCEPT"}, headers={"X-Admin-Key": "test-admin-key"})
+        response = client.post("/api/admin/review/action", params={"url": article.url, "action": "ACCEPT"}, headers={"X-Admin-Key": ADMIN_KEY})
         assert response.status_code == 200
         assert client.get("/api/projects?period=all").json()["total"] == 0
     with factory() as session:
@@ -67,7 +68,7 @@ def test_internal_intelligence_requires_admin_key(settings):
         assert "problems" not in public["total"]
         for path in ("/api/problems", "/api/ideas", "/api/signals", "/api/sectors/intelligence", "/api/sectors/stats"):
             assert client.get(path).status_code == 401
-            assert client.get(path, headers={"X-Admin-Key": "test-admin-key"}).status_code == 200
+            assert client.get(path, headers={"X-Admin-Key": ADMIN_KEY}).status_code == 200
 
 
 def test_admin_reject_requires_and_stores_reason(settings, factory):
@@ -75,7 +76,7 @@ def test_admin_reject_requires_and_stores_reason(settings, factory):
     article.text = "O‘zbekiston uchun AquaSense platformasi Ali Karimov tomonidan ishlab chiqildi. Fermerlar uchun prototip taqdim etildi."
     Pipeline(settings, factory, FakeDiscovery([article])).run()
     with TestClient(create_app(settings)) as client:
-        headers = {"X-Admin-Key": "test-admin-key"}
+        headers = {"X-Admin-Key": ADMIN_KEY}
         assert client.post("/api/admin/review/action", params={"url": article.url, "action": "REJECT"}, headers=headers).status_code == 422
         response = client.post("/api/admin/review/action", params={"url": article.url, "action": "REJECT", "reason": "insufficient_evidence"}, headers=headers)
         assert response.status_code == 200
@@ -92,7 +93,7 @@ def test_legacy_published_label_is_reconciled_with_public_gate(settings, factory
         candidate = session.get(Candidate, article.url)
         candidate.status, candidate.reason, candidate.project_ids = "published", "", []
     with TestClient(create_app(settings)) as client:
-        status = client.get("/api/admin/status", headers={"X-Admin-Key": "test-admin-key"}).json()
+        status = client.get("/api/admin/status", headers={"X-Admin-Key": ADMIN_KEY}).json()
         assert status["total_projects"] == status["publication_counts"]["published_projects"] == 0
         assert status["processing_summary"]["review_required"] == 1
         assert client.get("/api/projects?period=all").json()["total"] == 0

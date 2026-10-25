@@ -1,3 +1,4 @@
+from tests.admin_key import ADMIN_KEY
 import json
 from datetime import datetime, timezone
 from pathlib import Path
@@ -459,7 +460,7 @@ def test_github_project_is_exclusive_public_section(settings, factory):
         assert (home["total"], home["uzbekistan_total"], home["global_total"], home["github_total"]) == (1, 0, 0, 1)
         assert client.get("/api/projects?country=github").json()["total"] == 1
         assert client.get("/api/projects?country=Uzbekistan").json()["total"] == 0
-        admin = client.get("/api/admin/status", headers={"X-Admin-Key": "test-admin-key"}).json()
+        admin = client.get("/api/admin/status", headers={"X-Admin-Key": ADMIN_KEY}).json()
         assert admin["public_sections"] == {"Uzbekistan": 0, "Global": 0, "GitHub": 1, "Boshqa": 0}
 
 

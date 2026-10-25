@@ -1,5 +1,6 @@
 """Offline budgets, interruption recovery, owner decisions and single-writer safety."""
 
+from tests.admin_key import ADMIN_KEY
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
@@ -225,7 +226,7 @@ def test_one_writer_blocks_other_workers_and_admin_actions(settings, factory, of
             safe = settings.model_copy(update={"startup_data_updates_enabled": False, "database_auto_migrate": False})
             with TestClient(create_app(safe)) as client:
                 response = client.post('/api/admin/review/action?url=https://fixture.example/no&action=ACCEPT',
-                                       headers={"X-Admin-Key": "test-admin-key"})
+                                       headers={"X-Admin-Key": ADMIN_KEY})
                 assert response.status_code == 409
         finally:
             OWNER.reset(token)
@@ -243,14 +244,14 @@ def test_admin_daily_usage_warning_and_last24h(settings, factory):
         assert result["usage_today"]["pages"] == result["usage_24h"]["pages"] == 8
     with TestClient(create_app(settings)) as client:
         assert client.get('/api/admin/status').status_code == 401
-        assert client.get('/api/admin/status', headers={"X-Admin-Key": "test-admin-key"}).json()["free_daily"]["warnings"] == ["pages"]
+        assert client.get('/api/admin/status', headers={"X-Admin-Key": ADMIN_KEY}).json()["free_daily"]["warnings"] == ["pages"]
 
 
 def test_admin_verify_accepts_only_the_configured_key_and_admin_url_is_a_plain_page(settings):
     with TestClient(create_app(settings)) as client:
         assert client.get('/api/admin/verify').status_code == 401
         assert client.get('/api/admin/verify', headers={"X-Admin-Key": "wrong"}).status_code == 401
-        assert client.get('/api/admin/verify', headers={"X-Admin-Key": "test-admin-key"}).json() == {"ok": True}
+        assert client.get('/api/admin/verify', headers={"X-Admin-Key": ADMIN_KEY}).json() == {"ok": True}
         assert "/api/admin/verify" not in client.get('/openapi.json').text
         # /admin and an unknown URL get the same SPA shell, so the server reveals nothing.
         admin, unknown = client.get('/admin'), client.get('/no-such-page-anywhere')
@@ -431,7 +432,7 @@ def test_review_queue_publishes_an_analysed_project_and_refuses_unanalysed_items
         session.add(Candidate(url="https://fixture.example/raw", status="review_required",
                               reason="llm_unavailable", article={"title": "Raw"}))
         project_id = project.id
-    headers = {"X-Admin-Key": "test-admin-key"}
+    headers = {"X-Admin-Key": ADMIN_KEY}
     with TestClient(create_app(settings)) as client:
         items = {item["url"]: item for item in client.get("/api/admin/review", headers=headers).json()["items"]}
         assert items[page.url]["publishable"] is True

@@ -1,5 +1,10 @@
+import { randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
 import { defineConfig, devices } from "@playwright/test";
+// A fresh admin key for every test run; the browser server and specs read it
+// from the environment, so no fixed key lives in the repository.
+process.env.TEST_ADMIN_KEY ||= randomBytes(18).toString("base64url");
+
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: false,

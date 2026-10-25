@@ -1,6 +1,6 @@
 # Working agreement
 
-Before continuing, read PROJECT_STATUS.md, README.md, ARCHITECTURE.md and recent Git commits.
+Before continuing, read PROJECT_STATUS.md, README.md, docs/DEVELOPMENT_NOTES.md, ARCHITECTURE.md and recent Git commits.
 
 Only Stage 1 — Uzbekistan is authorized. Do not begin Global or a standalone GitHub / Yangi dasturlar section until the user explicitly accepts Stage 1 and authorizes the next stage. Requests for fixes or design changes concern the current stage.
 
@@ -10,6 +10,6 @@ Preserve evidence, publication timestamps and first_seen. Do not promote AI inte
 
 Use the existing checkout; the cloud task is already isolated. Do not create a worktree unless explicitly requested.
 
-At the end of a stage: run meaningful tests and a startup check, update README and PROJECT_STATUS, make a Git commit, report the results and limitations, then stop for explicit acceptance. Do not label a stage user-approved without actual acceptance.
+At the end of a stage: run meaningful tests and a startup check, update docs/DEVELOPMENT_NOTES.md (and README if user-facing behaviour changed) and PROJECT_STATUS, make a Git commit, report the results and limitations, then stop for explicit acceptance. Do not label a stage user-approved without actual acceptance.
 
 Source seeds live in config/sources.json; preserve operator settings and health. Schema migrations must preserve project IDs, publication timestamps and first_seen. All public project queries and sector statistics must enforce the evidence stop filter.

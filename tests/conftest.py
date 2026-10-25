@@ -1,3 +1,4 @@
+from tests.admin_key import ADMIN_KEY
 from datetime import timedelta
 from types import SimpleNamespace
 
@@ -34,7 +35,7 @@ def settings(tmp_path):
         openrouter_api_key="",
         groq_api_key="",
         search_api_key="",
-        admin_api_key="test-admin-key",
+        admin_api_key=ADMIN_KEY,
     )
 
 
@@ -105,3 +106,17 @@ def offline_daily_preflight(monkeypatch):
     No real key or external provider call is introduced into these tests.
     """
     monkeypatch.setattr("backend.app.free_daily.llm_preflight", lambda settings: True)
+
+
+
+def pytest_terminal_summary(terminalreporter):
+    """On GitHub Actions, surface failing tests and collection errors as check annotations."""
+    import os
+    if os.environ.get("GITHUB_ACTIONS") != "true":
+        return
+    for report in terminalreporter.stats.get("failed", []) + terminalreporter.stats.get("error", []):
+        location = getattr(report, "location", None) or (getattr(report, "nodeid", "") or "tests", None, "")
+        path, line = location[0], location[1]
+        lines = [x for x in str(report.longrepr).strip().splitlines() if x.strip()] or ["failed"]
+        message = (lines[-1] + " | " + " / ".join(lines[-6:-1]))[:900].replace("%", "%25")
+        terminalreporter.write_line(f"::error file={path},line={(line or 0) + 1}::{report.nodeid}: {message}")

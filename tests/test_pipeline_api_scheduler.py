@@ -1,3 +1,4 @@
+from tests.admin_key import ADMIN_KEY
 from datetime import datetime, timedelta, timezone
 from fastapi.testclient import TestClient
 from sqlalchemy import select
@@ -97,7 +98,7 @@ def test_api_filters_detail_status_and_not_found(settings, factory):
         )
         assert client.get("/api/projects", params={"min_rating": 11}).status_code == 422
         assert client.get("/api/projects/missing").status_code == 404
-        status = client.get("/api/admin/status", headers={"X-Admin-Key": "test-admin-key"}).json()
+        status = client.get("/api/admin/status", headers={"X-Admin-Key": ADMIN_KEY}).json()
         assert status["last_run"]["counts"]["new_projects"] == 1
         assert status["next_run"] is None
         assert status["ai_enabled"] is False

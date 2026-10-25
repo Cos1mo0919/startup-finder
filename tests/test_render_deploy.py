@@ -105,11 +105,13 @@ def test_start_script_binds_render_port_and_refuses_missing_database_url(tmp_pat
 
 
 def test_missing_database_url_settings_error_hides_other_secret_inputs():
+    import secrets
     from pydantic import ValidationError
+    sentinel = secrets.token_hex(16)  # random, so no key-like literal lives in the repo
     with pytest.raises(ValidationError) as caught:
-        Settings(_env_file=None, database_url="", gemini_api_key="not-a-real-key-test-sentinel")
+        Settings(_env_file=None, database_url="", gemini_api_key=sentinel)
     assert "DATABASE_URL is required" in str(caught.value)
-    assert "not-a-real-key-test-sentinel" not in str(caught.value)
+    assert sentinel not in str(caught.value)
 
 
 @pytest.mark.parametrize("backend_access", [True, False])
